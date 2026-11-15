@@ -52,6 +52,11 @@ static const QByteArray sampleDomainXml = R"(<domain type='kvm'>
       <source file='/tmp/disk.qcow2'/>
       <target dev='vda' bus='virtio'/>
     </disk>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source file='/tmp/disk2.raw'/>
+      <target dev='vdb' bus='virtio'/>
+    </disk>
     <interface type='user'>
       <model type='e1000'/>
     </interface>
@@ -69,6 +74,8 @@ void DomainXmlTest::readerParsesMetadataAndDisks()
     QCOMPARE(info.osId, QStringLiteral("http://example.com/os/1"));
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.qcow2"));
     QCOMPARE(info.diskFormat, QStringLiteral("qcow2"));
+    QCOMPARE(info.virtualDiskPaths.size(), 2);
+    QCOMPARE(info.virtualDiskPaths.at(1), QStringLiteral("/tmp/disk2.raw"));
     QCOMPARE(info.networkModel, QStringLiteral("e1000"));
     QVERIFY(info.isoDiskPath.isEmpty());
 }

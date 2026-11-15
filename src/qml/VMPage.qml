@@ -177,7 +177,13 @@ Kirigami.ScrollablePage {
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
                 text: i18n("Virtual Disk Path")
-                description: domain ? domain.config.virtualDiskPath : ""
+                description: {
+                    if (!domain) {
+                        return "";
+                    }
+                    const count = domain.config.virtualDiskPaths.length;
+                    return count > 1 ? domain.config.virtualDiskPath + " (+" + (count - 1) + ")" : domain.config.virtualDiskPath;
+                }
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {

@@ -25,6 +25,7 @@ DomainConfig::DomainConfig(const DomainConfigData &data)
     , m_xmlConfigPath(data.xmlConfigPath)
     , m_isoDiskPath(data.isoDiskPath)
     , m_virtualDiskPath(data.virtualDiskPath)
+    , m_virtualDiskPaths(data.virtualDiskPaths)
     , m_diskFormat(data.diskFormat)
     , m_firmware(data.firmware)
     , m_networkModel(data.networkModel)
@@ -45,7 +46,7 @@ void DomainConfig::apply(const DomainConfigData &data)
     setCpus(data.cpus);
     setMaxDiskStorage(data.maxDiskStorage);
     setAutostart(data.autostart);
-    setPaths(data.xmlConfigPath, data.isoDiskPath, data.virtualDiskPath, data.screenshotPreviewPath);
+    setPaths(data.xmlConfigPath, data.isoDiskPath, data.virtualDiskPath, data.virtualDiskPaths, data.screenshotPreviewPath);
 }
 
 void DomainConfig::setActive(bool active)
@@ -112,9 +113,13 @@ void DomainConfig::setMaxDiskStorage(int maxDiskStorage)
     }
 }
 
-void DomainConfig::setPaths(const QString &xmlConfigPath, const QString &isoDiskPath, const QString &virtualDiskPath, const QString &screenshotPreviewPath)
+void DomainConfig::setPaths(const QString &xmlConfigPath,
+                            const QString &isoDiskPath,
+                            const QString &virtualDiskPath,
+                            const QStringList &virtualDiskPaths,
+                            const QString &screenshotPreviewPath)
 {
-    if (m_xmlConfigPath == xmlConfigPath && m_isoDiskPath == isoDiskPath && m_virtualDiskPath == virtualDiskPath
+    if (m_xmlConfigPath == xmlConfigPath && m_isoDiskPath == isoDiskPath && m_virtualDiskPath == virtualDiskPath && m_virtualDiskPaths == virtualDiskPaths
         && m_screenshotPreviewPath == screenshotPreviewPath) {
         return;
     }
@@ -122,6 +127,7 @@ void DomainConfig::setPaths(const QString &xmlConfigPath, const QString &isoDisk
     m_xmlConfigPath = xmlConfigPath;
     m_isoDiskPath = isoDiskPath;
     m_virtualDiskPath = virtualDiskPath;
+    m_virtualDiskPaths = virtualDiskPaths;
     m_screenshotPreviewPath = screenshotPreviewPath;
     Q_EMIT pathsChanged();
 }

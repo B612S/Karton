@@ -20,6 +20,7 @@ public:
         QString shortOsId;
         QString isoDiskPath;
         QString virtualDiskPath;
+        QStringList virtualDiskPaths;
         QString diskFormat = QStringLiteral("qcow2");
         QString firmware = QStringLiteral("bios");
         QString networkModel = QStringLiteral("none");

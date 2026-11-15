@@ -65,9 +65,14 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
             QString format = QStringLiteral("qcow2");
             const QString path = retrieveDiskPath(xmlReader, &format);
             if (device == QStringLiteral("disk")) {
-                info.virtualDiskPath = path;
-                if (!format.isEmpty()) {
-                    info.diskFormat = format;
+                if (!path.isEmpty()) {
+                    info.virtualDiskPaths.append(path);
+                    if (info.virtualDiskPath.isEmpty()) {
+                        info.virtualDiskPath = path;
+                        if (!format.isEmpty()) {
+                            info.diskFormat = format;
+                        }
+                    }
                 }
             } else if (device == QStringLiteral("cdrom")) {
                 info.isoDiskPath = path;

@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class DomainConfig : public QObject
 {
@@ -25,6 +26,7 @@ class DomainConfig : public QObject
     Q_PROPERTY(QString xmlConfigPath READ xmlConfigPath NOTIFY pathsChanged)
     Q_PROPERTY(QString isoDiskPath READ isoDiskPath NOTIFY pathsChanged)
     Q_PROPERTY(QString virtualDiskPath READ virtualDiskPath NOTIFY pathsChanged)
+    Q_PROPERTY(QStringList virtualDiskPaths READ virtualDiskPaths NOTIFY pathsChanged)
     Q_PROPERTY(QString diskFormat READ diskFormat CONSTANT)
     Q_PROPERTY(QString firmware READ firmware CONSTANT)
     Q_PROPERTY(QString networkModel READ networkModel CONSTANT)
@@ -61,6 +63,7 @@ public:
         QString xmlConfigPath;
         QString isoDiskPath;
         QString virtualDiskPath;
+        QStringList virtualDiskPaths;
         QString diskFormat = QStringLiteral("qcow2");
         QString firmware = QStringLiteral("bios");
         QString networkModel = QStringLiteral("virtio");
@@ -138,6 +141,10 @@ public:
     {
         return m_virtualDiskPath;
     }
+    [[nodiscard]] QStringList virtualDiskPaths() const
+    {
+        return m_virtualDiskPaths;
+    }
     [[nodiscard]] QString diskFormat() const
     {
         return m_diskFormat;
@@ -175,7 +182,11 @@ public:
     void setMaxRam(int maxRam);
     void setCpus(int cpus);
     void setMaxDiskStorage(int maxDiskStorage);
-    void setPaths(const QString &xmlConfigPath, const QString &isoDiskPath, const QString &virtualDiskPath, const QString &screenshotPreviewPath);
+    void setPaths(const QString &xmlConfigPath,
+                  const QString &isoDiskPath,
+                  const QString &virtualDiskPath,
+                  const QStringList &virtualDiskPaths,
+                  const QString &screenshotPreviewPath);
 
 private:
     QString m_hypervisorType;
@@ -193,6 +204,7 @@ private:
     QString m_xmlConfigPath;
     QString m_isoDiskPath;
     QString m_virtualDiskPath;
+    QStringList m_virtualDiskPaths;
     QString m_diskFormat = QStringLiteral("qcow2");
     QString m_firmware = QStringLiteral("bios");
     QString m_networkModel = QStringLiteral("virtio");

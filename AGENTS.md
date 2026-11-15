@@ -171,6 +171,10 @@ When testing destructive operations, prefer domains whose names start with
   disk. Preserve unknown metadata when rewriting XML —
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
+- `DomainConfig::virtualDiskPaths` contains every `<disk device='disk'>` path
+  found in the domain XML; deleting a VM with "Delete Disk" removes all of
+  them. Creating a new VM still creates a single data disk, and size editing
+  operates on the first disk (`virtualDiskPath`).
 - New virtual disks can be created as `qcow2` (default), `raw` or `vmdk`.
   The format is stored in the domain XML `<driver type="…"/>` and exposed as
   `DomainConfig::diskFormat`; editing an existing domain does not convert its

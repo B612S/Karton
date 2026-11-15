@@ -256,6 +256,7 @@ void Karton::refreshDomainList()
             .xmlConfigPath = xmlConfigPath,
             .isoDiskPath = reader.m_xmlInfo.isoDiskPath,
             .virtualDiskPath = reader.m_xmlInfo.virtualDiskPath,
+            .virtualDiskPaths = reader.m_xmlInfo.virtualDiskPaths,
             .diskFormat = reader.m_xmlInfo.diskFormat,
             .firmware = reader.m_xmlInfo.firmware,
             .networkModel = reader.m_xmlInfo.networkModel,
@@ -423,14 +424,26 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 
     bool success = true;
 
-    const QString diskPath = domain->config()->virtualDiskPath();
-    if (deleteDisk && !diskPath.isEmpty() && QFile::exists(diskPath) && !QFile::remove(diskPath)) {
-        const QString errorMsg = i18nc("%1 is the path of the disk file", "Failed to delete disk file: %1", diskPath);
-        qCWarning(KARTON_DEBUG) << errorMsg;
-        Q_EMIT errorOccurred(errorMsg);
-        success = false;
-    } else if (deleteDisk && !diskPath.isEmpty()) {
-        qCInfo(KARTON_DEBUG) << "Successfully deleted disk image of" << domain->config()->name();
+    if (deleteDisk) {
+        QStringList diskPaths = domain->config()->virtualDiskPaths();
+        if (diskPaths.isEmpty() && !domain->config()->virtualDiskPath().isEmpty()) {
+            diskPaths.append(domain->config()->virtualDiskPath());
+        }
+        diskPaths.removeDuplicates();
+
+        for (const QString &diskPath : std::as_const(diskPaths)) {
+            if (diskPath.isEmpty() || !QFile::exists(diskPath)) {
+                continue;
+            }
+            if (!QFile::remove(diskPath)) {
+                const QString errorMsg = i18nc("%1 is the path of the disk file", "Failed to delete disk file: %1", diskPath);
+                qCWarning(KARTON_DEBUG) << errorMsg;
+                Q_EMIT errorOccurred(errorMsg);
+                success = false;
+            } else {
+                qCInfo(KARTON_DEBUG) << "Successfully deleted disk image:" << diskPath;
+            }
+        }
     }
 
     const QString previewPath = domain->config()->screenshotPreviewPath();
@@ -505,6 +518,7 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.xmlConfigPath = getXmlConfigPath(name);
     configData.isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString();
     configData.virtualDiskPath = getVirtualDiskPath(name, diskFormat);
+    configData.virtualDiskPaths = {configData.virtualDiskPath};
     configData.diskFormat = diskFormat;
     configData.firmware = firmware;
     configData.networkModel = networkModel;
