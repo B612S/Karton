@@ -175,6 +175,10 @@ When testing destructive operations, prefer domains whose names start with
   metadata on the next configuration save.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
+- SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
+  overlay, above the display node; the local cursor is hidden while the remote
+  cursor is visible. There is one display node per renderer and one root node
+  that owns both.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice. The SPICE

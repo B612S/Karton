@@ -9,11 +9,14 @@
 
 #include <cstdlib>
 
+#include <QCursor>
 #include <QDomDocument>
 #include <QDomElement>
 #include <QGuiApplication>
+#include <QMutexLocker>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QSGSimpleTextureNode>
 #include <QString>
 
 #include "domain.h"
@@ -216,6 +219,9 @@ void DomainViewer::disconnectFromSpice()
         m_renderer.reset();
     }
 
+    clearCursor();
+    update();
+
     if (m_session) {
         spice_session_disconnect(m_session);
         g_object_unref(m_session);
@@ -248,7 +254,8 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         g_signal_connect(channel, "playback-data", G_CALLBACK(playback_data_callback), item);
         g_signal_connect(channel, "playback-stop", G_CALLBACK(playback_stop_callback), item);
     } else if (SPICE_IS_CURSOR_CHANNEL(channel)) {
-        // Cursors are composited by the display channel; nothing to do here.
+        qCInfo(KARTON_DEBUG) << "SPICE: Cursor connected";
+        item->attachCursorChannel(channel);
     } else {
         gint type = 0;
         g_object_get(channel, "channel-type", &type, NULL);
@@ -277,6 +284,85 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
     m_renderer->attach(SPICE_DISPLAY_CHANNEL(channel));
 }
 
+void DomainViewer::attachCursorChannel(SpiceChannel *channel)
+{
+    spice_channel_connect(channel);
+    g_signal_connect(channel, "cursor-set", G_CALLBACK(cursorSetCallback), this);
+    g_signal_connect(channel, "cursor-move", G_CALLBACK(cursorMoveCallback), this);
+    g_signal_connect(channel, "cursor-hide", G_CALLBACK(cursorHideCallback), this);
+    g_signal_connect(channel, "cursor-reset", G_CALLBACK(cursorResetCallback), this);
+}
+
+void DomainViewer::cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData)
+{
+    Q_UNUSED(channel);
+
+    auto *item = static_cast<DomainViewer *>(userData);
+    if (!rgba || width <= 0 || height <= 0) {
+        item->clearCursor();
+        return;
+    }
+
+    qCDebug(KARTON_DEBUG) << "SPICE cursor-set:" << width << "x" << height << "hotspot" << hotX << hotY;
+    const QImage image(static_cast<const uchar *>(rgba), width, height, QImage::Format_RGBA8888);
+    {
+        QMutexLocker locker(&item->m_cursorMutex);
+        item->m_cursorImage = image.copy();
+        item->m_cursorHotspot = QPoint(hotX, hotY);
+        item->m_cursorVisible = true;
+        item->m_cursorTextureDirty = true;
+    }
+    item->setCursor(QCursor(Qt::BlankCursor));
+    item->update();
+}
+
+void DomainViewer::cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData)
+{
+    Q_UNUSED(channel);
+
+    auto *item = static_cast<DomainViewer *>(userData);
+    qCDebug(KARTON_DEBUG) << "SPICE cursor-move:" << x << y;
+    {
+        QMutexLocker locker(&item->m_cursorMutex);
+        item->m_cursorPosition = QPoint(x, y);
+    }
+    item->update();
+}
+
+void DomainViewer::cursorHideCallback(SpiceCursorChannel *channel, gpointer userData)
+{
+    Q_UNUSED(channel);
+
+    auto *item = static_cast<DomainViewer *>(userData);
+    qCDebug(KARTON_DEBUG) << "SPICE cursor-hide";
+    {
+        QMutexLocker locker(&item->m_cursorMutex);
+        item->m_cursorVisible = false;
+    }
+    item->unsetCursor();
+    item->update();
+}
+
+void DomainViewer::cursorResetCallback(SpiceCursorChannel *channel, gpointer userData)
+{
+    Q_UNUSED(channel);
+
+    qCDebug(KARTON_DEBUG) << "SPICE cursor-reset";
+    static_cast<DomainViewer *>(userData)->clearCursor();
+}
+
+void DomainViewer::clearCursor()
+{
+    {
+        QMutexLocker locker(&m_cursorMutex);
+        m_cursorImage = QImage();
+        m_cursorVisible = false;
+        m_cursorTextureDirty = true;
+    }
+    unsetCursor();
+    update();
+}
+
 void DomainViewer::handleRendererFrameSizeChanged()
 {
     if (!m_renderer) {
@@ -290,11 +376,84 @@ void DomainViewer::handleRendererFrameSizeChanged()
 // triggered by update()
 QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
-    if (!m_renderer) {
-        delete oldNode;
-        return nullptr;
+    QSGNode *root = oldNode;
+    if (!root) {
+        root = new QSGNode;
     }
-    return m_renderer->updatePaintNode(window(), oldNode, boundingRect());
+
+    if (m_renderer) {
+        QSGNode *display = m_renderer->updatePaintNode(window(), m_displayNode, boundingRect());
+        if (display != m_displayNode) {
+            m_displayNode = display;
+            if (display) {
+                root->appendChildNode(display);
+            }
+        } else if (display && display->parent() != root) {
+            root->appendChildNode(display);
+        }
+    } else if (m_displayNode) {
+        if (m_displayNode->parent() == root) {
+            root->removeChildNode(m_displayNode);
+        }
+        delete m_displayNode;
+        m_displayNode = nullptr;
+    }
+
+    QImage cursorImage;
+    QPoint cursorPosition;
+    QPoint hotspot;
+    bool cursorVisible = false;
+    bool textureDirty = false;
+    {
+        QMutexLocker locker(&m_cursorMutex);
+        cursorImage = m_cursorImage;
+        cursorPosition = m_cursorPosition;
+        hotspot = m_cursorHotspot;
+        cursorVisible = m_cursorVisible;
+        textureDirty = m_cursorTextureDirty;
+        m_cursorTextureDirty = false;
+    }
+
+    if (!cursorVisible || cursorImage.isNull()) {
+        if (m_cursorNode) {
+            root->removeChildNode(m_cursorNode);
+            delete m_cursorNode;
+            m_cursorNode = nullptr;
+        }
+        return root;
+    }
+
+    if (!m_cursorNode) {
+        m_cursorNode = new QSGSimpleTextureNode;
+        m_cursorNode->setOwnsTexture(true);
+        root->appendChildNode(m_cursorNode);
+    } else {
+        // Keep the cursor above the display node.
+        root->removeChildNode(m_cursorNode);
+        root->appendChildNode(m_cursorNode);
+    }
+
+    if (textureDirty || !m_cursorNode->texture()) {
+        QSGTexture *texture = window()->createTextureFromImage(cursorImage);
+        if (!texture) {
+            root->removeChildNode(m_cursorNode);
+            delete m_cursorNode;
+            m_cursorNode = nullptr;
+            return root;
+        }
+        m_cursorNode->setTexture(texture);
+    }
+
+    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
+    const qreal scaleX = (frameSize.width() > 0 && width() > 0) ? width() / frameSize.width() : 1.0;
+    const qreal scaleY = (frameSize.height() > 0 && height() > 0) ? height() / frameSize.height() : 1.0;
+
+    const qreal x = (cursorPosition.x() - hotspot.x()) * scaleX;
+    const qreal y = (cursorPosition.y() - hotspot.y()) * scaleY;
+    m_cursorNode->setRect(QRectF(x, y, cursorImage.width() * scaleX, cursorImage.height() * scaleY));
+    m_cursorNode->setFiltering(QSGTexture::Linear);
+
+    return root;
 }
 
 void DomainViewer::saveFrameToDomain()

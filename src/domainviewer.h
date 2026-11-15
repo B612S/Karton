@@ -9,11 +9,16 @@
 #include <QAudioFormat>
 #include <QAudioSink>
 #include <QIODevice>
+#include <QImage>
+#include <QMutex>
 #include <QObject>
+#include <QPoint>
 #include <QQuickItem>
 #include <QSGNode>
 
 #include <memory>
+
+class QSGSimpleTextureNode;
 
 #include "domain.h"
 #include "spicedisplayrenderer.h"
@@ -69,7 +74,14 @@ private:
 
     static void channel_new_callback(SpiceSession *session, SpiceChannel *channel, gpointer user_data);
     void attachDisplayChannel(SpiceChannel *channel);
+    void attachCursorChannel(SpiceChannel *channel);
     static uint8_t evdevToPcXt(uint32_t evdev_scancode);
+
+    static void cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData);
+    static void cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData);
+    static void cursorHideCallback(SpiceCursorChannel *channel, gpointer userData);
+    static void cursorResetCallback(SpiceCursorChannel *channel, gpointer userData);
+    void clearCursor();
 
     static void playback_start_callback(SpicePlaybackChannel *channel, gint format, gint channels, gint rate, gpointer user_data);
     static void playback_data_callback(SpicePlaybackChannel *channel, gpointer data, gint size, gpointer user_data);
@@ -90,6 +102,16 @@ private:
     QAudioSink *m_audioSink = nullptr;
     QIODevice *m_audioDevice = nullptr;
     QAudioFormat m_audioFormat;
+
+    QMutex m_cursorMutex;
+    QImage m_cursorImage;
+    QPoint m_cursorPosition;
+    QPoint m_cursorHotspot;
+    bool m_cursorVisible = false;
+    bool m_cursorTextureDirty = true;
+
+    QSGNode *m_displayNode = nullptr;
+    QSGSimpleTextureNode *m_cursorNode = nullptr;
 
     static constexpr quint32 x11_wayland_evdev_offset = 8;
     // difference of 8 between x11 wayland.
