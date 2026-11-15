@@ -23,6 +23,8 @@ include(KDEClangFormat)
 include(KDEGitCommitHooks)
 include(ECMSetupVersion)
 
+include(CTest)
+
 find_package(Qt6 REQUIRED COMPONENTS
     Core
     Quick
@@ -62,6 +64,10 @@ install(FILES
 ecm_find_qmlmodule(org.kde.kirigami REQUIRED)
 
 add_subdirectory(src)
+
+if (BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
 
 file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES *.cpp *.h)
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})

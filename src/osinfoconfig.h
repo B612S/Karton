@@ -3,11 +3,10 @@
 
 #pragma once
 
-#include <QJSEngine>
 #include <QObject>
-#include <QQmlEngine>
 #include <QString>
 #include <QStringList>
+#include <qqmlintegration.h>
 
 extern "C" // due to undefined references to libosinfo content
 {

@@ -26,11 +26,12 @@ DomainXmlReader::DomainXmlReader(virDomainPtr domainPtr)
 
     const QByteArray xml(xmlDesc);
     free(xmlDesc);
-    parse(xml);
+    m_xmlInfo = parseXml(xml);
 }
 
-void DomainXmlReader::parse(const QByteArray &xml)
+DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
 {
+    XmlInfo info;
     QXmlStreamReader xmlReader(xml);
 
     while (!xmlReader.atEnd() && !xmlReader.hasError()) {
@@ -40,24 +41,24 @@ void DomainXmlReader::parse(const QByteArray &xml)
         }
 
         if (xmlReader.name() == QStringLiteral("domain")) {
-            m_xmlInfo.indexId = xmlReader.attributes().value(QStringLiteral("id")).toInt();
-            m_xmlInfo.hypervisorType = xmlReader.attributes().value(QStringLiteral("type")).toString();
+            info.indexId = xmlReader.attributes().value(QStringLiteral("id")).toInt();
+            info.hypervisorType = xmlReader.attributes().value(QStringLiteral("type")).toString();
         } else if (xmlReader.name() == QStringLiteral("os") && xmlReader.attributes().hasAttribute(QStringLiteral("id"))) {
-            m_xmlInfo.osId = xmlReader.attributes().value(QStringLiteral("id")).toString();
-            m_xmlInfo.shortOsId = xmlReader.attributes().value(QStringLiteral("short-id")).toString();
+            info.osId = xmlReader.attributes().value(QStringLiteral("id")).toString();
+            info.shortOsId = xmlReader.attributes().value(QStringLiteral("short-id")).toString();
         } else if (xmlReader.name() == QStringLiteral("data")) {
             if (xmlReader.attributes().hasAttribute(QStringLiteral("maxDiskStorage"))) {
-                m_xmlInfo.maxDiskStorage = xmlReader.attributes().value(QStringLiteral("maxDiskStorage")).toInt();
+                info.maxDiskStorage = xmlReader.attributes().value(QStringLiteral("maxDiskStorage")).toInt();
             }
             if (xmlReader.attributes().hasAttribute(QStringLiteral("screenshotPreviewPath"))) {
-                m_xmlInfo.screenshotPreviewPath = xmlReader.attributes().value(QStringLiteral("screenshotPreviewPath")).toString();
+                info.screenshotPreviewPath = xmlReader.attributes().value(QStringLiteral("screenshotPreviewPath")).toString();
             }
         } else if (xmlReader.name() == QStringLiteral("disk")) {
             const QString device = xmlReader.attributes().value(QStringLiteral("device")).toString();
             if (device == QStringLiteral("disk")) {
-                m_xmlInfo.virtualDiskPath = retrieveDiskPath(xmlReader);
+                info.virtualDiskPath = retrieveDiskPath(xmlReader);
             } else if (device == QStringLiteral("cdrom")) {
-                m_xmlInfo.isoDiskPath = retrieveDiskPath(xmlReader);
+                info.isoDiskPath = retrieveDiskPath(xmlReader);
             }
         }
     }
@@ -65,6 +66,8 @@ void DomainXmlReader::parse(const QByteArray &xml)
     if (xmlReader.hasError()) {
         qCWarning(KARTON_DEBUG) << "XML parsing error:" << xmlReader.errorString();
     }
+
+    return info;
 }
 
 QString DomainXmlReader::retrieveDiskPath(QXmlStreamReader &xmlReader)

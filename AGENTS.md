@@ -14,10 +14,11 @@ KF6 application with a Kirigami UI. It lists and manages local libvirt domains,
 defines new domains from OS installation media, and embeds a SPICE display for
 the VM console.
 
-The application connects to **`qemu:///session`** (see `Karton::init()`). There
-is currently no UI for changing the libvirt connection URI. Any `virsh` command
-used during development or testing must therefore pass
-`-c qemu:///session`.
+The application connects to **`qemu:///session`** by default (see
+`Karton::init()`). Set `KARTON_LIBVIRT_URI` to use another URI (for example
+`qemu:///system`); there is no UI for changing it yet. Any `virsh` command used
+during development or testing must pass `-c <same URI>` (usually
+`-c qemu:///session`).
 
 ## Repository layout
 
@@ -36,6 +37,7 @@ used during development or testing must therefore pass
 | `src/libvirtmonitor.*`, `src/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `src/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `src/qml/` | Kirigami QML pages and dialogs. |
+| `tests/` | QtTest-based unit tests for the XML parser/builder. |
 
 QML sources are compiled into the binary by `ecm_add_qml_module()` under the URI
 `org.kde.karton`. When adding a QML file, add it to the `ecm_target_qml_sources()`
@@ -79,10 +81,16 @@ QT_QPA_PLATFORM=xcb ./build/bin/karton
 
 Screenshots can be taken with `spectacle -b -n -f -o /tmp/karton.png`.
 
-## Manual smoke test
+## Tests and manual smoke test
 
-There are no automated tests yet. A build plus a manual smoke test is the
-current baseline. Use a throwaway domain so nothing important is touched:
+Run the automated tests with:
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+They currently cover the domain XML parser and builder. A build plus a manual
+smoke test is still the baseline for UI changes. Use a throwaway domain so nothing important is touched:
 
 ```sh
 qemu-img create -f qcow2 ~/.local/share/libvirt/images/agent-test.qcow2 2G
@@ -157,6 +165,9 @@ When testing destructive operations, prefer domains whose names start with
   disk. Preserve unknown metadata when rewriting XML —
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
+- For domains without Karton metadata, the disk size is queried with
+  `qemu-img info --output=json` (cached per path) and written into the Karton
+  metadata on the next configuration save.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in

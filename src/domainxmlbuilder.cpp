@@ -209,7 +209,23 @@ QString DomainXmlBuilder::updateXML(const QString &xmlDesc, const EditableConfig
     // unknown (e.g. a domain not created by Karton), so leave it untouched.
     if (config.maxDiskStorage > 0) {
         const QDomNodeList kartonDataNodes = root.elementsByTagName(QStringLiteral("karton:data"));
-        if (!kartonDataNodes.isEmpty()) {
+        if (kartonDataNodes.isEmpty()) {
+            // Domains defined by other tools have no Karton metadata yet; add
+            // it so the size is remembered from now on.
+            QDomElement metadata = root.firstChildElement(QStringLiteral("metadata"));
+            if (metadata.isNull()) {
+                metadata = document.createElement(QStringLiteral("metadata"));
+                root.insertBefore(metadata, root.firstChild());
+            }
+
+            QDomElement karton = document.createElement(QStringLiteral("karton:kde-karton"));
+            karton.setAttribute(QStringLiteral("xmlns:karton"), QStringLiteral("https://invent.kde.org/sitter/karton"));
+            metadata.appendChild(karton);
+
+            QDomElement data = document.createElement(QStringLiteral("karton:data"));
+            data.setAttribute(QStringLiteral("maxDiskStorage"), QString::number(config.maxDiskStorage * 1024));
+            karton.appendChild(data);
+        } else {
             QDomElement kartonData = kartonDataNodes.at(0).toElement();
             kartonData.setAttribute(QStringLiteral("maxDiskStorage"), QString::number(config.maxDiskStorage * 1024));
         }

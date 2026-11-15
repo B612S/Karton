@@ -24,6 +24,12 @@ This project is still in early development and will likely break existing virtua
 - libosinfo
 - Vulkan (or OpenGL as a fallback)
 
+## Configuration
+Set `KARTON_LIBVIRT_URI` to override the default `qemu:///session` connection
+(for example `KARTON_LIBVIRT_URI=qemu:///system`). Set
+`KARTON_GRAPHICS_API=opengl` if Vulkan is unavailable and the automatic
+fallback is not desired.
+
 ## Installation
 ```
 git clone https://invent.kde.org/sitter/karton.git

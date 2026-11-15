@@ -4,6 +4,7 @@
 
 #include <libvirt/libvirt.h>
 
+#include <QHash>
 #include <QJSEngine>
 #include <QObject>
 #include <QQmlEngine>
@@ -26,6 +27,7 @@ class Karton : public QObject
     QML_SINGLETON
     Q_PROPERTY(bool connected READ connected CONSTANT)
     Q_PROPERTY(bool vulkanRendering READ vulkanRendering CONSTANT)
+    Q_PROPERTY(QString connectionUri READ connectionUri CONSTANT)
 
 public:
     // Deliberately not default-constructible: Qt then uses create() for the
@@ -41,6 +43,7 @@ public:
         return m_conn != nullptr;
     }
     [[nodiscard]] bool vulkanRendering() const;
+    [[nodiscard]] QString connectionUri() const;
 
     QVector<Domain *> domains();
     void refreshDomain(const virDomainPtr domainPtr);
@@ -48,6 +51,7 @@ public:
     void refreshDomainList();
     QString getVirtualDiskPath(const QString &domainName);
     QString getXmlConfigPath(const QString &domainName);
+    int diskSizeGB(const QString &path);
 
 Q_SIGNALS:
     void domainsChanged(const virDomainPtr domainPtr, int event, int detail);
@@ -72,6 +76,7 @@ private:
     QVector<Domain *> m_domains;
     LibvirtMonitor *m_monitor;
     CommandRunner *m_commandRunner;
+    QHash<QString, int> m_diskSizeCache;
 
     bool init();
 };

@@ -11,6 +11,8 @@
 #include <QDomDocument>
 #include <QDomElement>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QObject>
 #include <QQuickWindow>
 #include <QRegularExpression>
@@ -49,6 +51,11 @@ bool Karton::vulkanRendering() const
     return QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan;
 }
 
+QString Karton::connectionUri() const
+{
+    return qEnvironmentVariable("KARTON_LIBVIRT_URI", QStringLiteral("qemu:///session"));
+}
+
 Karton *Karton::self()
 {
     static Karton *k = new Karton(nullptr);
@@ -76,14 +83,14 @@ bool Karton::init()
     // to the hypervisor.
     LibvirtEventLoop::registerImpl();
 
-    // Currently set to session, but could also do system for root..
-    m_conn = virConnectOpen("qemu:///session");
+    const QString uri = connectionUri();
+    m_conn = virConnectOpen(uri.toUtf8().constData());
     if (!m_conn) {
         qCCritical(KARTON_DEBUG) << "Failed to connect to hypervisor:" << virGetLastErrorMessage();
         return false;
     }
 
-    qCInfo(KARTON_DEBUG) << "Connected to hypervisor";
+    qCInfo(KARTON_DEBUG) << "Connected to hypervisor:" << uri;
 
     m_monitor = new LibvirtMonitor(this, m_conn);
     connect(m_monitor, &LibvirtMonitor::domainStateChanged, this, &Karton::onDomainStateChanged);
@@ -229,7 +236,8 @@ void Karton::refreshDomainList()
             .maxRam = static_cast<int>(domInfo.maxMem / (1024 * 1024)), // KiB -> GiB
             .ramUsage = static_cast<int>(domInfo.memory / (1024 * 1024)), // KiB -> GiB
             .cpus = static_cast<int>(domInfo.nrVirtCpu),
-            .maxDiskStorage = reader.m_xmlInfo.maxDiskStorage / 1024, // MiB -> GiB
+            .maxDiskStorage = reader.m_xmlInfo.maxDiskStorage > 0 ? reader.m_xmlInfo.maxDiskStorage / 1024 // MiB -> GiB
+                                                                  : diskSizeGB(reader.m_xmlInfo.virtualDiskPath),
             .xmlConfigPath = xmlConfigPath,
             .isoDiskPath = reader.m_xmlInfo.isoDiskPath,
             .virtualDiskPath = reader.m_xmlInfo.virtualDiskPath,
@@ -550,6 +558,7 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
             Q_EMIT errorOccurred(errorMsg);
             return false;
         }
+        m_diskSizeCache.remove(domainConfig->virtualDiskPath());
     }
 
     virDomainPtr redefined = virDomainDefineXML(m_conn, xmlString.toUtf8().constData());
@@ -597,6 +606,39 @@ QString Karton::getVirtualDiskPath(const QString &domainName)
 {
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QStringLiteral("%1/libvirt/images/%2.qcow2").arg(dataDir, domainName);
+}
+
+int Karton::diskSizeGB(const QString &path)
+{
+    if (path.isEmpty()) {
+        return 0;
+    }
+
+    const auto cached = m_diskSizeCache.constFind(path);
+    if (cached != m_diskSizeCache.cend()) {
+        return *cached;
+    }
+
+    QString output;
+    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"), {QStringLiteral("info"), QStringLiteral("--output=json"), path}, &output)) {
+        return 0;
+    }
+
+    QJsonParseError error;
+    const QJsonDocument document = QJsonDocument::fromJson(output.toUtf8(), &error);
+    if (error.error != QJsonParseError::NoError) {
+        qCWarning(KARTON_DEBUG) << "Failed to parse qemu-img output for" << path << error.errorString();
+        return 0;
+    }
+
+    const qint64 bytes = document.object().value(QStringLiteral("virtual-size")).toVariant().toLongLong();
+    if (bytes <= 0) {
+        return 0;
+    }
+
+    const int sizeGB = static_cast<int>((bytes + (1LL << 30) - 1) / (1LL << 30));
+    m_diskSizeCache.insert(path, sizeGB);
+    return sizeGB;
 }
 
 bool Karton::ejectDisk(const Domain *domain)

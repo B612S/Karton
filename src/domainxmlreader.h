@@ -25,9 +25,10 @@ public:
 
     explicit DomainXmlReader(virDomainPtr domainPtr);
 
+    static XmlInfo parseXml(const QByteArray &xml);
+
     XmlInfo m_xmlInfo;
 
 private:
-    void parse(const QByteArray &xml);
-    QString retrieveDiskPath(QXmlStreamReader &xmlReader);
+    static QString retrieveDiskPath(QXmlStreamReader &xmlReader);
 };
