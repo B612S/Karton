@@ -105,9 +105,12 @@ When testing destructive operations, prefer domains whose names start with
 
 - C++20, Qt 6 / KF6 APIs. Prefer Qt/KF6 classes and `QStringLiteral` over
   `const char *` where practical.
-- Every source file starts with SPDX headers. C++/QML sources are
+- Every source file starts with SPDX headers. Most C++/QML sources are
   `GPL-3.0-or-later`; CMake files are `BSD-2-Clause`; documentation is
-  `CC0-1.0`. Match the header style of the file you are editing.
+  `CC0-1.0`. A few files (e.g. `devicepixelratiohelper.*`) use
+  `GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL`. Match the
+  header of the file you are editing, and do not remove existing copyright
+  lines.
 - Formatting is enforced by the KDE clang-format configuration. Run
   `clang-format -i` on touched C++ files (the build wires up
   `kde_clang_format`).
