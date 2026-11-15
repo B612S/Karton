@@ -190,6 +190,10 @@ When testing destructive operations, prefer domains whose names start with
   CONFIG libvirt calls so a running VM keeps the interface after shutdown; NIC
   detach removes the CONFIG device even if the guest cannot hot-unplug the live
   device.
+- Runtime USB passthrough is available through `Karton::usbDevices()`,
+  `domainUsbDevices()`, `attachUsbDevice()` and `detachUsbDevice()`, with the
+  UI in `qml/UsbDevicesDialog.qml`. Host devices come from libvirt node devices
+  (`usb_device` capability) and are attached as USB hostdevs.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's

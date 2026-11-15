@@ -78,6 +78,10 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantList domainInterfaces(const Domain *domain) const;
     Q_INVOKABLE bool attachNetwork(const Domain *domain, const QString &network, const QString &model);
     Q_INVOKABLE bool detachNetwork(const Domain *domain, const QString &mac);
+    Q_INVOKABLE QVariantList usbDevices() const;
+    Q_INVOKABLE QVariantList domainUsbDevices(const Domain *domain) const;
+    Q_INVOKABLE bool attachUsbDevice(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
+    Q_INVOKABLE bool detachUsbDevice(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
 
 Q_SIGNALS:
     void networksChanged();

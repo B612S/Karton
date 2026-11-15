@@ -64,6 +64,12 @@ Kirigami.ScrollablePage {
             onTriggered: networksDialog.open()
         },
         Kirigami.Action {
+            text: i18n("USB Devices")
+            icon.name: "drive-removable-media-usb"
+            shortcut: "Ctrl+Shift+U"
+            onTriggered: usbDialog.open()
+        },
+        Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
             icon.name: "delete"
             visible: !isRunning
@@ -102,6 +108,11 @@ Kirigami.ScrollablePage {
 
     NetworksDialog {
         id: networksDialog
+        domain: root.domain
+    }
+
+    UsbDevicesDialog {
+        id: usbDialog
         domain: root.domain
     }
 

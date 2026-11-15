@@ -130,6 +130,7 @@ ecm_target_qml_sources(karton
     qml/ConfigurationDialog.qml
     qml/ConnectionSettingsDialog.qml
     qml/NetworksDialog.qml
+    qml/UsbDevicesDialog.qml
 )
 
 ecm_qt_declare_logging_category(
