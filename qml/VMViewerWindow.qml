@@ -35,24 +35,30 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    Connections {
-        target: domainViewer
-        function onImplicitWidthChanged() {
-            if (domainViewer.implicitWidth > 0)
-                viewerWindow.width = domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio;
-        }
-        function onImplicitHeightChanged() {
-            if (domainViewer.implicitHeight > 0)
-                viewerWindow.height = domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio
-                                      + pageStack.globalToolBar.height;
-        }
-    }
-
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
         padding: 0
 
         actions: [
+            Kirigami.Action {
+                text: i18n("Actual Size")
+                icon.name: "zoom-original"
+                onTriggered: {
+                    viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
+                    viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Fit to Window")
+                icon.name: "zoom-fit-best"
+                onTriggered: viewerWindow.showMaximized()
+            },
+            Kirigami.Action {
+                text: i18n("Release Pointer")
+                icon.name: "transform-browse"
+                visible: domainViewer.pointerGrabbed
+                onTriggered: domainViewer.releasePointerGrab()
+            },
             Kirigami.Action {
                 icon.name: "view-fullscreen"
                 onTriggered: {
@@ -65,6 +71,11 @@ Kirigami.ApplicationWindow {
             }
         ]
 
+        Rectangle {
+            anchors.fill: parent
+            color: "black"
+        }
+
         DomainViewer {
             id: domainViewer
 
@@ -72,24 +83,26 @@ Kirigami.ApplicationWindow {
                 window: domainViewer.Window.window
             }
 
-            // Pre-cancel out scaling, and show VM pixels at 1:1.
-            // Falls back to a default size (hardcoded) until the first GL scanout sets implicitWidth/Height.
-            // Fixes 0 width/height bug.
-            width: implicitWidth > 0 ? implicitWidth / dprHelper.devicePixelRatio : Kirigami.Units.gridUnit * 56.55
-            height: implicitHeight > 0 ? implicitHeight / dprHelper.devicePixelRatio : Kirigami.Units.gridUnit * 36
+            readonly property real frameAspect: (implicitWidth > 0 && implicitHeight > 0) ? implicitWidth / implicitHeight : (16.0 / 9.0)
+
+            anchors.centerIn: parent
+            width: Math.min(parent.width, parent.height * frameAspect)
+            height: width / frameAspect
 
             domain: viewerWindow.domain
 
             focus: true
             activeFocusOnTab: true
+        }
 
-            MouseArea {
-                anchors.fill: parent
-                onPressed: {
-                    parent.forceActiveFocus();
-                    mouse.accepted = false;
-                }
-            }
+        Kirigami.InlineMessage {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Kirigami.Units.largeSpacing
+            width: Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 40)
+            visible: domainViewer.pointerGrabbed && domainViewer.errorMessage.length === 0
+            text: i18n("Pointer captured. Press Esc to release it.")
+            type: Kirigami.MessageType.Information
         }
 
         Kirigami.InlineMessage {

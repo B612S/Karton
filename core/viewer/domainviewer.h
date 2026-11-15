@@ -13,6 +13,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QPoint>
+#include <QPointF>
 #include <QQuickItem>
 #include <QSGNode>
 
@@ -29,6 +30,7 @@ class DomainViewer : public QQuickItem
     QML_ELEMENT
     Q_PROPERTY(Domain *domain READ domain WRITE setDomain NOTIFY domainChanged REQUIRED)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
+    Q_PROPERTY(bool pointerGrabbed READ pointerGrabbed NOTIFY pointerGrabbedChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -45,6 +47,13 @@ public:
         return m_errorMessage;
     }
     void setErrorMessage(const QString &message);
+
+    bool pointerGrabbed() const
+    {
+        return m_pointerGrabbed;
+    }
+    Q_INVOKABLE void grabPointer();
+    Q_INVOKABLE void releasePointerGrab();
 
     void componentComplete() override;
 
@@ -64,12 +73,14 @@ public:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
 
     Q_INVOKABLE void saveFrameToDomain();
 
 Q_SIGNALS:
     void domainChanged();
     void errorMessageChanged();
+    void pointerGrabbedChanged();
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
@@ -96,6 +107,9 @@ private:
     static void playback_data_callback(SpicePlaybackChannel *channel, gpointer data, gint size, gpointer user_data);
     static void playback_stop_callback(SpicePlaybackChannel *channel, gpointer user_data);
 
+    void updatePointer(const QPointF &position, int buttonMask);
+    int mouseMode() const;
+
     Domain *m_domain;
     QString m_spiceUri;
     QString m_errorMessage;
@@ -105,9 +119,13 @@ private:
     std::unique_ptr<SpiceDisplayRenderer> m_renderer;
 
     SpiceSession *m_session = nullptr;
+    SpiceMainChannel *m_main_channel = nullptr;
     SpiceInputsChannel *m_inputs_channel = nullptr;
 
     int m_current_button_mask = 0;
+    bool m_pointerGrabbed = false;
+    QPointF m_lastPointerPosition;
+    bool m_hasLastPointerPosition = false;
 
     QAudioSink *m_audioSink = nullptr;
     QIODevice *m_audioDevice = nullptr;

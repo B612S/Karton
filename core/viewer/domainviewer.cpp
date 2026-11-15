@@ -244,8 +244,10 @@ void DomainViewer::disconnectFromSpice()
         m_session = nullptr;
     }
 
+    m_main_channel = nullptr;
     m_inputs_channel = nullptr;
     m_connected = false;
+    releasePointerGrab();
 }
 
 void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *channel, gpointer user_data)
@@ -258,6 +260,10 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
     if (SPICE_IS_DISPLAY_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE display connected";
         item->attachDisplayChannel(channel);
+    } else if (SPICE_IS_MAIN_CHANNEL(channel)) {
+        qCInfo(KARTON_DEBUG) << "SPICE main channel connected";
+        spice_channel_connect(channel);
+        item->m_main_channel = SPICE_MAIN_CHANNEL(channel);
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
         spice_channel_connect(channel);
@@ -361,7 +367,9 @@ void DomainViewer::cursorHideCallback(SpiceCursorChannel *channel, gpointer user
         QMutexLocker locker(&item->m_cursorMutex);
         item->m_cursorVisible = false;
     }
-    item->unsetCursor();
+    if (!item->m_pointerGrabbed) {
+        item->unsetCursor();
+    }
     item->update();
 }
 
@@ -381,7 +389,9 @@ void DomainViewer::clearCursor()
         m_cursorVisible = false;
         m_cursorTextureDirty = true;
     }
-    unsetCursor();
+    if (!m_pointerGrabbed) {
+        unsetCursor();
+    }
     update();
 }
 
@@ -583,8 +593,97 @@ uint8_t DomainViewer::evdevToPcXt(uint32_t evdev_scancode)
     return result;
 }
 
+void DomainViewer::grabPointer()
+{
+    if (m_pointerGrabbed || !window()) {
+        return;
+    }
+
+    // Set the guard before calling into the window system: grabbing can
+    // re-enter the event handlers on some platforms.
+    m_pointerGrabbed = true;
+    if (!window()->setMouseGrabEnabled(true)) {
+        m_pointerGrabbed = false;
+        qCWarning(KARTON_DEBUG) << "The windowing system does not support mouse grab";
+        return;
+    }
+
+    window()->setKeyboardGrabEnabled(true);
+    qCInfo(KARTON_DEBUG) << "Pointer grabbed; SPICE mouse mode:" << mouseMode();
+    m_hasLastPointerPosition = false;
+    setCursor(Qt::BlankCursor);
+    forceActiveFocus();
+    Q_EMIT pointerGrabbedChanged();
+}
+
+void DomainViewer::releasePointerGrab()
+{
+    if (!m_pointerGrabbed) {
+        return;
+    }
+
+    m_pointerGrabbed = false;
+    m_hasLastPointerPosition = false;
+    qCInfo(KARTON_DEBUG) << "Pointer released";
+    if (window()) {
+        window()->setMouseGrabEnabled(false);
+        window()->setKeyboardGrabEnabled(false);
+    }
+    unsetCursor();
+    Q_EMIT pointerGrabbedChanged();
+}
+
+int DomainViewer::mouseMode() const
+{
+    if (!m_main_channel) {
+        return SPICE_MOUSE_MODE_CLIENT;
+    }
+
+    int mode = SPICE_MOUSE_MODE_CLIENT;
+    g_object_get(m_main_channel, "mouse-mode", &mode, nullptr);
+    return mode;
+}
+
+void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
+{
+    if (!m_inputs_channel || !m_connected || width() <= 0 || height() <= 0) {
+        return;
+    }
+
+    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
+    const qreal scaleX = frameSize.width() > 0 ? frameSize.width() / width() : 1.0;
+    const qreal scaleY = frameSize.height() > 0 ? frameSize.height() / height() : 1.0;
+
+    if (!m_hasLastPointerPosition) {
+        m_lastPointerPosition = position;
+        m_hasLastPointerPosition = true;
+    }
+
+    const QPointF delta = position - m_lastPointerPosition;
+    m_lastPointerPosition = position;
+
+    if (mouseMode() == SPICE_MOUSE_MODE_SERVER) {
+        // PS/2-style guests only understand relative motion. This also works
+        // while the pointer is grabbed and the host cursor is outside the item.
+        if (!qFuzzyIsNull(delta.x()) || !qFuzzyIsNull(delta.y())) {
+            spice_inputs_channel_motion(m_inputs_channel, qRound(delta.x() * scaleX), qRound(delta.y() * scaleY), buttonMask);
+        }
+        return;
+    }
+
+    const qreal x = qBound<qreal>(0, position.x(), width());
+    const qreal y = qBound<qreal>(0, position.y(), height());
+    spice_inputs_channel_position(m_inputs_channel, qRound(x * scaleX), qRound(y * scaleY), 0, buttonMask);
+}
+
 void DomainViewer::keyPressEvent(QKeyEvent *event)
 {
+    if (m_pointerGrabbed && event->key() == Qt::Key_Escape) {
+        releasePointerGrab();
+        event->accept();
+        return;
+    }
+
     event->accept();
     quint32 evdev_scancode;
     if (QGuiApplication::platformName() == QStringLiteral("xcb")) { // check if X11
@@ -626,16 +725,7 @@ void DomainViewer::wheelEvent(QWheelEvent *event)
     if (!m_inputs_channel || !m_connected) {
         return;
     }
-    qreal x = event->position().x();
-    qreal y = event->position().y();
-
-    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
-    if (frameSize.width() > 0 && frameSize.height() > 0 && width() > 0 && height() > 0) {
-        x = (x * frameSize.width()) / width();
-        y = (y * frameSize.height()) / height();
-    }
-
-    spice_inputs_channel_position(m_inputs_channel, x, y, 0, 0);
+    updatePointer(event->position(), m_current_button_mask);
 
     QPoint angleDelta = event->angleDelta();
     // for more info on constants see: (Inputs channel definition) https://www.spice-space.org/spice-protocol.html
@@ -652,69 +742,43 @@ void DomainViewer::wheelEvent(QWheelEvent *event)
     } else if (angleDelta.x() < 0) { // scroll left
     }
 
-    qCDebug(KARTON_DEBUG) << "wheel event at (" << x << "," << y << ") delta:" << angleDelta;
+    qCDebug(KARTON_DEBUG) << "wheel event at" << event->position() << "delta:" << angleDelta;
 }
 
 void DomainViewer::mouseMoveEvent(QMouseEvent *event)
 {
-    if (!m_inputs_channel || !m_connected) {
-        return;
+    int buttonMask = 0;
+    if (event->buttons() & Qt::LeftButton) {
+        buttonMask |= SPICE_MOUSE_BUTTON_MASK_LEFT;
+    }
+    if (event->buttons() & Qt::MiddleButton) {
+        buttonMask |= SPICE_MOUSE_BUTTON_MASK_MIDDLE;
+    }
+    if (event->buttons() & Qt::RightButton) {
+        buttonMask |= SPICE_MOUSE_BUTTON_MASK_RIGHT;
     }
 
-    int button_mask = 0;
-    if (event->buttons() & Qt::LeftButton)
-        button_mask |= SPICE_MOUSE_BUTTON_MASK_LEFT;
-    if (event->buttons() & Qt::MiddleButton)
-        button_mask |= SPICE_MOUSE_BUTTON_MASK_MIDDLE;
-    if (event->buttons() & Qt::RightButton)
-        button_mask |= SPICE_MOUSE_BUTTON_MASK_RIGHT;
-
-    qreal x = event->position().x();
-    qreal y = event->position().y();
-
-    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
-    if (width() > 0 && height() > 0) {
-        x = (x * frameSize.width()) / width();
-        y = (y * frameSize.height()) / height();
-    }
-
-    // note: theres a warning that it's deprecated, but newer version has some bug with drag.
-    spice_inputs_position(m_inputs_channel, x, y, 0, button_mask);
-    static int moveCounter = 0;
-    if (++moveCounter % 10 == 0) {
-        qCDebug(KARTON_DEBUG) << "Mouse drag at (" << x << "," << y << "), mask: " << m_current_button_mask;
-    }
-
+    updatePointer(event->position(), buttonMask);
     event->accept();
 }
+
 void DomainViewer::hoverMoveEvent(QHoverEvent *event)
 {
-    static int hoverCounter = 0;
-    if (++hoverCounter % 20 == 0) {
-        qCDebug(KARTON_DEBUG) << "Mouse hover at (" << event->position().x() << "," << event->position().y() << ")";
-    }
-    if (m_inputs_channel && m_connected) {
-        qreal x = event->position().x();
-        qreal y = event->position().y();
-
-        const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
-        if (frameSize.width() > 0 && frameSize.height() > 0 && width() > 0 && height() > 0) {
-            x = (x * frameSize.width()) / width();
-            y = (y * frameSize.height()) / height();
-        }
-
-        spice_inputs_channel_position(m_inputs_channel, x, y, 0, 0);
-    }
+    updatePointer(event->position(), 0);
 }
 
 void DomainViewer::mousePressEvent(QMouseEvent *event)
 {
     qCDebug(KARTON_DEBUG) << "Mouse click at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
+    grabPointer();
     setFocus(true);
 
     if (!m_inputs_channel || !m_connected) {
         return;
     }
+
+    m_lastPointerPosition = event->position();
+    m_hasLastPointerPosition = true;
 
     switch (event->button()) {
     case Qt::LeftButton:
@@ -765,6 +829,14 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
     spice_inputs_channel_button_release(m_inputs_channel, button, m_current_button_mask);
 
     event->accept();
+}
+
+void DomainViewer::focusOutEvent(QFocusEvent *event)
+{
+    if (!window() || !window()->isActive()) {
+        releasePointerGrab();
+    }
+    QQuickItem::focusOutEvent(event);
 }
 
 void DomainViewer::checkChannelStatus()
