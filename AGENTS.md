@@ -36,7 +36,6 @@ used during development or testing must therefore pass
 | `src/libvirtmonitor.*`, `src/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `src/commandrunner.*` | Small `QProcess` helper used for `qemu-img` / `virsh`. |
 | `src/qml/` | Kirigami QML pages and dialogs. |
-| `flatpak/` | Flatpak manifest and build patches. |
 
 QML sources are compiled into the binary by `ecm_add_qml_module()` under the URI
 `org.kde.karton`. When adding a QML file, add it to the `ecm_target_qml_sources()`
