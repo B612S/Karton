@@ -203,6 +203,11 @@ When testing destructive operations, prefer domains whose names start with
   `domainPciDevices()`, `attachPciDevice()` and `detachPciDevice()`, with the UI
   in `qml/PciDevicesDialog.qml`. The dialog warns that the device is detached
   from the host and only enables Attach for devices with an IOMMU group.
+- VM cloning is implemented by `Karton::cloneDomain()`, with the UI in
+  `qml/CloneDialog.qml`. It copies local file-backed disks with `qemu-img
+  convert -U`, strips the UUID, MAC addresses, hostdevs, NVRAM and Karton
+  metadata, and defines a stopped clone. The copy runs asynchronously through
+  `CommandRunner`; partial destination files are removed on failure.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's

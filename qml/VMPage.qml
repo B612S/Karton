@@ -81,6 +81,11 @@ Kirigami.ScrollablePage {
             onTriggered: pciDialog.open()
         },
         Kirigami.Action {
+            text: i18n("Clone")
+            icon.name: "edit-copy"
+            onTriggered: cloneDialog.open()
+        },
+        Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
             icon.name: "delete"
             visible: !isRunning
@@ -137,9 +142,19 @@ Kirigami.ScrollablePage {
         domain: root.domain
     }
 
+    CloneDialog {
+        id: cloneDialog
+        domain: root.domain
+    }
+
     Shortcut {
         sequence: "Ctrl+Shift+P"
         onActivated: pciDialog.open()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+C"
+        onActivated: cloneDialog.open()
     }
 
     ColumnLayout {

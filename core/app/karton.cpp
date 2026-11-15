@@ -12,6 +12,7 @@
 #include <QDomDocument>
 #include <QDomElement>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkInterface>
@@ -24,6 +25,8 @@
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
+#include <functional>
+#include <memory>
 #include <utility>
 
 #include "domain/domain.h"
@@ -1555,6 +1558,192 @@ bool Karton::detachPciDevice(const Domain *domain, const QString &pciDomain, con
         refreshDomain(domain->domainPtr());
     }
     return success;
+}
+
+bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    const QString sourceName = domain->config()->name();
+    const QString newName = requestedName.trimmed();
+    if (!isValidDomainName(newName)) {
+        Q_EMIT errorOccurred(i18n("A VM name may only contain letters, digits, dots, underscores and dashes."));
+        return false;
+    }
+
+    virDomainPtr existing = virDomainLookupByName(m_conn, newName.toUtf8().constData());
+    if (existing) {
+        virDomainFree(existing);
+        Q_EMIT errorOccurred(i18nc("%1 is a VM name", "A VM named %1 already exists.", newName));
+        return false;
+    }
+
+    char *sourceXml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    if (!sourceXml) {
+        Q_EMIT errorOccurred(
+            i18nc("VM cloning failed, %1 is the libvirt error", "Could not read the source VM configuration: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(sourceXml))) {
+        free(sourceXml);
+        Q_EMIT errorOccurred(i18n("Could not parse the source VM configuration."));
+        return false;
+    }
+    free(sourceXml);
+
+    QDomElement root = document.documentElement();
+    QDomElement nameElement = root.firstChildElement(QStringLiteral("name"));
+    if (nameElement.isNull()) {
+        Q_EMIT errorOccurred(i18n("The source VM configuration has no name."));
+        return false;
+    }
+    if (nameElement.firstChild().isNull()) {
+        nameElement.appendChild(document.createTextNode(newName));
+    } else {
+        nameElement.firstChild().setNodeValue(newName);
+    }
+
+    const QDomElement uuidElement = root.firstChildElement(QStringLiteral("uuid"));
+    if (!uuidElement.isNull()) {
+        root.removeChild(uuidElement);
+    }
+    const QDomElement metadataElement = root.firstChildElement(QStringLiteral("metadata"));
+    if (!metadataElement.isNull()) {
+        root.removeChild(metadataElement);
+    }
+
+    QDomElement osElement = root.firstChildElement(QStringLiteral("os"));
+    if (!osElement.isNull()) {
+        const QDomElement nvramElement = osElement.firstChildElement(QStringLiteral("nvram"));
+        if (!nvramElement.isNull()) {
+            osElement.removeChild(nvramElement);
+        }
+    }
+
+    const QDomNodeList graphics = root.elementsByTagName(QStringLiteral("graphics"));
+    for (int i = 0; i < graphics.count(); ++i) {
+        QDomElement element = graphics.at(i).toElement();
+        element.setAttribute(QStringLiteral("autoport"), QStringLiteral("yes"));
+        element.removeAttribute(QStringLiteral("port"));
+    }
+
+    const QDomNodeList interfaces = root.elementsByTagName(QStringLiteral("interface"));
+    for (int i = 0; i < interfaces.count(); ++i) {
+        QDomElement element = interfaces.at(i).toElement();
+        const QDomElement macElement = element.firstChildElement(QStringLiteral("mac"));
+        if (!macElement.isNull()) {
+            element.removeChild(macElement);
+        }
+    }
+
+    const QDomNodeList hostdevs = root.elementsByTagName(QStringLiteral("hostdev"));
+    for (int i = hostdevs.count() - 1; i >= 0; --i) {
+        QDomElement element = hostdevs.at(i).toElement();
+        if (!element.parentNode().isNull()) {
+            element.parentNode().removeChild(element);
+        }
+    }
+
+    struct DiskCopy {
+        QString source;
+        QString destination;
+        QString format;
+    };
+
+    QVector<DiskCopy> diskCopies;
+    const QDomNodeList diskNodes = root.elementsByTagName(QStringLiteral("disk"));
+    int dataDiskIndex = 0;
+    for (int i = 0; i < diskNodes.count(); ++i) {
+        QDomElement disk = diskNodes.at(i).toElement();
+        if (disk.attribute(QStringLiteral("device")) != QStringLiteral("disk")) {
+            continue;
+        }
+
+        QDomElement source = disk.firstChildElement(QStringLiteral("source"));
+        const QString sourcePath = source.attribute(QStringLiteral("file"));
+        if (sourcePath.isEmpty()) {
+            Q_EMIT errorOccurred(i18n("This VM has a disk that is not backed by a local file; cloning it is not supported."));
+            return false;
+        }
+
+        const QDomElement driver = disk.firstChildElement(QStringLiteral("driver"));
+        QString format = driver.attribute(QStringLiteral("type"));
+        if (format.isEmpty()) {
+            format = QStringLiteral("qcow2");
+        }
+
+        const QString diskName = dataDiskIndex == 0 ? newName : newName + QStringLiteral("-disk%1").arg(dataDiskIndex + 1);
+        const QString destination = getVirtualDiskPath(diskName, format);
+        if (QFile::exists(destination)) {
+            Q_EMIT errorOccurred(i18nc("%1 is a file path", "The clone destination already exists: %1", destination));
+            return false;
+        }
+
+        QDir().mkpath(QFileInfo(destination).absolutePath());
+        source.setAttribute(QStringLiteral("file"), destination);
+        diskCopies.append({sourcePath, destination, format});
+        ++dataDiskIndex;
+    }
+
+    const QString cloneXml = document.toString();
+    const auto createdFiles = std::make_shared<QStringList>();
+    const auto diskList = std::make_shared<QVector<DiskCopy>>(diskCopies);
+
+    auto defineClone = [this, cloneXml, createdFiles, sourceName, newName]() {
+        virDomainPtr clone = virDomainDefineXML(m_conn, cloneXml.toUtf8().constData());
+        if (!clone) {
+            qCWarning(KARTON_DEBUG) << "Define clone failed:" << virGetLastErrorMessage();
+            for (const QString &path : std::as_const(*createdFiles)) {
+                QFile::remove(path);
+            }
+            const QString errorMsg =
+                i18nc("%1 is a VM name, %2 is an error", "Failed to define cloned VM %1: %2", newName, QString::fromUtf8(virGetLastErrorMessage()));
+            Q_EMIT errorOccurred(errorMsg);
+            Q_EMIT domainCloned(false, sourceName, newName);
+            return;
+        }
+
+        virDomainFree(clone);
+        refreshDomainList();
+        Q_EMIT domainCloned(true, sourceName, newName);
+    };
+
+    auto nextDisk = std::make_shared<std::function<void(int)>>();
+    *nextDisk = [this, diskList, createdFiles, nextDisk, defineClone, sourceName, newName](int index) {
+        if (index >= diskList->size()) {
+            defineClone();
+            return;
+        }
+
+        const DiskCopy &disk = diskList->at(index);
+        m_commandRunner->runCommand(QStringLiteral("qemu-img"),
+                                    {QStringLiteral("convert"), QStringLiteral("-U"), QStringLiteral("-O"), disk.format, disk.source, disk.destination},
+                                    [this, disk, createdFiles, nextDisk, sourceName, newName, index](bool success, const QString &output) {
+                                        if (!success) {
+                                            for (const QString &path : std::as_const(*createdFiles)) {
+                                                QFile::remove(path);
+                                            }
+                                            QFile::remove(disk.destination);
+                                            Q_EMIT errorOccurred(
+                                                i18nc("%1 is a disk path, %2 is the error", "Failed to copy disk %1: %2", disk.source, output));
+                                            Q_EMIT domainCloned(false, sourceName, newName);
+                                            return;
+                                        }
+                                        createdFiles->append(disk.destination);
+                                        (*nextDisk)(index + 1);
+                                    });
+    };
+
+    if (diskList->isEmpty()) {
+        defineClone();
+    } else {
+        (*nextDisk)(0);
+    }
+    return true;
 }
 
 bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)

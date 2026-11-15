@@ -59,6 +59,7 @@ Q_SIGNALS:
     void domainRemoved(Domain *domain);
     void domainCreated(bool success, const QString &name);
     void domainEdited(bool success, const QString &name);
+    void domainCloned(bool success, const QString &sourceName, const QString &newName);
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
@@ -90,6 +91,7 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantList domainPciDevices(const Domain *domain) const;
     Q_INVOKABLE bool attachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
     Q_INVOKABLE bool detachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
+    Q_INVOKABLE bool cloneDomain(const Domain *domain, const QString &newName);
 
 Q_SIGNALS:
     void networksChanged();
