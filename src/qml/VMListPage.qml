@@ -18,20 +18,20 @@ Kirigami.ScrollablePage {
 
     function openDomain(domain) {
         const stack = applicationWindow().pageStack;
-        if (stack.depth > 1 && stack.currentItem && stack.currentItem.domain === domain) {
+        // In Kirigami's fixed-column layout currentItem can still point at the
+        // first column, while the detail page is the last one. Using
+        // replace() there would replace the VM list itself.
+        if (stack.lastItem && stack.lastItem.domain === domain) {
             return;
         }
 
-        const page = Qt.resolvedUrl("VMPage.qml");
-        if (stack.depth > 1) {
-            stack.replace(page, {
-                domain: domain
-            });
-        } else {
-            stack.push(page, {
-                domain: domain
-            });
+        while (stack.depth > 1) {
+            stack.pop();
         }
+
+        stack.push(Qt.resolvedUrl("VMPage.qml"), {
+            domain: domain
+        });
     }
 
     Connections {
