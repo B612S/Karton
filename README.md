@@ -13,6 +13,7 @@ This project is still in early development and will likely break existing virtua
 ## Features
 - Displays list of existing VMs
 - VM lifecycle: start, stop, pause/resume, reboot, force stop and open the console
+- Managed save: store a running VM's state on disk and restore it on the next start
 - Live CPU and memory usage on the VM page
 - Installing and deleting VMs
 - qcow2, raw and vmdk virtual disks

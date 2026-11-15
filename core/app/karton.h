@@ -69,6 +69,8 @@ public Q_SLOTS:
     Q_INVOKABLE bool pauseDomain(const Domain *domain);
     Q_INVOKABLE bool resumeDomain(const Domain *domain);
     Q_INVOKABLE bool rebootDomain(const Domain *domain);
+    Q_INVOKABLE bool saveDomainState(const Domain *domain);
+    Q_INVOKABLE bool deleteSavedState(const Domain *domain);
     Q_INVOKABLE QVariantMap domainStats(const Domain *domain);
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);

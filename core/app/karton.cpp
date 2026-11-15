@@ -269,6 +269,7 @@ void Karton::refreshDomain(const virDomainPtr domainPtr)
     // updates only mutable fields
     domain->setActive(virDomainIsActive(domainPtr) == 1);
     domain->setPaused(domInfo.state == VIR_DOMAIN_PAUSED);
+    domain->setHasSavedState(virDomainHasManagedSaveImage(domainPtr, 0) == 1);
     domain->setState(domainStateString(domInfo.state));
     domain->setRamUsage(domInfo.memory / (1024 * 1024));
     domain->setAutostart(autoFlag != 0);
@@ -330,6 +331,7 @@ void Karton::refreshDomainList()
             .osId = reader.m_xmlInfo.osId,
             .isActive = virDomainIsActive(domainPtr) == 1,
             .isPaused = domInfo.state == VIR_DOMAIN_PAUSED,
+            .hasSavedState = virDomainHasManagedSaveImage(domainPtr, 0) == 1,
             .state = domainStateString(domInfo.state),
             .maxRam = static_cast<int>(domInfo.maxMem / (1024 * 1024)), // KiB -> GiB
             .ramUsage = static_cast<int>(domInfo.memory / (1024 * 1024)), // KiB -> GiB
@@ -527,6 +529,50 @@ bool Karton::rebootDomain(const Domain *domain)
     }
 
     qCInfo(KARTON_DEBUG) << "Successfully rebooted domain:" << domain->config()->name();
+    return true;
+}
+
+bool Karton::saveDomainState(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainManagedSave(domainPtr, 0) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to save the state of domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    refreshDomain(domainPtr);
+    qCInfo(KARTON_DEBUG) << "Successfully saved the state of domain:" << domain->config()->name();
+    return true;
+}
+
+bool Karton::deleteSavedState(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainManagedSaveRemove(domainPtr, 0) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to delete the saved state of domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    refreshDomain(domainPtr);
+    qCInfo(KARTON_DEBUG) << "Successfully deleted the saved state of domain:" << domain->config()->name();
     return true;
 }
 

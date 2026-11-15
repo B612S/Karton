@@ -19,6 +19,7 @@ class DomainConfig : public QObject
     Q_PROPERTY(QString osId READ osId CONSTANT)
     Q_PROPERTY(bool isActive READ isActive NOTIFY isActiveChanged)
     Q_PROPERTY(bool isPaused READ isPaused NOTIFY isPausedChanged)
+    Q_PROPERTY(bool hasSavedState READ hasSavedState NOTIFY hasSavedStateChanged)
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(int maxRam READ maxRam NOTIFY maxRamChanged)
     Q_PROPERTY(int ramUsage READ ramUsage NOTIFY ramUsageChanged)
@@ -39,6 +40,7 @@ class DomainConfig : public QObject
 Q_SIGNALS:
     void isActiveChanged(bool active);
     void isPausedChanged(bool paused);
+    void hasSavedStateChanged(bool hasSavedState);
     void stateChanged(const QString &state);
     void ramUsageChanged(int ramUsage);
     void autostartChanged(bool autostart);
@@ -58,6 +60,7 @@ public:
         QString osId;
         bool isActive = false;
         bool isPaused = false;
+        bool hasSavedState = false;
         QString state;
         int maxRam = 0;
         int ramUsage = 0;
@@ -115,6 +118,10 @@ public:
     [[nodiscard]] bool isPaused() const
     {
         return m_isPaused;
+    }
+    [[nodiscard]] bool hasSavedState() const
+    {
+        return m_hasSavedState;
     }
     [[nodiscard]] QString state() const
     {
@@ -183,6 +190,7 @@ public:
 
     void setActive(bool active);
     void setPaused(bool paused);
+    void setHasSavedState(bool hasSavedState);
     void setState(const QString &state);
     void setRamUsage(int ramUsage);
     void setAutostart(bool autostart);
@@ -205,6 +213,7 @@ private:
     QString m_osId;
     bool m_isActive = false;
     bool m_isPaused = false;
+    bool m_hasSavedState = false;
     QString m_state;
     int m_maxRam = 0;
     int m_ramUsage = 0;

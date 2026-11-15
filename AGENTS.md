@@ -255,6 +255,11 @@ When testing destructive operations, prefer domains whose names start with
   and vCPU count for the VM page. `VMPage.qml` polls it with a 2-second `Timer`
   while the VM is running; the percentage is computed from the `virDomainInfo`
   CPU-time delta since the previous call and averaged over the vCPUs.
+- Managed save is exposed through `Karton::saveDomainState()` and
+  `deleteSavedState()`, with `Domain::hasSavedState` driving the VM page
+  actions. `startDomain()` restores a saved state automatically through
+  `virDomainCreate()`; never call `virDomainManagedSaveRemove()` while the
+  domain is running.
 - Application icons are installed under the reverse-DNS name
   `org.kde.karton`, matching `org.kde.karton.desktop` and `QGuiApplication`'s
   window icon lookup.

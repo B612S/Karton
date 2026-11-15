@@ -15,6 +15,7 @@ Kirigami.ScrollablePage {
     property Domain domain: null
     readonly property bool isRunning: domain ? domain.isActive : false
     readonly property bool isPaused: domain ? domain.isPaused : false
+    readonly property bool hasSavedState: domain ? domain.hasSavedState : false
     property var stats: ({})
 
     onDomainChanged: stats = domain && domain.isActive ? Karton.domainStats(domain) : ({})
@@ -96,6 +97,26 @@ Kirigami.ScrollablePage {
             onTriggered: {
                 if (Karton.rebootDomain(domain)) {
                     applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Rebooting VM: %1!", domain.config.name));
+                }
+            }
+        },
+        Kirigami.Action {
+            text: i18n("Save State")
+            icon.name: "document-save"
+            visible: isRunning
+            onTriggered: {
+                if (Karton.saveDomainState(domain)) {
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Saving VM state: %1!", domain.config.name));
+                }
+            }
+        },
+        Kirigami.Action {
+            text: i18n("Delete Saved State")
+            icon.name: "edit-delete"
+            visible: !isRunning && hasSavedState
+            onTriggered: {
+                if (Karton.deleteSavedState(domain)) {
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Deleted saved state for VM: %1", domain.config.name));
                 }
             }
         },
