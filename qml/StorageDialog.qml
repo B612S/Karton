@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Karton contributors
 
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -14,6 +15,14 @@ Kirigami.Dialog {
     title: domain ? i18n("Storage — %1", domain.config.name) : i18n("Storage")
     property var diskList: []
     property string errorText: ""
+
+    function localPath(url) {
+        let path = url.toString();
+        if (path.startsWith("file://")) {
+            path = path.substring(7);
+        }
+        return decodeURIComponent(path);
+    }
 
     function refresh() {
         diskList = domain ? Karton.domainDisks(domain) : [];
@@ -164,6 +173,10 @@ Kirigami.Dialog {
                 Layout.fillWidth: true
                 placeholderText: i18n("Path to a disk image")
             }
+            Controls.Button {
+                text: i18n("Browse…")
+                onClicked: imageFileDialog.open()
+            }
             Controls.ComboBox {
                 id: imageFormatCombo
                 model: ["qcow2", "raw", "vmdk"]
@@ -192,6 +205,10 @@ Kirigami.Dialog {
                 placeholderText: i18n("Path to an ISO image")
             }
             Controls.Button {
+                text: i18n("Browse…")
+                onClicked: isoFileDialog.open()
+            }
+            Controls.Button {
                 text: i18n("Attach ISO")
                 enabled: isoPathField.text.trim().length > 0
                 onClicked: {
@@ -206,5 +223,21 @@ Kirigami.Dialog {
                 onClicked: root.close()
             }
         }
+    }
+
+    FileDialog {
+        id: imageFileDialog
+        title: i18n("Select a disk image")
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["Disk images (*.qcow2 *.img *.raw *.vmdk)", "All files (*)"]
+        onAccepted: imagePathField.text = root.localPath(selectedFile)
+    }
+
+    FileDialog {
+        id: isoFileDialog
+        title: i18n("Select an ISO image")
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["ISO images (*.iso)", "All files (*)"]
+        onAccepted: isoPathField.text = root.localPath(selectedFile)
     }
 }
