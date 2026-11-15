@@ -30,7 +30,8 @@ This project is still in early development and will likely break existing virtua
 - Automatic system/session libvirt connection detection
 - Libvirt network management: list, start/stop, autostart, NAT creation and VM NIC attach/detach
 - Runtime USB passthrough from host to running VMs
-- VM snapshots: create, revert and delete internal snapshots
+- VM snapshots: internal snapshots (with optional memory) and external disk-only
+  snapshots for running VMs, with revert and delete
 - Runtime PCI passthrough with IOMMU group information and warnings
 - VM cloning with copied disk images and regenerated UUID/MAC
 - Runtime disk and ISO hotplug, with optional disk-file deletion on detach

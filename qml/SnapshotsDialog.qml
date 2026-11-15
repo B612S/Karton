@@ -28,7 +28,7 @@ Kirigami.Dialog {
         errorText = "";
         nameField.text = defaultName();
         descriptionField.text = "";
-        includeMemoryCheck.checked = root.domain !== null && root.domain.isActive;
+        includeMemoryCheck.checked = false;
         refresh();
     }
 
@@ -153,8 +153,18 @@ Kirigami.Dialog {
             id: includeMemoryCheck
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
-            text: i18n("Include memory (required for running VMs)")
+            text: i18n("Include memory (internal snapshot)")
             enabled: root.domain !== null && root.domain.isActive
+        }
+
+        Controls.Label {
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            Layout.fillWidth: true
+            visible: includeMemoryCheck.enabled && !includeMemoryCheck.checked
+            text: i18n("Without memory, a running VM gets an external disk-only snapshot.")
+            opacity: 0.7
+            wrapMode: Text.WordWrap
         }
 
         Controls.Button {

@@ -1201,8 +1201,112 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
         return false;
     }
     if (domain->isActive() && !includeMemory) {
-        Q_EMIT errorOccurred(i18n("A running VM needs a memory-inclusive internal snapshot. Enable Include memory."));
-        return false;
+        // A running VM cannot use an internal snapshot without memory, so use
+        // an external disk-only snapshot: libvirt creates one qcow2 overlay
+        // per data disk and switches the live domain to the overlay.
+        char *domainXml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+        if (!domainXml) {
+            Q_EMIT errorOccurred(i18n("Could not read the VM configuration for the snapshot."));
+            return false;
+        }
+
+        QDomDocument domainDocument;
+        if (!domainDocument.setContent(QString::fromUtf8(domainXml))) {
+            free(domainXml);
+            Q_EMIT errorOccurred(i18n("Could not parse the VM configuration for the snapshot."));
+            return false;
+        }
+        free(domainXml);
+
+        QDomDocument snapshotDocument;
+        QDomElement snapshotRoot = snapshotDocument.createElement(QStringLiteral("domainsnapshot"));
+        snapshotDocument.appendChild(snapshotRoot);
+
+        QDomElement snapshotName = snapshotDocument.createElement(QStringLiteral("name"));
+        snapshotName.appendChild(snapshotDocument.createTextNode(name));
+        snapshotRoot.appendChild(snapshotName);
+
+        if (!description.trimmed().isEmpty()) {
+            QDomElement descriptionElement = snapshotDocument.createElement(QStringLiteral("description"));
+            descriptionElement.appendChild(snapshotDocument.createTextNode(description));
+            snapshotRoot.appendChild(descriptionElement);
+        }
+
+        QDomElement memoryElement = snapshotDocument.createElement(QStringLiteral("memory"));
+        memoryElement.setAttribute(QStringLiteral("snapshot"), QStringLiteral("no"));
+        snapshotRoot.appendChild(memoryElement);
+
+        QDomElement disksElement = snapshotDocument.createElement(QStringLiteral("disks"));
+        snapshotRoot.appendChild(disksElement);
+
+        QStringList overlayPaths;
+        const QString domainName = domain->config()->name();
+        const QDomNodeList disks = domainDocument.elementsByTagName(QStringLiteral("disk"));
+        for (int i = 0; i < disks.count(); ++i) {
+            const QDomElement disk = disks.at(i).toElement();
+            if (disk.attribute(QStringLiteral("device")) != QStringLiteral("disk") || disk.attribute(QStringLiteral("type")) != QStringLiteral("file")) {
+                continue;
+            }
+            const QDomElement source = disk.firstChildElement(QStringLiteral("source"));
+            const QString sourceFile = source.attribute(QStringLiteral("file"));
+            if (sourceFile.isEmpty()) {
+                continue;
+            }
+            const QDomElement target = disk.firstChildElement(QStringLiteral("target"));
+            const QString targetDev = target.attribute(QStringLiteral("dev"));
+            if (targetDev.isEmpty()) {
+                continue;
+            }
+
+            // Keep the overlay next to its backing file: for a qemu:///system
+            // domain only the image directory is writable by the qemu user.
+            const QString overlayPath = QFileInfo(sourceFile).absolutePath() + QLatin1Char('/') + domainName + QLatin1Char('-') + name + QLatin1Char('-')
+                + targetDev + QStringLiteral(".qcow2");
+            if (QFile::exists(overlayPath)) {
+                for (const QString &path : std::as_const(overlayPaths)) {
+                    QFile::remove(path);
+                }
+                Q_EMIT errorOccurred(i18nc("%1 is a file path", "Snapshot overlay already exists: %1", overlayPath));
+                return false;
+            }
+
+            QDomElement diskElement = snapshotDocument.createElement(QStringLiteral("disk"));
+            diskElement.setAttribute(QStringLiteral("name"), targetDev);
+            diskElement.setAttribute(QStringLiteral("snapshot"), QStringLiteral("external"));
+            diskElement.setAttribute(QStringLiteral("type"), QStringLiteral("file"));
+
+            QDomElement sourceElement = snapshotDocument.createElement(QStringLiteral("source"));
+            sourceElement.setAttribute(QStringLiteral("file"), overlayPath);
+            diskElement.appendChild(sourceElement);
+
+            QDomElement driverElement = snapshotDocument.createElement(QStringLiteral("driver"));
+            driverElement.setAttribute(QStringLiteral("type"), QStringLiteral("qcow2"));
+            diskElement.appendChild(driverElement);
+
+            disksElement.appendChild(diskElement);
+            overlayPaths.append(overlayPath);
+        }
+
+        if (overlayPaths.isEmpty()) {
+            Q_EMIT errorOccurred(i18n("The VM has no local data disks to snapshot."));
+            return false;
+        }
+
+        virDomainSnapshotPtr snapshot = virDomainSnapshotCreateXML(domain->domainPtr(),
+                                                                   snapshotDocument.toString().toUtf8().constData(),
+                                                                   VIR_DOMAIN_SNAPSHOT_CREATE_DISK_ONLY | VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC);
+        if (!snapshot) {
+            for (const QString &path : std::as_const(overlayPaths)) {
+                QFile::remove(path);
+            }
+            Q_EMIT errorOccurred(
+                i18nc("%1 is a snapshot name, %2 is an error", "Failed to create snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage())));
+            return false;
+        }
+
+        virDomainSnapshotFree(snapshot);
+        refreshDomain(domain->domainPtr());
+        return true;
     }
 
     QDomDocument document;
@@ -1249,13 +1353,27 @@ bool Karton::deleteSnapshot(const Domain *domain, const QString &name)
         return false;
     }
 
-    const bool success = virDomainSnapshotDelete(snapshot, VIR_DOMAIN_SNAPSHOT_DELETE_CHILDREN) == 0;
+    // External disk snapshots cannot be deleted together with their children;
+    // libvirt merges the overlay back into its backing file when the snapshot
+    // metadata is removed on its own. Internal snapshots keep the old
+    // delete-the-subtree behaviour.
+    bool external = false;
+    char *snapshotXml = virDomainSnapshotGetXMLDesc(snapshot, 0);
+    if (snapshotXml) {
+        external = QString::fromUtf8(snapshotXml).contains(QStringLiteral("snapshot='external'"));
+        free(snapshotXml);
+    }
+
+    const bool success = virDomainSnapshotDelete(snapshot, external ? 0 : VIR_DOMAIN_SNAPSHOT_DELETE_CHILDREN) == 0;
     if (!success) {
         const QString errorMsg =
             i18nc("%1 is a snapshot name, %2 is an error", "Failed to delete snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
     virDomainSnapshotFree(snapshot);
+    if (success) {
+        refreshDomain(domain->domainPtr());
+    }
     return success;
 }
 

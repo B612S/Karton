@@ -196,9 +196,12 @@ When testing destructive operations, prefer domains whose names start with
   (`usb_device` capability) and are attached as USB hostdevs.
 - Snapshots are exposed through `Karton::domainSnapshots()`,
   `createSnapshot()`, `revertSnapshot()` and `deleteSnapshot()`, with the UI in
-  `qml/SnapshotsDialog.qml`. Internal snapshots of a running VM must include
-  memory; the dialog enables that by default and the backend rejects a
-  memory-less running snapshot with a clear error.
+  `qml/SnapshotsDialog.qml`. A running VM with "Include memory" uses an internal
+  snapshot with memory; without it, the backend creates an external disk-only
+  snapshot with one qcow2 overlay per local data disk. External snapshots must
+  be deleted newest-first: `deleteSnapshot()` omits the children flag for them so
+  libvirt merges the overlay back instead of failing with "deletion of external
+  disk snapshots with children not supported".
 - Runtime PCI passthrough is exposed through `Karton::pciDevices()`,
   `domainPciDevices()`, `attachPciDevice()` and `detachPciDevice()`, with the UI
   in `qml/PciDevicesDialog.qml`. The dialog warns that the device is detached
