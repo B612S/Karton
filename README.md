@@ -12,7 +12,8 @@ This project is still in early development and will likely break existing virtua
 
 ## Features
 - Displays list of existing VMs
-- Basic functionality to start, stop, and view VMs
+- VM lifecycle: start, stop, pause/resume, reboot, force stop and open the console
+- Live CPU and memory usage on the VM page
 - Installing and deleting VMs
 - qcow2, raw and vmdk virtual disks
 - BIOS and UEFI firmware, optional Secure Boot

@@ -17,6 +17,7 @@ class Domain : public QObject
     QML_ELEMENT
 
     Q_PROPERTY(bool isActive READ isActive NOTIFY isActiveChanged)
+    Q_PROPERTY(bool isPaused READ isPaused NOTIFY isPausedChanged)
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(int ramUsage READ ramUsage NOTIFY ramUsageChanged)
     Q_PROPERTY(bool autostart READ autostart NOTIFY autostartChanged)
@@ -24,6 +25,7 @@ class Domain : public QObject
 
 Q_SIGNALS:
     void isActiveChanged(const bool active);
+    void isPausedChanged(const bool paused);
     void stateChanged(const QString &state);
     void ramUsageChanged(const int usage);
     void autostartChanged(const bool autostart);
@@ -50,6 +52,10 @@ public:
     {
         return m_config->isActive();
     }
+    [[nodiscard]] bool isPaused() const
+    {
+        return m_config->isPaused();
+    }
     [[nodiscard]] int ramUsage() const
     {
         return m_config->ramUsage();
@@ -68,6 +74,7 @@ public:
     void apply(const DomainConfig::DomainConfigData &data);
 
     void setActive(bool active);
+    void setPaused(bool paused);
     void setState(const QString &state);
     void setRamUsage(int ramUsage);
     void setAutostart(bool autostart);

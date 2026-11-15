@@ -248,6 +248,13 @@ When testing destructive operations, prefer domains whose names start with
   next configuration save.
 - Autostart is toggled from the General configuration tab through
   `Karton::setAutostart()`; it is also read back into `DomainConfig::autostart`.
+- Pause/resume/reboot are `Karton::pauseDomain()`, `resumeDomain()` and
+  `rebootDomain()`. `Domain::isPaused` mirrors `VIR_DOMAIN_PAUSED`; never infer
+  paused state from the localized `DomainConfig::state` string.
+- `Karton::domainStats()` returns CPU percentage, CPU time, current/max memory
+  and vCPU count for the VM page. `VMPage.qml` polls it with a 2-second `Timer`
+  while the VM is running; the percentage is computed from the `virDomainInfo`
+  CPU-time delta since the previous call and averaged over the vCPUs.
 - Application icons are installed under the reverse-DNS name
   `org.kde.karton`, matching `org.kde.karton.desktop` and `QGuiApplication`'s
   window icon lookup.

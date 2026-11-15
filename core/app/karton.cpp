@@ -268,6 +268,7 @@ void Karton::refreshDomain(const virDomainPtr domainPtr)
 
     // updates only mutable fields
     domain->setActive(virDomainIsActive(domainPtr) == 1);
+    domain->setPaused(domInfo.state == VIR_DOMAIN_PAUSED);
     domain->setState(domainStateString(domInfo.state));
     domain->setRamUsage(domInfo.memory / (1024 * 1024));
     domain->setAutostart(autoFlag != 0);
@@ -328,6 +329,7 @@ void Karton::refreshDomainList()
             .shortOsId = reader.m_xmlInfo.shortOsId,
             .osId = reader.m_xmlInfo.osId,
             .isActive = virDomainIsActive(domainPtr) == 1,
+            .isPaused = domInfo.state == VIR_DOMAIN_PAUSED,
             .state = domainStateString(domInfo.state),
             .maxRam = static_cast<int>(domInfo.maxMem / (1024 * 1024)), // KiB -> GiB
             .ramUsage = static_cast<int>(domInfo.memory / (1024 * 1024)), // KiB -> GiB
@@ -461,6 +463,113 @@ bool Karton::forceStopDomain(const Domain *domain)
     }
     qCInfo(KARTON_DEBUG) << "Successfully force-stopped domain:" << domain->config()->name();
     return true;
+}
+
+bool Karton::pauseDomain(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainSuspend(domainPtr) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to pause domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    refreshDomain(domainPtr);
+    qCInfo(KARTON_DEBUG) << "Successfully paused domain:" << domain->config()->name();
+    return true;
+}
+
+bool Karton::resumeDomain(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainResume(domainPtr) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to resume domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    refreshDomain(domainPtr);
+    qCInfo(KARTON_DEBUG) << "Successfully resumed domain:" << domain->config()->name();
+    return true;
+}
+
+bool Karton::rebootDomain(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainReboot(domainPtr, VIR_DOMAIN_REBOOT_DEFAULT) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to reboot domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    qCInfo(KARTON_DEBUG) << "Successfully rebooted domain:" << domain->config()->name();
+    return true;
+}
+
+QVariantMap Karton::domainStats(const Domain *domain)
+{
+    QVariantMap stats;
+    if (!domain || !domain->domainPtr()) {
+        return stats;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    virDomainInfo info = {};
+    if (virDomainGetInfo(domainPtr, &info) < 0) {
+        return stats;
+    }
+
+    const int vcpus = qMax(1, static_cast<int>(info.nrVirtCpu));
+    const qint64 cpuTime = static_cast<qint64>(info.cpuTime);
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    QString cacheKey = Domain::uuidString(domainPtr);
+    if (cacheKey.isEmpty()) {
+        cacheKey = QString::fromUtf8(virDomainGetName(domainPtr));
+    }
+
+    double cpuPercent = 0.0;
+    const auto previous = m_cpuSamples.constFind(cacheKey);
+    if (info.state == VIR_DOMAIN_RUNNING && previous != m_cpuSamples.cend() && now > previous->timestamp) {
+        const qint64 elapsedMs = now - previous->timestamp;
+        const qint64 usedNs = cpuTime - previous->cpuTime;
+        if (elapsedMs > 0 && usedNs > 0) {
+            cpuPercent = static_cast<double>(usedNs) * 100.0 / (static_cast<double>(elapsedMs) * 1000000.0 * vcpus);
+            cpuPercent = qBound(0.0, cpuPercent, 100.0);
+        }
+    }
+    m_cpuSamples.insert(cacheKey, {cpuTime, now});
+
+    const unsigned long maxMemory = virDomainGetMaxMemory(domainPtr);
+    stats.insert(QStringLiteral("cpuPercent"), cpuPercent);
+    stats.insert(QStringLiteral("cpuTime"), cpuTime);
+    stats.insert(QStringLiteral("memoryKiB"), static_cast<qulonglong>(info.memory));
+    stats.insert(QStringLiteral("maxMemoryKiB"), static_cast<qulonglong>(maxMemory));
+    stats.insert(QStringLiteral("vcpus"), vcpus);
+    return stats;
 }
 
 bool Karton::setAutostart(const Domain *domain, bool autostart)

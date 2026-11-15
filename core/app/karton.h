@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QVector>
 
 #include "domain/domain.h"
@@ -65,6 +66,10 @@ public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
     Q_INVOKABLE bool stopDomain(const Domain *domain);
     Q_INVOKABLE bool forceStopDomain(const Domain *domain);
+    Q_INVOKABLE bool pauseDomain(const Domain *domain);
+    Q_INVOKABLE bool resumeDomain(const Domain *domain);
+    Q_INVOKABLE bool rebootDomain(const Domain *domain);
+    Q_INVOKABLE QVariantMap domainStats(const Domain *domain);
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
@@ -111,6 +116,12 @@ private:
     LibvirtMonitor *m_monitor;
     CommandRunner *m_commandRunner;
     QHash<QString, int> m_diskSizeCache;
+
+    struct CpuSample {
+        qint64 cpuTime = 0;
+        qint64 timestamp = 0;
+    };
+    QHash<QString, CpuSample> m_cpuSamples;
 
     bool init();
 };

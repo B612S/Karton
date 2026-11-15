@@ -17,6 +17,7 @@ DomainConfig::DomainConfig(const DomainConfigData &data)
     , m_shortOsId(data.shortOsId)
     , m_osId(data.osId)
     , m_isActive(data.isActive)
+    , m_isPaused(data.isPaused)
     , m_state(data.state)
     , m_maxRam(data.maxRam)
     , m_ramUsage(data.ramUsage)
@@ -40,6 +41,7 @@ void DomainConfig::apply(const DomainConfigData &data)
 {
     setName(data.name);
     setActive(data.isActive);
+    setPaused(data.isPaused);
     setState(data.state);
     setMaxRam(data.maxRam);
     setRamUsage(data.ramUsage);
@@ -54,6 +56,14 @@ void DomainConfig::setActive(bool active)
     if (m_isActive != active) {
         m_isActive = active;
         Q_EMIT isActiveChanged(active);
+    }
+}
+
+void DomainConfig::setPaused(bool paused)
+{
+    if (m_isPaused != paused) {
+        m_isPaused = paused;
+        Q_EMIT isPausedChanged(paused);
     }
 }
 

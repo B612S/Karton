@@ -18,6 +18,7 @@ Domain::Domain(QObject *parent)
     , m_config(new DomainConfig(this))
 {
     connect(m_config, &DomainConfig::isActiveChanged, this, &Domain::isActiveChanged);
+    connect(m_config, &DomainConfig::isPausedChanged, this, &Domain::isPausedChanged);
     connect(m_config, &DomainConfig::stateChanged, this, &Domain::stateChanged);
     connect(m_config, &DomainConfig::ramUsageChanged, this, &Domain::ramUsageChanged);
     connect(m_config, &DomainConfig::autostartChanged, this, &Domain::autostartChanged);
@@ -32,6 +33,7 @@ Domain::Domain(const virDomainPtr domainPtr, DomainConfig *config, QObject *pare
     m_config->setParent(this);
 
     connect(m_config, &DomainConfig::isActiveChanged, this, &Domain::isActiveChanged);
+    connect(m_config, &DomainConfig::isPausedChanged, this, &Domain::isPausedChanged);
     connect(m_config, &DomainConfig::stateChanged, this, &Domain::stateChanged);
     connect(m_config, &DomainConfig::ramUsageChanged, this, &Domain::ramUsageChanged);
     connect(m_config, &DomainConfig::autostartChanged, this, &Domain::autostartChanged);
@@ -63,6 +65,11 @@ void Domain::apply(const DomainConfig::DomainConfigData &data)
 void Domain::setActive(bool active)
 {
     m_config->setActive(active);
+}
+
+void Domain::setPaused(bool paused)
+{
+    m_config->setPaused(paused);
 }
 
 void Domain::setState(const QString &state)

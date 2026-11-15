@@ -14,6 +14,15 @@ Kirigami.ScrollablePage {
     title: domain ? domain.config.name : ""
     property Domain domain: null
     readonly property bool isRunning: domain ? domain.isActive : false
+    readonly property bool isPaused: domain ? domain.isPaused : false
+    property var stats: ({})
+
+    onDomainChanged: stats = domain && domain.isActive ? Karton.domainStats(domain) : ({})
+    onIsRunningChanged: {
+        if (!isRunning) {
+            stats = ({});
+        }
+    }
 
     topPadding: 0
     bottomPadding: Kirigami.Units.gridUnit
@@ -31,6 +40,19 @@ Kirigami.ScrollablePage {
         }
     }
 
+    Timer {
+        id: statsTimer
+        interval: 2000
+        repeat: true
+        running: root.isRunning && root.visible
+        triggeredOnStart: true
+        onTriggered: {
+            if (root.domain) {
+                root.stats = Karton.domainStats(root.domain);
+            }
+        }
+    }
+
     actions: [
         Kirigami.Action {
             icon.name: isRunning ? "system-shutdown" : "media-playback-start"
@@ -44,6 +66,36 @@ Kirigami.ScrollablePage {
                     if (Karton.startDomain(domain)) {
                         applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", domain.config.name));
                     }
+                }
+            }
+        },
+        Kirigami.Action {
+            text: i18n("Pause")
+            icon.name: "media-playback-pause"
+            visible: isRunning && !isPaused
+            onTriggered: {
+                if (Karton.pauseDomain(domain)) {
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Pausing VM: %1!", domain.config.name));
+                }
+            }
+        },
+        Kirigami.Action {
+            text: i18n("Resume")
+            icon.name: "media-playback-start"
+            visible: isPaused
+            onTriggered: {
+                if (Karton.resumeDomain(domain)) {
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Resuming VM: %1!", domain.config.name));
+                }
+            }
+        },
+        Kirigami.Action {
+            text: i18n("Reboot")
+            icon.name: "system-reboot"
+            visible: isRunning
+            onTriggered: {
+                if (Karton.rebootDomain(domain)) {
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Rebooting VM: %1!", domain.config.name));
                 }
             }
         },
@@ -239,13 +291,26 @@ Kirigami.ScrollablePage {
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
+                text: i18n("CPU Usage")
+                description: root.stats.cpuPercent !== undefined ? i18n("%1 %", root.stats.cpuPercent.toFixed(1)) : "—"
+            }
+            FormCard.FormDelegateSeparator {}
+            FormCard.FormTextDelegate {
                 text: i18n("Maximum Memory (GB)")
                 description: domain ? domain.config.maxRam : ""
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
-                text: i18n("Memory Usage (GB)")
-                description: domain ? domain.config.ramUsage : ""
+                text: i18n("Memory Usage")
+                description: {
+                    if (!domain) {
+                        return "";
+                    }
+                    if (root.stats.memoryKiB !== undefined) {
+                        return i18n("%1 MiB of %2 MiB", (root.stats.memoryKiB / 1024).toFixed(0), (root.stats.maxMemoryKiB / 1024).toFixed(0));
+                    }
+                    return domain.config.ramUsage + " GB";
+                }
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
