@@ -47,6 +47,7 @@ find_package(Libosinfo REQUIRED)
 find_package(Glib REQUIRED)
 find_package(Spiceglib REQUIRED)
 find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
+find_package(Vulkan REQUIRED)
 
 find_package(KF6 REQUIRED COMPONENTS
     Kirigami

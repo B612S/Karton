@@ -26,6 +26,7 @@
 #include "glscanoutrenderer.h"
 #include "karton_debug.h"
 #include "primarysurfacerenderer.h"
+#include "vulkanscanoutrenderer.h"
 
 #include "evdev_to_xtkbd_map.h"
 
@@ -178,17 +179,8 @@ bool DomainViewer::setupSpiceSession()
 
     const bool vulkan = QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan;
     if (vulkan) {
-        // The GL scanout renderer uses OpenGL/EGL and cannot be used with a
-        // Vulkan scene graph.
-        m_renderMode = RenderMode::PrimarySurface;
-        if (glEnabled) {
-            qCWarning(KARTON_DEBUG) << "SPICE GL scanout is enabled for" << m_domain->config()->name()
-                                    << "but the Vulkan renderer can only display primary surfaces";
-            setErrorMessage(
-                i18n("This virtual machine uses 3D acceleration, which requires the OpenGL renderer. "
-                     "Restart Karton with KARTON_GRAPHICS_API=opengl to view it."));
-        }
-        qCInfo(KARTON_DEBUG) << "Using Vulkan; primary surface rendering selected";
+        m_renderMode = glEnabled ? RenderMode::VulkanScanout : RenderMode::PrimarySurface;
+        qCInfo(KARTON_DEBUG) << "Using Vulkan;" << (glEnabled ? "scanout" : "primary surface") << "rendering selected";
     } else if (uri.startsWith(QStringLiteral("spice+unix://"))) {
         qCInfo(KARTON_DEBUG) << "Detected UNIX socket. Using GL scanout rendering.";
         m_renderMode = RenderMode::GlScanout;
@@ -297,6 +289,9 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
     case RenderMode::GlScanout:
         m_renderer = std::make_unique<GlScanoutRenderer>();
         break;
+    case RenderMode::VulkanScanout:
+        m_renderer = std::make_unique<VulkanScanoutRenderer>();
+        break;
     case RenderMode::PrimarySurface:
         m_renderer = std::make_unique<PrimarySurfaceRenderer>();
         break;
@@ -304,6 +299,9 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
 
     connect(m_renderer.get(), &SpiceDisplayRenderer::frameReady, this, &QQuickItem::update);
     connect(m_renderer.get(), &SpiceDisplayRenderer::frameSizeChanged, this, &DomainViewer::handleRendererFrameSizeChanged);
+    connect(m_renderer.get(), &SpiceDisplayRenderer::errorOccurred, this, [this](const QString &message) {
+        setErrorMessage(message);
+    });
 
     m_renderer->attach(SPICE_DISPLAY_CHANNEL(channel));
 }

@@ -49,6 +49,10 @@ int main(int argc, char *argv[])
     KirigamiAppDefaults::apply(&app);
 
     const QSGRendererInterface::GraphicsApi graphicsApi = preferredGraphicsApi();
+    if (graphicsApi == QSGRendererInterface::Vulkan) {
+        // Needed by VulkanScanoutRenderer to import SPICE DMA-BUF scanouts.
+        qputenv("QT_VULKAN_DEVICE_EXTENSIONS", "VK_KHR_external_memory_fd;VK_EXT_external_memory_dma_buf;VK_EXT_image_drm_format_modifier");
+    }
     QQuickWindow::setGraphicsApi(graphicsApi);
     qCInfo(KARTON_DEBUG) << "Using graphics API:"
                          << (graphicsApi == QSGRendererInterface::Vulkan       ? "Vulkan"

@@ -26,7 +26,6 @@ class Karton : public QObject
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(bool connected READ connected CONSTANT)
-    Q_PROPERTY(bool vulkanRendering READ vulkanRendering CONSTANT)
     Q_PROPERTY(QString connectionUri READ connectionUri CONSTANT)
 
 public:
@@ -42,7 +41,6 @@ public:
     {
         return m_conn != nullptr;
     }
-    [[nodiscard]] bool vulkanRendering() const;
     [[nodiscard]] QString connectionUri() const;
 
     QVector<Domain *> domains();

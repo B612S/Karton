@@ -48,11 +48,6 @@ Karton::~Karton()
     }
 }
 
-bool Karton::vulkanRendering() const
-{
-    return QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan;
-}
-
 QString Karton::connectionUri() const
 {
     const QByteArray environmentUri = qgetenv("KARTON_LIBVIRT_URI");
@@ -523,9 +518,7 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.firmware = firmware;
     configData.networkModel = networkModel;
     configData.secureBoot = config.value(QStringLiteral("secureBoot"), false).toBool();
-    // SPICE GL scanout requires an OpenGL scene graph. With Vulkan the viewer
-    // uses the primary surface path instead.
-    configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool() && !vulkanRendering();
+    configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool();
 
     const QString diskPath = configData.virtualDiskPath;
 

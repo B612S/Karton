@@ -19,6 +19,7 @@
 *.*#
 build
 build-*
+pkg/
 core
 !core/
 tags

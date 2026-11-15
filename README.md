@@ -26,7 +26,7 @@ This project is still in early development and will likely break existing virtua
 - libvirt
 - spice-client-glib
 - libosinfo
-- Vulkan (or OpenGL as a fallback)
+- Vulkan with DMA-BUF scanout import (or OpenGL as a fallback)
 
 ## Configuration
 The connection URI can be changed in the Connection Settings dialog (restart
@@ -52,6 +52,10 @@ Check your app menu for "Karton", it should be hiding under the "System" section
 <img src="https://cdn.kde.org/screenshots/karton/karton_homepage.png" width="370"/>
 <img src="https://cdn.kde.org/screenshots/karton/karton_installer.png" width="370"/>
 
+
+## Arch Linux
+A `PKGBUILD` for the git version is included in the repository root; build and
+install it with `makepkg -si`.
 
 ## Development
 ```sh

@@ -365,9 +365,8 @@ Kirigami.Dialog {
 
                 FormCard.FormCheckDelegate {
                     id: enableAccel3dCheckBox
-                    text: Karton.vulkanRendering ? i18nc("@option:check", "Hardware acceleration (requires OpenGL rendering)") : i18nc("@option:check", "Enable hardware acceleration")
-                    checked: !Karton.vulkanRendering
-                    enabled: !Karton.vulkanRendering
+                    text: i18nc("@option:check", "Enable hardware acceleration")
+                    checked: true
                     Layout.fillWidth: true
                 }
             }

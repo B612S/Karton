@@ -32,4 +32,5 @@ public:
 Q_SIGNALS:
     void frameSizeChanged();
     void frameReady();
+    void errorOccurred(const QString &message);
 };

@@ -77,6 +77,7 @@ private Q_SLOTS:
 private:
     enum class RenderMode {
         GlScanout,
+        VulkanScanout,
         PrimarySurface,
     };
 

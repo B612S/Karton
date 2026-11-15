@@ -34,7 +34,7 @@ which takes precedence. It is stored in QSettings under `connection/uri`. Any
 | `src/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
 | `src/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
 | `src/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
-| `src/glscanoutrenderer.*`, `src/primarysurfacerenderer.*` | SPICE display rendering backends. |
+| `src/glscanoutrenderer.*`, `src/primarysurfacerenderer.*`, `src/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
 | `src/libvirtmonitor.*`, `src/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `src/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `src/qml/` | Kirigami QML pages and dialogs. |
@@ -48,8 +48,8 @@ list in `src/CMakeLists.txt`, otherwise it will not be bundled.
 
 Required: CMake >= 3.20, a C++20 compiler, Qt 6, KF6 (Kirigami, I18n,
 CoreAddons, QQC2DesktopStyle, IconThemes), Kirigami Addons >= 1.11, libvirt,
-libosinfo, GLib, spice-client-glib, Vulkan (default scene graph; OpenGL/EGL are
-kept for the optional GL scanout fallback), and Extra CMake Modules (ECM)
+libosinfo, GLib, spice-client-glib, Vulkan (default scene graph and SPICE
+scanout import), OpenGL/EGL (fallback renderer), and Extra CMake Modules (ECM)
 >= 6.0.
 
 On Arch Linux, the relevant packages are roughly:
@@ -214,11 +214,14 @@ When testing destructive operations, prefer domains whose names start with
   that owns both.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
-  `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice. The SPICE
-  GL scanout renderer is OpenGL-only, so with Vulkan the viewer uses the
-  primary-surface renderer and new domains are created without 3D
-  acceleration. If an existing domain has `gl=on`, the viewer shows an inline
-  error explaining that `KARTON_GRAPHICS_API=opengl` is required.
+  `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.
+  `VulkanScanoutRenderer` imports the SPICE GL scanout DMA-BUF into a
+  `VkImage` using `VK_EXT_external_memory_dma_buf` and
+  `VK_EXT_image_drm_format_modifier`; `main.cpp` enables those device
+  extensions before the scene graph is created. ARGB/XRGB scanouts are sampled
+  directly, RGB565 scanouts are copied to a host buffer and converted to RGBA8.
+  The OpenGL renderer remains available with `KARTON_GRAPHICS_API=opengl`.
+  New domains can use 3D acceleration under Vulkan.
 - Suspend/undefine/define events can arrive while a QML page is open; check for
   valid domain pointers and handle missing files gracefully.
 

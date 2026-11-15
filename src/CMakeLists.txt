@@ -29,6 +29,8 @@ target_sources(karton
     spicedisplayrenderer.h
     glscanoutrenderer.cpp
     primarysurfacerenderer.cpp
+    vulkanscanoutrenderer.cpp
+    vulkanscanoutrenderer.h
     domainxmlbuilder.cpp
     osinfoconfig.cpp
     domainxmlreader.cpp
@@ -85,6 +87,7 @@ target_link_libraries(karton
     Glib::Glib
     OpenGL::EGL
     OpenGL::GL
+    Vulkan::Vulkan
 )
 
 install(TARGETS karton ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
