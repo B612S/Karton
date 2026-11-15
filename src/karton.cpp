@@ -18,6 +18,7 @@
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QSGRendererInterface>
+#include <QSettings>
 #include <QStandardPaths>
 #include <utility>
 
@@ -54,7 +55,20 @@ bool Karton::vulkanRendering() const
 
 QString Karton::connectionUri() const
 {
-    return qEnvironmentVariable("KARTON_LIBVIRT_URI", QStringLiteral("qemu:///session"));
+    const QByteArray environmentUri = qgetenv("KARTON_LIBVIRT_URI");
+    if (!environmentUri.isEmpty()) {
+        return QString::fromUtf8(environmentUri);
+    }
+
+    QSettings settings;
+    const QString storedUri = settings.value(QStringLiteral("connection/uri")).toString();
+    return storedUri.isEmpty() ? QStringLiteral("qemu:///session") : storedUri;
+}
+
+void Karton::saveConnectionUri(const QString &uri)
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("connection/uri"), uri.trimmed());
 }
 
 Karton *Karton::self()

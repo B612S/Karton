@@ -15,10 +15,11 @@ defines new domains from OS installation media, and embeds a SPICE display for
 the VM console.
 
 The application connects to **`qemu:///session`** by default (see
-`Karton::init()`). Set `KARTON_LIBVIRT_URI` to use another URI (for example
-`qemu:///system`); there is no UI for changing it yet. Any `virsh` command used
-during development or testing must pass `-c <same URI>` (usually
-`-c qemu:///session`).
+`Karton::init()`). The URI can be changed in the Connection Settings dialog
+(requires a restart) or with the `KARTON_LIBVIRT_URI` environment variable,
+which takes precedence. It is stored in QSettings under `connection/uri`. Any
+`virsh` command used during development or testing must pass `-c <same URI>`
+(usually `-c qemu:///session`).
 
 ## Repository layout
 

@@ -48,11 +48,20 @@ Kirigami.ScrollablePage {
             onTriggered: source => {
                 addDomainDialog.open();
             }
+        },
+        Kirigami.Action {
+            icon.name: "settings-configure"
+            text: i18n("Connection Settings")
+            onTriggered: connectionDialog.open()
         }
     ]
 
     InstallationDialog {
         id: addDomainDialog
+    }
+
+    ConnectionSettingsDialog {
+        id: connectionDialog
     }
 
     ListView {

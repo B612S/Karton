@@ -25,8 +25,9 @@ This project is still in early development and will likely break existing virtua
 - Vulkan (or OpenGL as a fallback)
 
 ## Configuration
-Set `KARTON_LIBVIRT_URI` to override the default `qemu:///session` connection
-(for example `KARTON_LIBVIRT_URI=qemu:///system`). Set
+The connection URI can be changed in the Connection Settings dialog (restart
+required) or with `KARTON_LIBVIRT_URI`, which overrides the stored value (for
+example `KARTON_LIBVIRT_URI=qemu:///system`). Set
 `KARTON_GRAPHICS_API=opengl` if Vulkan is unavailable and the automatic
 fallback is not desired.
 
