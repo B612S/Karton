@@ -206,7 +206,8 @@ When testing destructive operations, prefer domains whose names start with
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice. The SPICE
   GL scanout renderer is OpenGL-only, so with Vulkan the viewer uses the
   primary-surface renderer and new domains are created without 3D
-  acceleration.
+  acceleration. If an existing domain has `gl=on`, the viewer shows an inline
+  error explaining that `KARTON_GRAPHICS_API=opengl` is required.
 - Suspend/undefine/define events can arrive while a QML page is open; check for
   valid domain pointers and handle missing files gracefully.
 

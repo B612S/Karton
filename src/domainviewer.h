@@ -28,6 +28,7 @@ class DomainViewer : public QQuickItem
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(Domain *domain READ domain WRITE setDomain NOTIFY domainChanged REQUIRED)
+    Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -38,6 +39,12 @@ public:
         return m_domain;
     }
     void setDomain(Domain *domain);
+
+    QString errorMessage() const
+    {
+        return m_errorMessage;
+    }
+    void setErrorMessage(const QString &message);
 
     void componentComplete() override;
 
@@ -62,6 +69,7 @@ public:
 
 Q_SIGNALS:
     void domainChanged();
+    void errorMessageChanged();
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
@@ -89,6 +97,7 @@ private:
 
     Domain *m_domain;
     QString m_spiceUri;
+    QString m_errorMessage;
     bool m_connected = false;
     RenderMode m_renderMode = RenderMode::GlScanout;
 

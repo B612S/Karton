@@ -9,6 +9,8 @@
 
 #include <cstdlib>
 
+#include <KLocalizedString>
+
 #include <QCursor>
 #include <QDomDocument>
 #include <QDomElement>
@@ -50,6 +52,15 @@ DomainViewer::~DomainViewer()
     disconnectFromSpice();
 }
 
+void DomainViewer::setErrorMessage(const QString &message)
+{
+    if (m_errorMessage == message) {
+        return;
+    }
+    m_errorMessage = message;
+    Q_EMIT errorMessageChanged();
+}
+
 void DomainViewer::setDomain(Domain *domain)
 {
     if (m_domain == domain) {
@@ -81,8 +92,11 @@ void DomainViewer::componentComplete()
 
 bool DomainViewer::setupSpiceSession()
 {
+    setErrorMessage(QString());
+
     if (!m_domain || !m_domain->domainPtr()) {
         qCWarning(KARTON_DEBUG) << "setupSpiceSession(): no valid domain";
+        setErrorMessage(i18n("No virtual machine is selected."));
         return false;
     }
 
@@ -94,6 +108,7 @@ bool DomainViewer::setupSpiceSession()
     }
     if (!xmlDesc) {
         qCWarning(KARTON_DEBUG) << "Failed to read domain XML:" << virGetLastErrorMessage();
+        setErrorMessage(i18n("Failed to read the virtual machine configuration."));
         return false;
     }
 
@@ -103,6 +118,7 @@ bool DomainViewer::setupSpiceSession()
     QDomDocument document;
     if (!document.setContent(QString::fromUtf8(xml))) {
         qCWarning(KARTON_DEBUG) << "Failed to parse domain XML";
+        setErrorMessage(i18n("Failed to parse the virtual machine configuration."));
         return false;
     }
 
@@ -154,6 +170,7 @@ bool DomainViewer::setupSpiceSession()
 
     if (uri.isEmpty()) {
         qCWarning(KARTON_DEBUG) << "No usable SPICE graphics device found for domain:" << m_domain->config()->name();
+        setErrorMessage(i18n("This virtual machine has no usable SPICE display."));
         return false;
     }
 
@@ -167,6 +184,9 @@ bool DomainViewer::setupSpiceSession()
         if (glEnabled) {
             qCWarning(KARTON_DEBUG) << "SPICE GL scanout is enabled for" << m_domain->config()->name()
                                     << "but the Vulkan renderer can only display primary surfaces";
+            setErrorMessage(
+                i18n("This virtual machine uses 3D acceleration, which requires the OpenGL renderer. "
+                     "Restart Karton with KARTON_GRAPHICS_API=opengl to view it."));
         }
         qCInfo(KARTON_DEBUG) << "Using Vulkan; primary surface rendering selected";
     } else if (uri.startsWith(QStringLiteral("spice+unix://"))) {
@@ -177,7 +197,11 @@ bool DomainViewer::setupSpiceSession()
         m_renderMode = RenderMode::PrimarySurface;
     }
 
-    return connectToSpice();
+    if (!connectToSpice()) {
+        setErrorMessage(i18n("Could not connect to the SPICE display."));
+        return false;
+    }
+    return true;
 }
 
 bool DomainViewer::connectToSpice()

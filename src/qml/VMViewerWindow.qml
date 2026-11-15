@@ -91,5 +91,15 @@ Kirigami.ApplicationWindow {
                 }
             }
         }
+
+        Kirigami.InlineMessage {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: Kirigami.Units.largeSpacing
+            width: Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 40)
+            visible: domainViewer.errorMessage.length > 0
+            text: domainViewer.errorMessage
+            type: Kirigami.MessageType.Error
+        }
     }
 }
