@@ -51,6 +51,7 @@ Kirigami.Dialog {
             memoryGB: memorySpinBox.value,
             storageGB: storageSpinBox.value,
             diskFormat: diskFormatCombo.currentText,
+            firmware: firmwareCombo.currentIndex === 1 ? "efi" : "bios",
             cpus: cpuSpinBox.value,
             enableAccel3d: enableAccel3dCheckBox.checked
         };
@@ -301,6 +302,16 @@ Kirigami.Dialog {
                     id: diskFormatCombo
                     text: i18n("Disk format:")
                     model: ["qcow2", "raw", "vmdk"]
+                    currentIndex: 0
+                    Layout.fillWidth: true
+                }
+
+                FormCard.FormDelegateSeparator {}
+
+                FormCard.FormComboBoxDelegate {
+                    id: firmwareCombo
+                    text: i18n("Firmware:")
+                    model: ["BIOS", "UEFI"]
                     currentIndex: 0
                     Layout.fillWidth: true
                 }

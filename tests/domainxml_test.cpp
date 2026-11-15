@@ -7,6 +7,7 @@
 
 #include "domainxmlbuilder.h"
 #include "domainxmlreader.h"
+#include "osinfoconfig.h"
 
 class DomainXmlTest : public QObject
 {
@@ -16,6 +17,8 @@ private Q_SLOTS:
     void readerParsesMetadataAndDisks();
     void readerStopsAtDiskBoundary();
     void readerParsesRawDiskFormat();
+    void readerParsesFirmware();
+    void builderGeneratesUefiRawDomain();
     void builderUpdatesHardwareAndPreservesMetadata();
     void builderLeavesUnknownStorageUntouched();
     void builderAddsMetadataWhenMissing();
@@ -73,6 +76,19 @@ void DomainXmlTest::readerStopsAtDiskBoundary()
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.qcow2"));
 }
 
+void DomainXmlTest::readerParsesFirmware()
+{
+    const QByteArray xml = R"(<domain type='kvm'>
+  <name>uefi</name>
+  <os firmware='efi'>
+    <type arch='x86_64'>hvm</type>
+  </os>
+</domain>)";
+
+    const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml(xml);
+    QCOMPARE(info.firmware, QStringLiteral("efi"));
+}
+
 void DomainXmlTest::readerParsesRawDiskFormat()
 {
     const QByteArray xml = R"(<domain type='kvm'>
@@ -89,6 +105,51 @@ void DomainXmlTest::readerParsesRawDiskFormat()
     const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml(xml);
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.raw"));
     QCOMPARE(info.diskFormat, QStringLiteral("raw"));
+}
+
+void DomainXmlTest::builderGeneratesUefiRawDomain()
+{
+    OsinfoConfig osinfo;
+    const QStringList oses = osinfo.osList();
+    if (oses.isEmpty()) {
+        QSKIP("No libosinfo database available");
+    }
+
+    DomainConfig::DomainConfigData data;
+    data.name = QStringLiteral("test");
+    data.shortOsId = oses.first();
+    data.maxRam = 1;
+    data.cpus = 1;
+    data.maxDiskStorage = 1;
+    data.virtualDiskPath = QStringLiteral("/tmp/test.raw");
+    data.diskFormat = QStringLiteral("raw");
+    data.firmware = QStringLiteral("efi");
+    data.enableAccel3d = false;
+
+    DomainConfig config(data);
+    DomainXmlBuilder builder;
+    const QString xml = builder.generateXML(&config);
+    QVERIFY2(!xml.isEmpty(), "generateXML() returned an empty document");
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(xml), qPrintable(xml));
+    const QDomElement root = document.documentElement();
+    const QDomElement os = root.firstChildElement(QStringLiteral("os"));
+    QCOMPARE(os.attribute(QStringLiteral("firmware")), QStringLiteral("efi"));
+    QCOMPARE(os.firstChildElement(QStringLiteral("loader")).attribute(QStringLiteral("secure")), QStringLiteral("no"));
+
+    bool foundRawDisk = false;
+    const QDomNodeList disks = root.elementsByTagName(QStringLiteral("disk"));
+    for (int i = 0; i < disks.count(); ++i) {
+        const QDomElement disk = disks.at(i).toElement();
+        if (disk.attribute(QStringLiteral("device")) != QStringLiteral("disk")) {
+            continue;
+        }
+        QCOMPARE(disk.firstChildElement(QStringLiteral("driver")).attribute(QStringLiteral("type")), QStringLiteral("raw"));
+        QCOMPARE(disk.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file")), QStringLiteral("/tmp/test.raw"));
+        foundRawDisk = true;
+    }
+    QVERIFY(foundRawDisk);
 }
 
 void DomainXmlTest::builderUpdatesHardwareAndPreservesMetadata()

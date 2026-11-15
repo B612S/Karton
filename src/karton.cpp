@@ -257,6 +257,7 @@ void Karton::refreshDomainList()
             .isoDiskPath = reader.m_xmlInfo.isoDiskPath,
             .virtualDiskPath = reader.m_xmlInfo.virtualDiskPath,
             .diskFormat = reader.m_xmlInfo.diskFormat,
+            .firmware = reader.m_xmlInfo.firmware,
             .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
@@ -451,6 +452,11 @@ bool Karton::createDomain(const QVariantMap &config)
         Q_EMIT errorOccurred(i18n("Unsupported disk format"));
         return false;
     }
+    const QString firmware = config.value(QStringLiteral("firmware"), QStringLiteral("bios")).toString();
+    if (firmware != QStringLiteral("bios") && firmware != QStringLiteral("efi")) {
+        Q_EMIT errorOccurred(i18n("Unsupported firmware type"));
+        return false;
+    }
 
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     const QString basePath = QStringLiteral("%1/libvirt").arg(dataDir);
@@ -472,6 +478,7 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString();
     configData.virtualDiskPath = getVirtualDiskPath(name, diskFormat);
     configData.diskFormat = diskFormat;
+    configData.firmware = firmware;
     // SPICE GL scanout requires an OpenGL scene graph. With Vulkan the viewer
     // uses the primary surface path instead.
     configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool() && !vulkanRendering();

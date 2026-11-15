@@ -38,6 +38,11 @@ public:
     explicit OsinfoConfig();
     ~OsinfoConfig();
 
+    [[nodiscard]] QStringList osList() const
+    {
+        return m_osList;
+    }
+
     QString getOsIdFromShortId(const QString &short_id);
     Q_INVOKABLE QString getShortIdFromId(const QString &id);
     Q_INVOKABLE QString getOsIdFromDisk(const QString &isoDiskPath);

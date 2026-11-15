@@ -43,6 +43,8 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
         if (xmlReader.name() == QStringLiteral("domain")) {
             info.indexId = xmlReader.attributes().value(QStringLiteral("id")).toInt();
             info.hypervisorType = xmlReader.attributes().value(QStringLiteral("type")).toString();
+        } else if (xmlReader.name() == QStringLiteral("os") && xmlReader.attributes().hasAttribute(QStringLiteral("firmware"))) {
+            info.firmware = xmlReader.attributes().value(QStringLiteral("firmware")).toString();
         } else if (xmlReader.name() == QStringLiteral("os") && xmlReader.attributes().hasAttribute(QStringLiteral("id"))) {
             info.osId = xmlReader.attributes().value(QStringLiteral("id")).toString();
             info.shortOsId = xmlReader.attributes().value(QStringLiteral("short-id")).toString();

@@ -94,12 +94,23 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
 
     // os element
     QDomElement os = document.createElement(QStringLiteral("os"));
+    if (config->firmware() == QStringLiteral("efi")) {
+        os.setAttribute(QStringLiteral("firmware"), QStringLiteral("efi"));
+    }
     root.appendChild(os);
     QMap<QString, QString> type;
     type[QStringLiteral("arch")] = osArchitecture;
     type[QStringLiteral("machine")] = QStringLiteral("q35"); // parameterize using libos?
     // QEMU machine types see: https://people.redhat.com/~cohuck/2022/01/05/qemu-machine-types.html
     addElementWithAttributes(document, os, QStringLiteral("type"), QStringLiteral("hvm"), type);
+    if (config->firmware() == QStringLiteral("efi")) {
+        // Disable Secure Boot by default; the firmware auto-selection would
+        // otherwise pick the secure-boot variant, which rejects unsigned
+        // installers and guest drivers.
+        QMap<QString, QString> loader;
+        loader[QStringLiteral("secure")] = QStringLiteral("no");
+        addElementWithAttributes(document, os, QStringLiteral("loader"), QString(), loader);
+    }
     QMap<QString, QString> boot1;
     boot1[QStringLiteral("dev")] = QStringLiteral("cdrom");
     QMap<QString, QString> boot2;

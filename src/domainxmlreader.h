@@ -21,6 +21,7 @@ public:
         QString isoDiskPath;
         QString virtualDiskPath;
         QString diskFormat = QStringLiteral("qcow2");
+        QString firmware = QStringLiteral("bios");
         QString screenshotPreviewPath;
     };
 
