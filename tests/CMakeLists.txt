@@ -6,10 +6,10 @@ find_package(Qt6 REQUIRED COMPONENTS Test Xml Qml)
 add_executable(karton-xml-tests
     domainxml_test.cpp
     ${CMAKE_BINARY_DIR}/core/karton_debug.cpp
-    ${CMAKE_SOURCE_DIR}/core/domainconfig.cpp
-    ${CMAKE_SOURCE_DIR}/core/domainxmlbuilder.cpp
-    ${CMAKE_SOURCE_DIR}/core/domainxmlreader.cpp
-    ${CMAKE_SOURCE_DIR}/core/osinfoconfig.cpp
+    ${CMAKE_SOURCE_DIR}/core/domain/domainconfig.cpp
+    ${CMAKE_SOURCE_DIR}/core/domain/domainxmlbuilder.cpp
+    ${CMAKE_SOURCE_DIR}/core/domain/domainxmlreader.cpp
+    ${CMAKE_SOURCE_DIR}/core/os/osinfoconfig.cpp
 )
 
 set_target_properties(karton-xml-tests PROPERTIES AUTOMOC ON)
@@ -34,7 +34,7 @@ add_test(NAME karton-xml-tests COMMAND karton-xml-tests)
 add_executable(karton-commandrunner-tests
     commandrunner_test.cpp
     ${CMAKE_BINARY_DIR}/core/karton_debug.cpp
-    ${CMAKE_SOURCE_DIR}/core/commandrunner.cpp
+    ${CMAKE_SOURCE_DIR}/core/util/commandrunner.cpp
 )
 
 set_target_properties(karton-commandrunner-tests PROPERTIES AUTOMOC ON)

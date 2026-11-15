@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 
-#include "evdev_to_xtkbd_map.h"
+#include "util/evdev_to_xtkbd_map.h"
 
 /*
  * This file is auto-generated from keymaps.csv

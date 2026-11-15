@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 
-#include "domainxmlbuilder.h"
+#include "domain/domainxmlbuilder.h"
 
 #include <libvirt/virterror.h>
 
@@ -15,9 +15,9 @@
 #include <QUuid>
 #include <net/ethernet.h>
 
-#include "domainconfig.h"
+#include "domain/domainconfig.h"
 #include "karton_debug.h"
-#include "osinfoconfig.h"
+#include "os/osinfoconfig.h"
 
 #ifndef ETH_ALEN
 #define ETH_ALEN 6

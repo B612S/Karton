@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Derek Lin <derekhongdalin@gmail.com>
 
-#include "primarysurfacerenderer.h"
+#include "viewer/primarysurfacerenderer.h"
 
 #include <QMutexLocker>
 #include <QQuickWindow>

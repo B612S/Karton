@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "domainconfig.h"
+#include "domain/domainconfig.h"
 #include <libvirt/libvirt.h>
 
 #include <QDomDocument>

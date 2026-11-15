@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "spicedisplayrenderer.h"
+#include "viewer/spicedisplayrenderer.h"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 
-#include "karton.h"
+#include "app/karton.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
@@ -22,13 +22,13 @@
 #include <QStandardPaths>
 #include <utility>
 
-#include "domain.h"
-#include "domainconfig.h"
-#include "domainxmlbuilder.h"
-#include "domainxmlreader.h"
+#include "domain/domain.h"
+#include "domain/domainconfig.h"
+#include "domain/domainxmlbuilder.h"
+#include "domain/domainxmlreader.h"
 #include "karton_debug.h"
-#include "libvirteventloop.h"
-#include "libvirtmonitor.h"
+#include "libvirt/libvirteventloop.h"
+#include "libvirt/libvirtmonitor.h"
 
 Karton::Karton(QObject *parent)
     : QObject(parent)

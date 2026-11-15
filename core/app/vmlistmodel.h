@@ -12,8 +12,8 @@
 #include <QObject>
 #include <QVariant>
 
-#include "domain.h"
-#include "karton.h"
+#include "app/karton.h"
+#include "domain/domain.h"
 
 class VMModel : public QAbstractListModel
 {

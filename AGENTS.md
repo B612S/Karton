@@ -29,21 +29,35 @@ development or testing must pass `-c <same URI>` (usually
 
 | Path | Purpose |
 | --- | --- |
-| `core/main.cpp` | Entry point; sets up `KAboutData` and loads the QML module. |
-| `core/karton.{h,cpp}` | `Karton` QML singleton: libvirt connection, domain list, VM lifecycle operations, paths. |
-| `core/domain.{h,cpp}` | QML-exposed `Domain` wrapper around a `virDomainPtr`. |
-| `core/domainconfig.{h,cpp}` | QML-exposed per-domain configuration/state model. |
-| `core/vmlistmodel.{h,cpp}` | `VMModel`, the QML singleton list model shown on the main page. |
-| `core/domainxmlbuilder.{h,cpp}` | Generates and edits libvirt domain XML. |
-| `core/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
-| `core/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
-| `core/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
-| `core/glscanoutrenderer.*`, `core/primarysurfacerenderer.*`, `core/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
-| `core/libvirtmonitor.*`, `core/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
-| `core/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
+| `core/app/main.cpp` | Entry point; sets up `KAboutData` and loads the QML module. |
+| `core/app/karton.{h,cpp}` | `Karton` QML singleton: libvirt connection, domain list, VM lifecycle operations, paths. |
+| `core/domain/domain.{h,cpp}` | QML-exposed `Domain` wrapper around a `virDomainPtr`. |
+| `core/domain/domainconfig.{h,cpp}` | QML-exposed per-domain configuration/state model. |
+| `core/app/vmlistmodel.{h,cpp}` | `VMModel`, the QML singleton list model shown on the main page. |
+| `core/domain/domainxmlbuilder.{h,cpp}` | Generates and edits libvirt domain XML. |
+| `core/domain/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
+| `core/os/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
+| `core/viewer/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
+| `core/viewer/glscanoutrenderer.*`, `core/viewer/primarysurfacerenderer.*`, `core/viewer/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
+| `core/libvirt/libvirtmonitor.*`, `core/libvirt/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
+| `core/util/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `qml/` | Kirigami QML pages and dialogs. |
 | `tests/` | QtTest-based unit tests for the XML parser/builder and command runner. |
 | `src/` | Reserved for makepkg's `$srcdir`; it is not used for source files. |
+
+C++ sources are grouped by responsibility under `core/`:
+
+- `core/app/` — application entry point, `Karton` singleton and the VM list model.
+- `core/domain/` — domain state, configuration, XML builder and reader.
+- `core/libvirt/` — libvirt event loop and lifecycle monitor.
+- `core/viewer/` — SPICE viewer and display renderers.
+- `core/os/` — libosinfo integration.
+- `core/util/` — small helpers such as the command runner and DPI/keyboard utilities.
+
+New C++ files must go into the matching subsystem directory; create a new
+subsystem only when none of the existing groups fits. Include headers with the
+subsystem prefix, for example `#include "domain/domain.h"`; `core/` is an
+include root. QML stays in the top-level `qml/` directory.
 
 QML sources are compiled into the binary by `ecm_add_qml_module()` under the URI
 `org.kde.karton`. When adding a QML file, add it to the `ecm_target_qml_sources()`

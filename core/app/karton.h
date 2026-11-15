@@ -10,8 +10,8 @@
 #include <QQmlEngine>
 #include <QVector>
 
-#include "commandrunner.h"
-#include "domain.h"
+#include "domain/domain.h"
+#include "util/commandrunner.h"
 #include <qqmlintegration.h>
 
 class LibvirtMonitor;

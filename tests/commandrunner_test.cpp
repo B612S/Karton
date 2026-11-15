@@ -3,7 +3,7 @@
 
 #include <QtTest>
 
-#include "commandrunner.h"
+#include "util/commandrunner.h"
 
 class CommandRunnerTest : public QObject
 {

@@ -20,8 +20,8 @@
 
 class QSGSimpleTextureNode;
 
-#include "domain.h"
-#include "spicedisplayrenderer.h"
+#include "domain/domain.h"
+#include "viewer/spicedisplayrenderer.h"
 
 class DomainViewer : public QQuickItem
 {

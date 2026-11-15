@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 
-#include "domain.h"
+#include "domain/domain.h"
 
 #include <array>
 
@@ -9,7 +9,7 @@
 #include <QFileInfo>
 #include <QString>
 
-#include "domainconfig.h"
+#include "domain/domainconfig.h"
 #include "karton_debug.h"
 
 Domain::Domain(QObject *parent)

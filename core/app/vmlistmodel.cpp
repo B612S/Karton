@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 
-#include "vmlistmodel.h"
+#include "app/vmlistmodel.h"
 
-#include "karton.h"
+#include "app/karton.h"
 #include "karton_debug.h"
 
 VMModel::VMModel(QObject *parent)

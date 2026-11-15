@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 
-#include "domainviewer.h"
+#include "viewer/domainviewer.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
@@ -21,14 +21,14 @@
 #include <QSGSimpleTextureNode>
 #include <QString>
 
-#include "domain.h"
+#include "domain/domain.h"
 #include "glib.h"
-#include "glscanoutrenderer.h"
 #include "karton_debug.h"
-#include "primarysurfacerenderer.h"
-#include "vulkanscanoutrenderer.h"
+#include "viewer/glscanoutrenderer.h"
+#include "viewer/primarysurfacerenderer.h"
+#include "viewer/vulkanscanoutrenderer.h"
 
-#include "evdev_to_xtkbd_map.h"
+#include "util/evdev_to_xtkbd_map.h"
 
 DomainViewer::DomainViewer(QQuickItem *parent)
     : QQuickItem(parent)

@@ -5,9 +5,9 @@
 #include <QDomElement>
 #include <QtTest>
 
-#include "domainxmlbuilder.h"
-#include "domainxmlreader.h"
-#include "osinfoconfig.h"
+#include "domain/domainxmlbuilder.h"
+#include "domain/domainxmlreader.h"
+#include "os/osinfoconfig.h"
 
 class DomainXmlTest : public QObject
 {

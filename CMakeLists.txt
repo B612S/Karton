@@ -87,31 +87,37 @@ ecm_add_qml_module(karton
 
 target_include_directories(karton PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/app
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/domain
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/libvirt
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/viewer
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/os
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/util
     ${CMAKE_CURRENT_BINARY_DIR}/core
 )
 
 target_sources(karton
     PRIVATE
-    core/main.cpp
-    core/karton.cpp
-    core/vmlistmodel.cpp
-    core/domain.cpp
-    core/domainconfig.cpp
-    core/libvirtmonitor.cpp
-    core/libvirteventloop.cpp
-    core/domainviewer.cpp
-    core/spicedisplayrenderer.h
-    core/glscanoutrenderer.cpp
-    core/primarysurfacerenderer.cpp
-    core/vulkanscanoutrenderer.cpp
-    core/vulkanscanoutrenderer.h
-    core/domainxmlbuilder.cpp
-    core/osinfoconfig.cpp
-    core/domainxmlreader.cpp
-    core/commandrunner.cpp
-    core/evdev_to_xtkbd_map.c
-    core/evdev_to_xtkbd_map.h
-    core/devicepixelratiohelper.cpp
+    core/app/main.cpp
+    core/app/karton.cpp
+    core/app/vmlistmodel.cpp
+    core/domain/domain.cpp
+    core/domain/domainconfig.cpp
+    core/libvirt/libvirtmonitor.cpp
+    core/libvirt/libvirteventloop.cpp
+    core/viewer/domainviewer.cpp
+    core/viewer/spicedisplayrenderer.h
+    core/viewer/glscanoutrenderer.cpp
+    core/viewer/primarysurfacerenderer.cpp
+    core/viewer/vulkanscanoutrenderer.cpp
+    core/viewer/vulkanscanoutrenderer.h
+    core/domain/domainxmlbuilder.cpp
+    core/os/osinfoconfig.cpp
+    core/domain/domainxmlreader.cpp
+    core/util/commandrunner.cpp
+    core/util/evdev_to_xtkbd_map.c
+    core/util/evdev_to_xtkbd_map.h
+    core/util/devicepixelratiohelper.cpp
 )
 
 ecm_target_qml_sources(karton
