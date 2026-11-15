@@ -47,7 +47,7 @@ development or testing must pass `-c <same URI>` (usually
 
 QML sources are compiled into the binary by `ecm_add_qml_module()` under the URI
 `org.kde.karton`. When adding a QML file, add it to the `ecm_target_qml_sources()`
-list in `core/CMakeLists.txt`, otherwise it will not be bundled.
+list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 
 ## Build
 
@@ -136,7 +136,7 @@ When testing destructive operations, prefer domains whose names start with
   `kde_clang_format`).
 - User-visible strings must be translatable: use `i18n()` / `i18nc()` in C++
   and QML, and add translation contexts as existing code does. Keep
-  `core/Messages.sh` and `core/CMakeLists.txt` in sync when adding files.
+  `core/Messages.sh` and the root `CMakeLists.txt` in sync when adding files.
 - Use the `KARTON_DEBUG` logging category (`qCInfo(KARTON_DEBUG)`,
   `qCWarning(KARTON_DEBUG)`, ...) rather than raw `qDebug()`.
 - Keep changes focused. Do not reformat unrelated code or check in `build/`,
