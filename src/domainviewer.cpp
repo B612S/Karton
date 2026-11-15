@@ -3,12 +3,18 @@
 
 #include "domainviewer.h"
 
+#include <libvirt/libvirt.h>
+#include <libvirt/virterror.h>
 #include <spice-client.h>
 
+#include <cstdlib>
+
+#include <QDomDocument>
+#include <QDomElement>
 #include <QGuiApplication>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QString>
-#include <QUrl>
 
 #include "domain.h"
 #include "glib.h"
@@ -20,7 +26,6 @@
 
 DomainViewer::DomainViewer(QQuickItem *parent)
     : QQuickItem(parent)
-    , m_commandRunner(new CommandRunner(this))
     , m_domain(nullptr)
     , m_spiceUri(QString())
     , m_connected(false)
@@ -35,8 +40,6 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     setAcceptedMouseButtons(Qt::AllButtons);
     setAcceptHoverEvents(true);
     setFlag(ItemIsFocusScope, true);
-
-    connect(m_commandRunner, &CommandRunner::commandFinished, this, &DomainViewer::handleHostPort);
 }
 
 DomainViewer::~DomainViewer()
@@ -73,22 +76,97 @@ void DomainViewer::componentComplete()
     }
 }
 
-void DomainViewer::handleHostPort(int exitCode, const QString &output)
+bool DomainViewer::setupSpiceSession()
 {
-    if (exitCode != 0 || output.isEmpty()) {
-        qCCritical(KARTON_DEBUG) << "handleHostPort: virsh domdisplay call failed";
-        return;
+    if (!m_domain || !m_domain->domainPtr()) {
+        qCWarning(KARTON_DEBUG) << "setupSpiceSession(): no valid domain";
+        return false;
     }
 
-    m_spiceUri = output.trimmed();
-
-    const QUrl url(m_spiceUri);
-    if (m_spiceUri.isEmpty() || !url.isValid()) {
-        qCCritical(KARTON_DEBUG) << "Invalid SPICE URI given to virsh domdisplay";
-        return;
+    // The live XML contains the actual SPICE port for autoport domains and the
+    // socket path for socket-listening domains.
+    char *xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), 0);
+    if (!xmlDesc) {
+        xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    }
+    if (!xmlDesc) {
+        qCWarning(KARTON_DEBUG) << "Failed to read domain XML:" << virGetLastErrorMessage();
+        return false;
     }
 
-    if (m_spiceUri.startsWith(QStringLiteral("spice+unix://"))) {
+    const QByteArray xml(xmlDesc);
+    free(xmlDesc);
+
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        qCWarning(KARTON_DEBUG) << "Failed to parse domain XML";
+        return false;
+    }
+
+    QString uri;
+    bool glEnabled = false;
+
+    const QDomNodeList graphicsNodes = document.elementsByTagName(QStringLiteral("graphics"));
+    for (int i = 0; i < graphicsNodes.count(); ++i) {
+        const QDomElement graphics = graphicsNodes.at(i).toElement();
+        if (graphics.attribute(QStringLiteral("type")) != QStringLiteral("spice")) {
+            continue;
+        }
+
+        const QDomElement gl = graphics.firstChildElement(QStringLiteral("gl"));
+        glEnabled = gl.attribute(QStringLiteral("enable")) == QStringLiteral("yes");
+
+        const QDomElement listen = graphics.firstChildElement(QStringLiteral("listen"));
+        QString listenType = listen.attribute(QStringLiteral("type"));
+        if (listenType.isEmpty()) {
+            listenType = graphics.attribute(QStringLiteral("listen"));
+        }
+
+        if (listenType == QStringLiteral("socket")) {
+            QString socketPath = listen.attribute(QStringLiteral("socket"));
+            if (socketPath.isEmpty()) {
+                socketPath = graphics.attribute(QStringLiteral("socket"));
+            }
+            if (!socketPath.isEmpty()) {
+                uri = QStringLiteral("spice+unix://%1").arg(socketPath);
+            }
+        } else if (listenType != QStringLiteral("none")) {
+            QString host = listen.attribute(QStringLiteral("address"));
+            if (host.isEmpty()) {
+                host = graphics.attribute(QStringLiteral("listen"));
+            }
+            if (host.isEmpty() || host == QStringLiteral("0.0.0.0") || host == QStringLiteral("::")) {
+                host = QStringLiteral("127.0.0.1");
+            }
+            const QString port = graphics.attribute(QStringLiteral("port"));
+            if (!port.isEmpty() && port != QStringLiteral("-1")) {
+                uri = QStringLiteral("spice://%1:%2").arg(host, port);
+            }
+        }
+
+        if (!uri.isEmpty()) {
+            break;
+        }
+    }
+
+    if (uri.isEmpty()) {
+        qCWarning(KARTON_DEBUG) << "No usable SPICE graphics device found for domain:" << m_domain->config()->name();
+        return false;
+    }
+
+    m_spiceUri = uri;
+
+    const bool vulkan = QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan;
+    if (vulkan) {
+        // The GL scanout renderer uses OpenGL/EGL and cannot be used with a
+        // Vulkan scene graph.
+        m_renderMode = RenderMode::PrimarySurface;
+        if (glEnabled) {
+            qCWarning(KARTON_DEBUG) << "SPICE GL scanout is enabled for" << m_domain->config()->name()
+                                    << "but the Vulkan renderer can only display primary surfaces";
+        }
+        qCInfo(KARTON_DEBUG) << "Using Vulkan; primary surface rendering selected";
+    } else if (uri.startsWith(QStringLiteral("spice+unix://"))) {
         qCInfo(KARTON_DEBUG) << "Detected UNIX socket. Using GL scanout rendering.";
         m_renderMode = RenderMode::GlScanout;
     } else {
@@ -96,17 +174,7 @@ void DomainViewer::handleHostPort(int exitCode, const QString &output)
         m_renderMode = RenderMode::PrimarySurface;
     }
 
-    if (!connectToSpice()) {
-        qCCritical(KARTON_DEBUG) << "Failed to connect to SPICE";
-    }
-}
-
-bool DomainViewer::setupSpiceSession()
-{
-    // TODO: replace virsh CLI, use libvirt API: https://libvirt.org/html/libvirt-libvirt-domain.html#VIR_MIGRATE_PARAM_GRAPHICS_URI
-    // once finished, handleHostPort() will set the URI provided by the output.
-    return m_commandRunner->runCommand(QStringLiteral("virsh"),
-                                       {QStringLiteral("-c"), QStringLiteral("qemu:///session"), QStringLiteral("domdisplay"), m_domain->config()->name()});
+    return connectToSpice();
 }
 
 bool DomainViewer::connectToSpice()

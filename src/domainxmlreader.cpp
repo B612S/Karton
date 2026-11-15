@@ -3,26 +3,35 @@
 
 #include "domainxmlreader.h"
 
-#include <QFile>
-#include <QXmlStreamReader>
+#include <cstdlib>
+
+#include <libvirt/virterror.h>
 
 #include "karton_debug.h"
 
-DomainXmlReader::DomainXmlReader(const QString &path)
-    : m_xmlInfo(readConfigFile(path))
+DomainXmlReader::DomainXmlReader(virDomainPtr domainPtr)
 {
+    if (!domainPtr) {
+        return;
+    }
+
+    // Ask libvirt for the persistent definition instead of reading
+    // ~/.config/libvirt/qemu/<name>.xml directly. This also works with
+    // qemu:///system and with non-default configuration directories.
+    char *xmlDesc = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
+    if (!xmlDesc) {
+        qCWarning(KARTON_DEBUG) << "Failed to read domain XML:" << virGetLastErrorMessage();
+        return;
+    }
+
+    const QByteArray xml(xmlDesc);
+    free(xmlDesc);
+    parse(xml);
 }
 
-DomainXmlReader::XmlInfo DomainXmlReader::readConfigFile(const QString &path)
+void DomainXmlReader::parse(const QByteArray &xml)
 {
-    XmlInfo info;
-
-    QFile xmlFile(path);
-    if (!xmlFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qCInfo(KARTON_DEBUG) << "Could not open domain config file:" << path;
-        return info;
-    }
-    QXmlStreamReader xmlReader(&xmlFile);
+    QXmlStreamReader xmlReader(xml);
 
     while (!xmlReader.atEnd() && !xmlReader.hasError()) {
         const QXmlStreamReader::TokenType token = xmlReader.readNext();
@@ -31,24 +40,24 @@ DomainXmlReader::XmlInfo DomainXmlReader::readConfigFile(const QString &path)
         }
 
         if (xmlReader.name() == QStringLiteral("domain")) {
-            info.indexId = xmlReader.attributes().value(QStringLiteral("id")).toInt();
-            info.hypervisorType = xmlReader.attributes().value(QStringLiteral("type")).toString();
+            m_xmlInfo.indexId = xmlReader.attributes().value(QStringLiteral("id")).toInt();
+            m_xmlInfo.hypervisorType = xmlReader.attributes().value(QStringLiteral("type")).toString();
         } else if (xmlReader.name() == QStringLiteral("os") && xmlReader.attributes().hasAttribute(QStringLiteral("id"))) {
-            info.osId = xmlReader.attributes().value(QStringLiteral("id")).toString();
-            info.shortOsId = xmlReader.attributes().value(QStringLiteral("short-id")).toString();
+            m_xmlInfo.osId = xmlReader.attributes().value(QStringLiteral("id")).toString();
+            m_xmlInfo.shortOsId = xmlReader.attributes().value(QStringLiteral("short-id")).toString();
         } else if (xmlReader.name() == QStringLiteral("data")) {
             if (xmlReader.attributes().hasAttribute(QStringLiteral("maxDiskStorage"))) {
-                info.maxDiskStorage = xmlReader.attributes().value(QStringLiteral("maxDiskStorage")).toInt();
+                m_xmlInfo.maxDiskStorage = xmlReader.attributes().value(QStringLiteral("maxDiskStorage")).toInt();
             }
             if (xmlReader.attributes().hasAttribute(QStringLiteral("screenshotPreviewPath"))) {
-                info.screenshotPreviewPath = xmlReader.attributes().value(QStringLiteral("screenshotPreviewPath")).toString();
+                m_xmlInfo.screenshotPreviewPath = xmlReader.attributes().value(QStringLiteral("screenshotPreviewPath")).toString();
             }
         } else if (xmlReader.name() == QStringLiteral("disk")) {
             const QString device = xmlReader.attributes().value(QStringLiteral("device")).toString();
             if (device == QStringLiteral("disk")) {
-                info.virtualDiskPath = retrieveDiskPath(xmlReader);
+                m_xmlInfo.virtualDiskPath = retrieveDiskPath(xmlReader);
             } else if (device == QStringLiteral("cdrom")) {
-                info.isoDiskPath = retrieveDiskPath(xmlReader);
+                m_xmlInfo.isoDiskPath = retrieveDiskPath(xmlReader);
             }
         }
     }
@@ -56,8 +65,6 @@ DomainXmlReader::XmlInfo DomainXmlReader::readConfigFile(const QString &path)
     if (xmlReader.hasError()) {
         qCWarning(KARTON_DEBUG) << "XML parsing error:" << xmlReader.errorString();
     }
-
-    return info;
 }
 
 QString DomainXmlReader::retrieveDiskPath(QXmlStreamReader &xmlReader)

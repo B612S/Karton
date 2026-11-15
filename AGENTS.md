@@ -29,12 +29,12 @@ used during development or testing must therefore pass
 | `src/domainconfig.{h,cpp}` | QML-exposed per-domain configuration/state model. |
 | `src/vmlistmodel.{h,cpp}` | `VMModel`, the QML singleton list model shown on the main page. |
 | `src/domainxmlbuilder.{h,cpp}` | Generates and edits libvirt domain XML. |
-| `src/domainxmlreader.{h,cpp}` | Reads libvirt's saved XML config files for Karton metadata. |
+| `src/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
 | `src/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
 | `src/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
 | `src/glscanoutrenderer.*`, `src/primarysurfacerenderer.*` | SPICE display rendering backends. |
 | `src/libvirtmonitor.*`, `src/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
-| `src/commandrunner.*` | Small `QProcess` helper used for `qemu-img` / `virsh`. |
+| `src/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `src/qml/` | Kirigami QML pages and dialogs. |
 
 QML sources are compiled into the binary by `ecm_add_qml_module()` under the URI
@@ -45,7 +45,8 @@ list in `src/CMakeLists.txt`, otherwise it will not be bundled.
 
 Required: CMake >= 3.20, a C++20 compiler, Qt 6, KF6 (Kirigami, I18n,
 CoreAddons, QQC2DesktopStyle, IconThemes), Kirigami Addons >= 1.11, libvirt,
-libosinfo, GLib, spice-client-glib, OpenGL/EGL, and Extra CMake Modules (ECM)
+libosinfo, GLib, spice-client-glib, Vulkan (default scene graph; OpenGL/EGL are
+kept for the optional GL scanout fallback), and Extra CMake Modules (ECM)
 >= 6.0.
 
 On Arch Linux, the relevant packages are roughly:
@@ -54,7 +55,7 @@ On Arch Linux, the relevant packages are roughly:
 sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules \
     qt6-base qt6-declarative qt6-multimedia qt6-tools \
     kirigami kirigami-addons kcoreaddons ki18n kiconthemes qqc2-desktop-style \
-    libvirt libosinfo spice-gtk mesa
+    libvirt libosinfo spice-gtk mesa vulkan-headers vulkan-icd-loader
 ```
 
 Configure and build out-of-tree:
@@ -135,25 +136,35 @@ When testing destructive operations, prefer domains whose names start with
   `Domain` objects take ownership of those references; don't add extra refs or
   frees without checking the surrounding code.
 - `virDomainGetXMLDesc()` returns a `char *` that must be freed with `free()`.
-- libvirt lifecycle events are delivered through `LibvirtEventLoop`, which polls
-  `virEventRunDefaultImpl()` from a 1-second `QTimer` on the GUI thread. The
-  event callback emits synchronously, so handlers run on the GUI thread; keep
-  them cheap and do not block.
+- libvirt lifecycle events are delivered through `LibvirtEventLoop`, which
+  registers a Qt implementation of the libvirt event API (`QSocketNotifier` for
+  handles, `QTimer` for timeouts) before the hypervisor connection is opened.
+  The event callback emits synchronously on the GUI thread; keep handlers cheap
+  and do not block.
 - `CommandRunner::runCommand()` starts a program with an explicit argument list
   (no shell), so it does not support pipes, globbing, or shell escape
   sequences. It only reports whether the process *started*; use
   `runCommandAndWait()` when you need the exit code, or `commandFinished` for
   the asynchronous result.
-- External `virsh` calls (e.g. in `DomainViewer`) must use
-  `-c qemu:///session` to match the application's connection.
+- The viewer discovers the SPICE URI from the domain XML
+  (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
+  call is ever needed, pass `-c qemu:///session` to match the application's
+  connection.
 - Karton stores its own data inside domain XML metadata:
   `<karton:data maxDiskStorage="…" screenshotPreviewPath="…"/>`.
-  `maxDiskStorage` is stored in MiB. Preserve unknown metadata when rewriting
-  XML — `DomainXmlBuilder::updateXML()` intentionally edits only specific
-  fields.
+  `maxDiskStorage` is stored in MiB. `DomainXmlReader` gets the XML from
+  libvirt (`virDomainGetXMLDesc()`) rather than reading the config file on
+  disk. Preserve unknown metadata when rewriting XML —
+  `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
+- The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
+  `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
+  `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice. The SPICE
+  GL scanout renderer is OpenGL-only, so with Vulkan the viewer uses the
+  primary-surface renderer and new domains are created without 3D
+  acceleration.
 - Suspend/undefine/define events can arrive while a QML page is open; check for
   valid domain pointers and handle missing files gracefully.
 

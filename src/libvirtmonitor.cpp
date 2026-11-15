@@ -4,7 +4,6 @@
 #include "libvirtmonitor.h"
 
 #include "karton_debug.h"
-#include "libvirteventloop.h"
 
 LibvirtMonitor::LibvirtMonitor(QObject *parent, virConnectPtr conn)
     : QObject(parent)
@@ -16,30 +15,20 @@ LibvirtMonitor::LibvirtMonitor(QObject *parent, virConnectPtr conn)
         return;
     }
 
-    auto virtEventLoop = new LibvirtEventLoop{this}; // TODO store
+    m_callbackId =
+        virConnectDomainEventRegisterAny(m_conn, nullptr, VIR_DOMAIN_EVENT_ID_LIFECYCLE, VIR_DOMAIN_EVENT_CALLBACK(domainEventCallback), this, nullptr);
 
-    // LibvirtEventLoop::registerQtEventLoop();
-    connect(virtEventLoop, &LibvirtEventLoop::result, this, [this](bool result) {
-        if (!result) {
-            qCCritical(KARTON_DEBUG) << "LibvirtEventLoop register failed";
-            return;
-        }
-        m_callbackId =
-            virConnectDomainEventRegisterAny(m_conn, nullptr, VIR_DOMAIN_EVENT_ID_LIFECYCLE, VIR_DOMAIN_EVENT_CALLBACK(domainEventCallback), this, nullptr);
+    // For reference...
+    // EVENT_ID_LIFECYCLE is listening to all events under:
+    // https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType
+    // Also a list of other callbacks:
+    // https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventID
 
-        // For reference...
-        // EVENT_ID_LIFECYCLE is listening to all events under:
-        // https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType
-        // Also a list of other callbacks:
-        // https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventID
-
-        if (m_callbackId < 0) {
-            qCCritical(KARTON_DEBUG) << "Failed to register event callback";
-        } else {
-            qCInfo(KARTON_DEBUG) << "Successfully registered domain event callback";
-        }
-    });
-    virtEventLoop->run();
+    if (m_callbackId < 0) {
+        qCCritical(KARTON_DEBUG) << "Failed to register event callback";
+    } else {
+        qCInfo(KARTON_DEBUG) << "Successfully registered domain event callback";
+    }
 }
 
 LibvirtMonitor::~LibvirtMonitor()

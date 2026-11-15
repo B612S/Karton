@@ -12,7 +12,9 @@
 #include <QDomElement>
 #include <QFile>
 #include <QObject>
+#include <QQuickWindow>
 #include <QRegularExpression>
+#include <QSGRendererInterface>
 #include <QStandardPaths>
 #include <utility>
 
@@ -21,6 +23,7 @@
 #include "domainxmlbuilder.h"
 #include "domainxmlreader.h"
 #include "karton_debug.h"
+#include "libvirteventloop.h"
 #include "libvirtmonitor.h"
 
 Karton::Karton(QObject *parent)
@@ -39,6 +42,11 @@ Karton::~Karton()
         virConnectClose(m_conn);
         m_conn = nullptr;
     }
+}
+
+bool Karton::vulkanRendering() const
+{
+    return QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan;
 }
 
 Karton *Karton::self()
@@ -64,8 +72,9 @@ void Karton::onDomainStateChanged(virDomainPtr domainPtr, int event, int detail)
 
 bool Karton::init()
 {
-    // Register event loop. Note: must be done before connection to hypervisor.
-    virEventRegisterDefaultImpl();
+    // Register the Qt-based event loop. Note: must be done before connecting
+    // to the hypervisor.
+    LibvirtEventLoop::registerImpl();
 
     // Currently set to session, but could also do system for root..
     m_conn = virConnectOpen("qemu:///session");
@@ -198,7 +207,7 @@ void Karton::refreshDomainList()
         const QString name = QString::fromUtf8(virDomainGetName(domainPtr));
         const QString xmlConfigPath = getXmlConfigPath(name);
 
-        DomainXmlReader reader(xmlConfigPath);
+        DomainXmlReader reader(domainPtr);
 
         QString screenshotPreviewPath = reader.m_xmlInfo.screenshotPreviewPath;
         if (screenshotPreviewPath.isEmpty()) { // set default path if not found
@@ -433,7 +442,9 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.xmlConfigPath = getXmlConfigPath(name);
     configData.isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString();
     configData.virtualDiskPath = getVirtualDiskPath(name);
-    configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool();
+    // SPICE GL scanout requires an OpenGL scene graph. With Vulkan the viewer
+    // uses the primary surface path instead.
+    configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool() && !vulkanRendering();
 
     DomainConfig domainConfig(configData);
 

@@ -11,15 +11,49 @@
 #include <QApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QVulkanInstance>
 #include <QtQml>
 
 #include "karton_debug.h"
 #include "karton_version.h"
 
+static QSGRendererInterface::GraphicsApi preferredGraphicsApi()
+{
+    const QByteArray requested = qgetenv("KARTON_GRAPHICS_API").trimmed().toLower();
+    if (requested == "opengl" || requested == "gl") {
+        return QSGRendererInterface::OpenGL;
+    }
+    if (requested == "vulkan" || requested == "vk") {
+        return QSGRendererInterface::Vulkan;
+    }
+    if (requested == "software") {
+        return QSGRendererInterface::Software;
+    }
+
+    // Prefer Vulkan, but fall back to OpenGL on systems where it is not
+    // available (e.g. no Vulkan driver or a headless environment).
+    QVulkanInstance probe;
+    if (probe.create()) {
+        return QSGRendererInterface::Vulkan;
+    }
+
+    qCWarning(KARTON_DEBUG) << "Vulkan is not available, falling back to OpenGL";
+    return QSGRendererInterface::OpenGL;
+}
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     KirigamiAppDefaults::apply(&app);
+
+    const QSGRendererInterface::GraphicsApi graphicsApi = preferredGraphicsApi();
+    QQuickWindow::setGraphicsApi(graphicsApi);
+    qCInfo(KARTON_DEBUG) << "Using graphics API:"
+                         << (graphicsApi == QSGRendererInterface::Vulkan       ? "Vulkan"
+                                 : graphicsApi == QSGRendererInterface::OpenGL ? "OpenGL"
+                                                                               : "software");
 
     KLocalizedString::setApplicationDomain("karton");
 

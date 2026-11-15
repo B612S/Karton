@@ -25,6 +25,7 @@ class Karton : public QObject
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(bool connected READ connected CONSTANT)
+    Q_PROPERTY(bool vulkanRendering READ vulkanRendering CONSTANT)
 
 public:
     // Deliberately not default-constructible: Qt then uses create() for the
@@ -39,6 +40,7 @@ public:
     {
         return m_conn != nullptr;
     }
+    [[nodiscard]] bool vulkanRendering() const;
 
     QVector<Domain *> domains();
     void refreshDomain(const virDomainPtr domainPtr);

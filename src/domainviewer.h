@@ -15,7 +15,6 @@
 
 #include <memory>
 
-#include "commandrunner.h"
 #include "domain.h"
 #include "spicedisplayrenderer.h"
 
@@ -60,7 +59,6 @@ Q_SIGNALS:
     void domainChanged();
 
 private Q_SLOTS:
-    void handleHostPort(int exitCode, const QString &output);
     void handleRendererFrameSizeChanged();
 
 private:
@@ -77,7 +75,6 @@ private:
     static void playback_data_callback(SpicePlaybackChannel *channel, gpointer data, gint size, gpointer user_data);
     static void playback_stop_callback(SpicePlaybackChannel *channel, gpointer user_data);
 
-    CommandRunner *m_commandRunner;
     Domain *m_domain;
     QString m_spiceUri;
     bool m_connected = false;

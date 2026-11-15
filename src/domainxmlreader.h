@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <libvirt/libvirt.h>
+
+#include <QByteArray>
 #include <QString>
 #include <QXmlStreamReader>
 
@@ -20,12 +23,11 @@ public:
         QString screenshotPreviewPath;
     };
 
-    explicit DomainXmlReader(const QString &path);
-
-    XmlInfo readConfigFile(const QString &path);
+    explicit DomainXmlReader(virDomainPtr domainPtr);
 
     XmlInfo m_xmlInfo;
 
 private:
+    void parse(const QByteArray &xml);
     QString retrieveDiskPath(QXmlStreamReader &xmlReader);
 };

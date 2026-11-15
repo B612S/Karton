@@ -22,6 +22,7 @@ This project is still in early development and will likely break existing virtua
 - libvirt
 - spice-client-glib
 - libosinfo
+- Vulkan (or OpenGL as a fallback)
 
 ## Installation
 ```
