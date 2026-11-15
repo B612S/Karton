@@ -95,6 +95,7 @@ Kirigami.Dialog {
                             Layout.fillWidth: true
                             text: modelData.vendor + ":" + modelData.product
                                   + " · bus " + modelData.bus + ", device " + modelData.device
+                                  + (modelData.hub ? " · hub" : "")
                                   + (modelData.devnode.length > 0 ? " · " + modelData.devnode : "")
                             opacity: 0.7
                             elide: Text.ElideRight
@@ -104,7 +105,7 @@ Kirigami.Dialog {
                     Controls.Button {
                         text: i18n("Attach")
                         icon.name: "list-add"
-                        enabled: root.domain !== null
+                        enabled: root.domain !== null && !modelData.hub
                         onClicked: {
                             if (Karton.attachUsbDevice(root.domain,
                                                        modelData.vendor,

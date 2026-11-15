@@ -999,6 +999,9 @@ QVariantList Karton::usbDevices() const
                 info.insert(QStringLiteral("device"), device.text());
                 info.insert(QStringLiteral("port"), port.text());
                 info.insert(QStringLiteral("devnode"), devnode.text());
+                info.insert(QStringLiteral("hub"),
+                            productName.contains(QStringLiteral("hub"), Qt::CaseInsensitive)
+                                || vendorName.contains(QStringLiteral("hub"), Qt::CaseInsensitive));
                 result.append(info);
             }
         }
@@ -2016,9 +2019,13 @@ bool Karton::attachIso(const Domain *domain, const QString &path)
     return success;
 }
 
-bool Karton::detachDisk(const Domain *domain, const QString &targetDev)
+bool Karton::detachDisk(const Domain *domain, const QString &targetDev, bool deleteFile)
 {
     if (!domain || !domain->domainPtr() || targetDev.isEmpty()) {
+        return false;
+    }
+    if (deleteFile && domain->isActive()) {
+        Q_EMIT errorOccurred(i18n("Stop the VM before deleting a disk file."));
         return false;
     }
 
@@ -2027,6 +2034,15 @@ bool Karton::detachDisk(const Domain *domain, const QString &targetDev)
     if (liveXml.isEmpty() && configXml.isEmpty()) {
         Q_EMIT errorOccurred(i18nc("%1 is a disk target", "No disk with target %1 was found.", targetDev));
         return false;
+    }
+
+    QString diskSource;
+    QString diskDevice;
+    QDomDocument diskDocument;
+    if (diskDocument.setContent(liveXml.isEmpty() ? configXml : liveXml)) {
+        const QDomElement element = diskDocument.documentElement();
+        diskDevice = element.attribute(QStringLiteral("device"));
+        diskSource = element.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file"));
     }
 
     bool success = true;
@@ -2049,6 +2065,12 @@ bool Karton::detachDisk(const Domain *domain, const QString &targetDev)
     }
 
     if (success) {
+        if (deleteFile && diskDevice == QStringLiteral("disk") && !diskSource.isEmpty() && QFile::exists(diskSource)) {
+            if (!QFile::remove(diskSource)) {
+                Q_EMIT errorOccurred(i18nc("%1 is a file path", "The disk was detached, but its file could not be removed: %1", diskSource));
+                success = false;
+            }
+        }
         refreshDomain(domain->domainPtr());
     }
     return success;

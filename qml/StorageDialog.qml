@@ -104,13 +104,21 @@ Kirigami.Dialog {
                         text: i18n("Detach")
                         icon.name: "list-remove"
                         onClicked: {
-                            if (Karton.detachDisk(root.domain, modelData.target)) {
+                            if (Karton.detachDisk(root.domain, modelData.target, deleteFilesCheck.checked)) {
                                 root.refresh();
                             }
                         }
                     }
                 }
             }
+        }
+
+        Controls.CheckBox {
+            id: deleteFilesCheck
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            text: i18n("Also delete the detached data disk file")
+            enabled: root.domain !== null && !root.domain.isActive
         }
 
         Kirigami.Separator {

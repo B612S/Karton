@@ -96,7 +96,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool addDisk(const Domain *domain, int sizeGB, const QString &format);
     Q_INVOKABLE bool attachDiskImage(const Domain *domain, const QString &path, const QString &format);
     Q_INVOKABLE bool attachIso(const Domain *domain, const QString &path);
-    Q_INVOKABLE bool detachDisk(const Domain *domain, const QString &targetDev);
+    Q_INVOKABLE bool detachDisk(const Domain *domain, const QString &targetDev, bool deleteFile);
 
 Q_SIGNALS:
     void networksChanged();

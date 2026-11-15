@@ -212,6 +212,8 @@ When testing destructive operations, prefer domains whose names start with
   `attachDiskImage()`, `attachIso()` and `detachDisk()`, with the UI in
   `qml/StorageDialog.qml`. New disks are created with `qemu-img create` and
   attached as virtio devices; ISO images are attached as read-only SATA cdroms.
+  The Storage dialog uses FileDialog pickers for images/ISOs and can optionally
+  delete a data disk file after detaching it from a stopped VM.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's
