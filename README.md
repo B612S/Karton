@@ -28,6 +28,7 @@ This project is still in early development and will likely break existing virtua
 - libosinfo
 - Vulkan with DMA-BUF scanout import (or OpenGL as a fallback)
 - Automatic system/session libvirt connection detection
+- Libvirt network management: list, start/stop, autostart, NAT creation and VM NIC attach/detach
 
 ## Configuration
 The connection URI can be changed in the Connection Settings dialog (restart

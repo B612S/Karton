@@ -37,7 +37,7 @@ Kirigami.ScrollablePage {
     Connections {
         target: Karton
         function onErrorOccurred(errorMessage) {
-            root.showPassiveNotification(errorMessage, "long");
+            applicationWindow().showPassiveNotification(errorMessage, "long");
         }
     }
 
@@ -48,6 +48,11 @@ Kirigami.ScrollablePage {
             onTriggered: source => {
                 addDomainDialog.open();
             }
+        },
+        Kirigami.Action {
+            icon.name: "network-wired"
+            text: i18n("Networks")
+            onTriggered: networksDialog.open()
         },
         Kirigami.Action {
             icon.name: "settings-configure"
@@ -62,6 +67,10 @@ Kirigami.ScrollablePage {
 
     ConnectionSettingsDialog {
         id: connectionDialog
+    }
+
+    NetworksDialog {
+        id: networksDialog
     }
 
     ListView {

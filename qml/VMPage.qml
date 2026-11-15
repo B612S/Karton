@@ -38,11 +38,11 @@ Kirigami.ScrollablePage {
             onTriggered: {
                 if (isRunning) {
                     if (Karton.stopDomain(domain)) {
-                        showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Stopping VM: %1!", domain.config.name));
+                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Stopping VM: %1!", domain.config.name));
                     }
                 } else {
                     if (Karton.startDomain(domain)) {
-                        showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", domain.config.name));
+                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", domain.config.name));
                     }
                 }
             }
@@ -53,9 +53,15 @@ Kirigami.ScrollablePage {
             visible: isRunning
             onTriggered: {
                 if (Karton.forceStopDomain(domain)) {
-                    showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", domain.config.name));
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", domain.config.name));
                 }
             }
+        },
+        Kirigami.Action {
+            text: i18n("Networks")
+            icon.name: "network-wired"
+            shortcut: "Ctrl+Shift+N"
+            onTriggered: networksDialog.open()
         },
         Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
@@ -93,6 +99,11 @@ Kirigami.ScrollablePage {
             }
         }
     ]
+
+    NetworksDialog {
+        id: networksDialog
+        domain: root.domain
+    }
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
@@ -194,7 +205,7 @@ Kirigami.ScrollablePage {
                     icon.name: "media-eject"
                     onClicked: {
                         if (Karton.ejectDisk(domain)) {
-                            showPassiveNotification(i18nc("%1 is the name of the virtual machine", "ISO Disk ejected for VM: %1", domain.config.name));
+                            applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "ISO Disk ejected for VM: %1", domain.config.name));
                         }
                     }
                 }

@@ -8,6 +8,7 @@
 #include <QJSEngine>
 #include <QObject>
 #include <QQmlEngine>
+#include <QVariantList>
 #include <QVector>
 
 #include "domain/domain.h"
@@ -69,6 +70,17 @@ public Q_SLOTS:
     Q_INVOKABLE bool ejectDisk(const Domain *domain);
     Q_INVOKABLE void saveConnectionUri(const QString &uri);
     Q_INVOKABLE bool setAutostart(const Domain *domain, bool autostart);
+    Q_INVOKABLE QVariantList networks() const;
+    Q_INVOKABLE bool startNetwork(const QString &name);
+    Q_INVOKABLE bool stopNetwork(const QString &name);
+    Q_INVOKABLE bool setNetworkAutostart(const QString &name, bool autostart);
+    Q_INVOKABLE bool createNatNetwork(const QString &name);
+    Q_INVOKABLE QVariantList domainInterfaces(const Domain *domain) const;
+    Q_INVOKABLE bool attachNetwork(const Domain *domain, const QString &network, const QString &model);
+    Q_INVOKABLE bool detachNetwork(const Domain *domain, const QString &mac);
+
+Q_SIGNALS:
+    void networksChanged();
 
 private Q_SLOTS:
     void onDomainStateChanged(const virDomainPtr domainPtr, int event, int detail);

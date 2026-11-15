@@ -184,6 +184,12 @@ When testing destructive operations, prefer domains whose names start with
   `domainEdited`.
 - The QML dialogs keep themselves open while an asynchronous create/edit is in
   flight; do not close them optimistically after calling `Karton`.
+- Libvirt network management lives on `Karton` (`networks()`, `startNetwork()`,
+  `stopNetwork()`, `createNatNetwork()`, `attachNetwork()`, `detachNetwork()`)
+  and is exposed by `qml/NetworksDialog.qml`. NIC attach uses separate LIVE and
+  CONFIG libvirt calls so a running VM keeps the interface after shutdown; NIC
+  detach removes the CONFIG device even if the guest cannot hot-unplug the live
+  device.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's

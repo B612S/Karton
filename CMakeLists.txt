@@ -129,6 +129,7 @@ ecm_target_qml_sources(karton
     qml/VMPage.qml
     qml/ConfigurationDialog.qml
     qml/ConnectionSettingsDialog.qml
+    qml/NetworksDialog.qml
 )
 
 ecm_qt_declare_logging_category(
