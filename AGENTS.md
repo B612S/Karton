@@ -194,6 +194,11 @@ When testing destructive operations, prefer domains whose names start with
   `domainUsbDevices()`, `attachUsbDevice()` and `detachUsbDevice()`, with the
   UI in `qml/UsbDevicesDialog.qml`. Host devices come from libvirt node devices
   (`usb_device` capability) and are attached as USB hostdevs.
+- Snapshots are exposed through `Karton::domainSnapshots()`,
+  `createSnapshot()`, `revertSnapshot()` and `deleteSnapshot()`, with the UI in
+  `qml/SnapshotsDialog.qml`. Internal snapshots of a running VM must include
+  memory; the dialog enables that by default and the backend rejects a
+  memory-less running snapshot with a clear error.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's

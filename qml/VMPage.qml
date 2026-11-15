@@ -70,6 +70,12 @@ Kirigami.ScrollablePage {
             onTriggered: usbDialog.open()
         },
         Kirigami.Action {
+            text: i18n("Snapshots")
+            icon.name: "document-save"
+            shortcut: "Ctrl+Shift+S"
+            onTriggered: snapshotsDialog.open()
+        },
+        Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
             icon.name: "delete"
             visible: !isRunning
@@ -113,6 +119,11 @@ Kirigami.ScrollablePage {
 
     UsbDevicesDialog {
         id: usbDialog
+        domain: root.domain
+    }
+
+    SnapshotsDialog {
+        id: snapshotsDialog
         domain: root.domain
     }
 

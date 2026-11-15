@@ -7,6 +7,7 @@
 #include <libvirt/virterror.h>
 
 #include <KLocalizedString>
+#include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
 #include <QDomElement>
@@ -1124,6 +1125,155 @@ bool Karton::detachUsbDevice(const Domain *domain, const QString &vendor, const 
         }
     }
 
+    if (success) {
+        refreshDomain(domain->domainPtr());
+    }
+    return success;
+}
+
+QVariantList Karton::domainSnapshots(const Domain *domain) const
+{
+    QVariantList result;
+    if (!domain || !domain->domainPtr()) {
+        return result;
+    }
+
+    virDomainSnapshotPtr *snapshots = nullptr;
+    const int count = virDomainListAllSnapshots(domain->domainPtr(), &snapshots, 0);
+    if (count < 0) {
+        return result;
+    }
+
+    for (int i = 0; i < count; ++i) {
+        char *xml = virDomainSnapshotGetXMLDesc(snapshots[i], 0);
+        if (!xml) {
+            virDomainSnapshotFree(snapshots[i]);
+            continue;
+        }
+
+        QDomDocument document;
+        if (document.setContent(QString::fromUtf8(xml))) {
+            const QDomElement rootElement = document.documentElement();
+            const QDomElement nameElement = rootElement.firstChildElement(QStringLiteral("name"));
+            const QDomElement descriptionElement = rootElement.firstChildElement(QStringLiteral("description"));
+            const QDomElement creationElement = rootElement.firstChildElement(QStringLiteral("creationTime"));
+            const QDomElement stateElement = rootElement.firstChildElement(QStringLiteral("state"));
+            const QDomElement parentElement = rootElement.firstChildElement(QStringLiteral("parent"));
+            const QDomElement parentNameElement = parentElement.firstChildElement(QStringLiteral("name"));
+
+            QString creationTime;
+            if (!creationElement.text().isEmpty()) {
+                creationTime = QDateTime::fromSecsSinceEpoch(creationElement.text().toLongLong()).toString(Qt::ISODate);
+            }
+
+            QVariantMap info;
+            info.insert(QStringLiteral("name"), nameElement.text());
+            info.insert(QStringLiteral("description"), descriptionElement.text());
+            info.insert(QStringLiteral("creationTime"), creationTime);
+            info.insert(QStringLiteral("state"), stateElement.text());
+            info.insert(QStringLiteral("parent"), parentNameElement.text());
+            info.insert(QStringLiteral("current"), virDomainSnapshotIsCurrent(snapshots[i], 0) == 1);
+            result.append(info);
+        }
+
+        free(xml);
+        virDomainSnapshotFree(snapshots[i]);
+    }
+    free(snapshots);
+    return result;
+}
+
+bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, const QString &description, bool includeMemory)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    const QString name = requestedName.trimmed();
+    if (!isValidDomainName(name)) {
+        Q_EMIT errorOccurred(i18n("A snapshot name may only contain letters, digits, dots, underscores and dashes."));
+        return false;
+    }
+    if (domain->isActive() && !includeMemory) {
+        Q_EMIT errorOccurred(i18n("A running VM needs a memory-inclusive internal snapshot. Enable Include memory."));
+        return false;
+    }
+
+    QDomDocument document;
+    QDomElement root = document.createElement(QStringLiteral("domainsnapshot"));
+    document.appendChild(root);
+
+    QDomElement nameElement = document.createElement(QStringLiteral("name"));
+    nameElement.appendChild(document.createTextNode(name));
+    root.appendChild(nameElement);
+
+    if (!description.trimmed().isEmpty()) {
+        QDomElement descriptionElement = document.createElement(QStringLiteral("description"));
+        descriptionElement.appendChild(document.createTextNode(description));
+        root.appendChild(descriptionElement);
+    }
+
+    QDomElement memoryElement = document.createElement(QStringLiteral("memory"));
+    memoryElement.setAttribute(QStringLiteral("snapshot"), (includeMemory && domain->isActive()) ? QStringLiteral("internal") : QStringLiteral("no"));
+    root.appendChild(memoryElement);
+
+    virDomainSnapshotPtr snapshot = virDomainSnapshotCreateXML(domain->domainPtr(), document.toString().toUtf8().constData(), 0);
+    if (!snapshot) {
+        const QString errorMsg =
+            i18nc("%1 is a snapshot name, %2 is an error", "Failed to create snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    virDomainSnapshotFree(snapshot);
+    return true;
+}
+
+bool Karton::deleteSnapshot(const Domain *domain, const QString &name)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainSnapshotPtr snapshot = virDomainSnapshotLookupByName(domain->domainPtr(), name.toUtf8().constData(), 0);
+    if (!snapshot) {
+        const QString errorMsg =
+            i18nc("%1 is a snapshot name, %2 is an error", "Failed to find snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    const bool success = virDomainSnapshotDelete(snapshot, VIR_DOMAIN_SNAPSHOT_DELETE_CHILDREN) == 0;
+    if (!success) {
+        const QString errorMsg =
+            i18nc("%1 is a snapshot name, %2 is an error", "Failed to delete snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        Q_EMIT errorOccurred(errorMsg);
+    }
+    virDomainSnapshotFree(snapshot);
+    return success;
+}
+
+bool Karton::revertSnapshot(const Domain *domain, const QString &name)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainSnapshotPtr snapshot = virDomainSnapshotLookupByName(domain->domainPtr(), name.toUtf8().constData(), 0);
+    if (!snapshot) {
+        const QString errorMsg =
+            i18nc("%1 is a snapshot name, %2 is an error", "Failed to find snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    const bool success = virDomainRevertToSnapshot(snapshot, 0) == 0;
+    if (!success) {
+        const QString errorMsg =
+            i18nc("%1 is a snapshot name, %2 is an error", "Failed to revert to snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        Q_EMIT errorOccurred(errorMsg);
+    }
+    virDomainSnapshotFree(snapshot);
     if (success) {
         refreshDomain(domain->domainPtr());
     }

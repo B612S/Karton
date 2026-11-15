@@ -82,6 +82,10 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantList domainUsbDevices(const Domain *domain) const;
     Q_INVOKABLE bool attachUsbDevice(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
     Q_INVOKABLE bool detachUsbDevice(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
+    Q_INVOKABLE QVariantList domainSnapshots(const Domain *domain) const;
+    Q_INVOKABLE bool createSnapshot(const Domain *domain, const QString &name, const QString &description, bool includeMemory);
+    Q_INVOKABLE bool deleteSnapshot(const Domain *domain, const QString &name);
+    Q_INVOKABLE bool revertSnapshot(const Domain *domain, const QString &name);
 
 Q_SIGNALS:
     void networksChanged();
