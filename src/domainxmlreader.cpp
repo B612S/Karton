@@ -55,6 +55,8 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
             if (xmlReader.attributes().hasAttribute(QStringLiteral("screenshotPreviewPath"))) {
                 info.screenshotPreviewPath = xmlReader.attributes().value(QStringLiteral("screenshotPreviewPath")).toString();
             }
+        } else if (xmlReader.name() == QStringLiteral("interface")) {
+            parseInterface(info, xmlReader);
         } else if (xmlReader.name() == QStringLiteral("disk")) {
             const QString device = xmlReader.attributes().value(QStringLiteral("device")).toString();
             QString format = QStringLiteral("qcow2");
@@ -75,6 +77,24 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
     }
 
     return info;
+}
+
+void DomainXmlReader::parseInterface(XmlInfo &info, QXmlStreamReader &xmlReader)
+{
+    info.networkModel = QStringLiteral("virtio");
+
+    while (!xmlReader.atEnd()) {
+        const QXmlStreamReader::TokenType token = xmlReader.readNext();
+        if (token == QXmlStreamReader::StartElement && xmlReader.name() == QStringLiteral("model")) {
+            const QString type = xmlReader.attributes().value(QStringLiteral("type")).toString();
+            if (!type.isEmpty()) {
+                info.networkModel = type;
+            }
+        }
+        if (token == QXmlStreamReader::EndElement && xmlReader.name() == QStringLiteral("interface")) {
+            break;
+        }
+    }
 }
 
 QString DomainXmlReader::retrieveDiskPath(QXmlStreamReader &xmlReader, QString *format)

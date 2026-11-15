@@ -22,6 +22,7 @@ public:
         QString virtualDiskPath;
         QString diskFormat = QStringLiteral("qcow2");
         QString firmware = QStringLiteral("bios");
+        QString networkModel = QStringLiteral("none");
         QString screenshotPreviewPath;
     };
 
@@ -33,4 +34,5 @@ public:
 
 private:
     static QString retrieveDiskPath(QXmlStreamReader &xmlReader, QString *format = nullptr);
+    static void parseInterface(XmlInfo &info, QXmlStreamReader &xmlReader);
 };

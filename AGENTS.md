@@ -183,9 +183,13 @@ When testing destructive operations, prefer domains whose names start with
   `qemu-img info -U --output=json` (cached per path; `-U` is required while a
   running VM holds the image lock) and written into the Karton metadata on the
   next configuration save.
-- `InstallationDialog.qml` is a two-step wizard: installation source, then
-  hardware. Keep the content of each step short; the previous single long form
-  triggered a `Kirigami.Dialog` binding loop on `y`.
+- `InstallationDialog.qml` is a three-step wizard: installation source,
+  resources (memory/storage/format) and system (firmware/network/CPU/
+  acceleration). Keep the content of each step short; the previous single long
+  form triggered a `Kirigami.Dialog` binding loop on `y`.
+- New domains use user-mode networking with a `virtio` (default) or `e1000`
+  interface, or no network at all. The model is stored in
+  `DomainConfig::networkModel` and read back from the domain XML.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph

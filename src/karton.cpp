@@ -258,6 +258,7 @@ void Karton::refreshDomainList()
             .virtualDiskPath = reader.m_xmlInfo.virtualDiskPath,
             .diskFormat = reader.m_xmlInfo.diskFormat,
             .firmware = reader.m_xmlInfo.firmware,
+            .networkModel = reader.m_xmlInfo.networkModel,
             .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
@@ -457,6 +458,11 @@ bool Karton::createDomain(const QVariantMap &config)
         Q_EMIT errorOccurred(i18n("Unsupported firmware type"));
         return false;
     }
+    const QString networkModel = config.value(QStringLiteral("networkModel"), QStringLiteral("virtio")).toString();
+    if (networkModel != QStringLiteral("virtio") && networkModel != QStringLiteral("e1000") && networkModel != QStringLiteral("none")) {
+        Q_EMIT errorOccurred(i18n("Unsupported network model"));
+        return false;
+    }
 
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     const QString basePath = QStringLiteral("%1/libvirt").arg(dataDir);
@@ -479,6 +485,7 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.virtualDiskPath = getVirtualDiskPath(name, diskFormat);
     configData.diskFormat = diskFormat;
     configData.firmware = firmware;
+    configData.networkModel = networkModel;
     // SPICE GL scanout requires an OpenGL scene graph. With Vulkan the viewer
     // uses the primary surface path instead.
     configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool() && !vulkanRendering();

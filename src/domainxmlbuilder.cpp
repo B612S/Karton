@@ -167,7 +167,9 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
 
     // devices->network interfaces element
     // Userspace connection https://libvirt.org/formatdomain.html#id44
-    addNetworkInterfaceDevices(document, devices, {.type = QStringLiteral("user"), .mac = genMac(), .source = QString(), .model = QStringLiteral("virtio")});
+    if (config->networkModel() != QStringLiteral("none")) {
+        addNetworkInterfaceDevices(document, devices, {.type = QStringLiteral("user"), .mac = genMac(), .source = QString(), .model = config->networkModel()});
+    }
 
     // devices->graphics element
     const bool enableAccel3d = config->enableAccel3d();

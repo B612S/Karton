@@ -19,6 +19,7 @@ private Q_SLOTS:
     void readerParsesRawDiskFormat();
     void readerParsesFirmware();
     void builderGeneratesUefiRawDomain();
+    void builderCanDisableNetwork();
     void builderUpdatesHardwareAndPreservesMetadata();
     void builderLeavesUnknownStorageUntouched();
     void builderAddsMetadataWhenMissing();
@@ -50,6 +51,9 @@ static const QByteArray sampleDomainXml = R"(<domain type='kvm'>
       <source file='/tmp/disk.qcow2'/>
       <target dev='vda' bus='virtio'/>
     </disk>
+    <interface type='user'>
+      <model type='e1000'/>
+    </interface>
   </devices>
 </domain>)";
 
@@ -64,6 +68,7 @@ void DomainXmlTest::readerParsesMetadataAndDisks()
     QCOMPARE(info.osId, QStringLiteral("http://example.com/os/1"));
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.qcow2"));
     QCOMPARE(info.diskFormat, QStringLiteral("qcow2"));
+    QCOMPARE(info.networkModel, QStringLiteral("e1000"));
     QVERIFY(info.isoDiskPath.isEmpty());
 }
 
@@ -124,6 +129,7 @@ void DomainXmlTest::builderGeneratesUefiRawDomain()
     data.virtualDiskPath = QStringLiteral("/tmp/test.raw");
     data.diskFormat = QStringLiteral("raw");
     data.firmware = QStringLiteral("efi");
+    data.networkModel = QStringLiteral("e1000");
     data.enableAccel3d = false;
 
     DomainConfig config(data);
@@ -150,6 +156,44 @@ void DomainXmlTest::builderGeneratesUefiRawDomain()
         foundRawDisk = true;
     }
     QVERIFY(foundRawDisk);
+
+    bool foundNetwork = false;
+    const QDomNodeList interfaces = root.elementsByTagName(QStringLiteral("interface"));
+    for (int i = 0; i < interfaces.count(); ++i) {
+        const QDomElement interface = interfaces.at(i).toElement();
+        QCOMPARE(interface.attribute(QStringLiteral("type")), QStringLiteral("user"));
+        QCOMPARE(interface.firstChildElement(QStringLiteral("model")).attribute(QStringLiteral("type")), QStringLiteral("e1000"));
+        foundNetwork = true;
+    }
+    QVERIFY(foundNetwork);
+}
+
+void DomainXmlTest::builderCanDisableNetwork()
+{
+    OsinfoConfig osinfo;
+    const QStringList oses = osinfo.osList();
+    if (oses.isEmpty()) {
+        QSKIP("No libosinfo database available");
+    }
+
+    DomainConfig::DomainConfigData data;
+    data.name = QStringLiteral("test");
+    data.shortOsId = oses.first();
+    data.maxRam = 1;
+    data.cpus = 1;
+    data.maxDiskStorage = 1;
+    data.virtualDiskPath = QStringLiteral("/tmp/test.qcow2");
+    data.networkModel = QStringLiteral("none");
+    data.enableAccel3d = false;
+
+    DomainConfig config(data);
+    DomainXmlBuilder builder;
+    const QString xml = builder.generateXML(&config);
+    QVERIFY2(!xml.isEmpty(), "generateXML() returned an empty document");
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(xml), qPrintable(xml));
+    QVERIFY(document.elementsByTagName(QStringLiteral("interface")).isEmpty());
 }
 
 void DomainXmlTest::builderUpdatesHardwareAndPreservesMetadata()

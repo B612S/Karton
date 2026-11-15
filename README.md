@@ -16,6 +16,7 @@ This project is still in early development and will likely break existing virtua
 - Installing and deleting VMs
 - qcow2, raw and vmdk virtual disks
 - BIOS and UEFI firmware
+- User-mode networking with virtio or e1000, or no network
 
 ## Dependencies
 - Kirigami

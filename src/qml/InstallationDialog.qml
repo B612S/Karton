@@ -18,11 +18,11 @@ Kirigami.Dialog {
     property bool creating: false
     property string pendingName: ""
     property int step: 0
-    readonly property int lastStep: 1
+    readonly property int lastStep: 2
     modal: true
 
     preferredWidth: Kirigami.Units.gridUnit * 40
-    preferredHeight: Kirigami.Units.gridUnit * 27
+    preferredHeight: Kirigami.Units.gridUnit * 28
 
     function getShortOsId(path) {
         return OsinfoConfig.getShortIdFromId(OsinfoConfig.getOsIdFromDisk(path));
@@ -52,6 +52,7 @@ Kirigami.Dialog {
             storageGB: storageSpinBox.value,
             diskFormat: diskFormatCombo.currentText,
             firmware: firmwareCombo.currentIndex === 1 ? "efi" : "bios",
+            networkModel: networkModelCombo.currentIndex === 2 ? "none" : (networkModelCombo.currentIndex === 1 ? "e1000" : "virtio"),
             cpus: cpuSpinBox.value,
             enableAccel3d: enableAccel3dCheckBox.checked
         };
@@ -271,11 +272,12 @@ Kirigami.Dialog {
                 Layout.rightMargin: Kirigami.Units.gridUnit * 2
                 Layout.topMargin: Kirigami.Units.largeSpacing
                 level: 3
-                text: i18n("Hardware")
+                text: i18n("Resources")
             }
 
             FormCard.FormCard {
                 Layout.fillWidth: true
+
                 FormCard.FormSpinBoxDelegate {
                     id: memorySpinBox
                     label: i18nc("@label:spinbox, RAM", "Memory (GB)")
@@ -305,13 +307,37 @@ Kirigami.Dialog {
                     currentIndex: 0
                     Layout.fillWidth: true
                 }
+            }
+        }
 
-                FormCard.FormDelegateSeparator {}
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.Heading {
+                Layout.leftMargin: Kirigami.Units.gridUnit * 2
+                Layout.rightMargin: Kirigami.Units.gridUnit * 2
+                Layout.topMargin: Kirigami.Units.largeSpacing
+                level: 3
+                text: i18n("System")
+            }
+
+            FormCard.FormCard {
+                Layout.fillWidth: true
 
                 FormCard.FormComboBoxDelegate {
                     id: firmwareCombo
                     text: i18n("Firmware:")
                     model: ["BIOS", "UEFI"]
+                    currentIndex: 0
+                    Layout.fillWidth: true
+                }
+
+                FormCard.FormDelegateSeparator {}
+
+                FormCard.FormComboBoxDelegate {
+                    id: networkModelCombo
+                    text: i18n("Network:")
+                    model: ["User (virtio)", "User (e1000)", "None"]
                     currentIndex: 0
                     Layout.fillWidth: true
                 }
