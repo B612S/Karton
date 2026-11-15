@@ -3,92 +3,45 @@
 
 #include "domainconfig.h"
 
-#include <QString>
-
 DomainConfig::DomainConfig(QObject *parent)
     : QObject(parent)
-    , m_hypervisorType(QString())
-    , m_indexId(0)
-    , m_name(QString())
-    , m_uuid(QString())
-    , m_shortOsId(QString())
-    , m_osId(QString())
-    , m_isActive(false)
-    , m_state(QString())
-    , m_maxRam(0)
-    , m_ramUsage(0)
-    , m_maxDiskStorage(0)
-    , m_xmlConfigPath(QString())
-    , m_isoDiskPath(QString())
-    , m_virtualDiskPath(QString())
-    , m_screenshotPreviewPath(QString())
-    , m_autostart(false)
-    , m_enableAccel3d(true)
 {
 }
 
 DomainConfig::DomainConfig(const DomainConfigData &data)
-    : DomainConfig(data.hypervisorType,
-                   data.indexId,
-                   data.name,
-                   data.uuid,
-                   data.shortOsId,
-                   data.osId,
-                   data.isActive,
-                   data.state,
-                   data.maxRam,
-                   data.ramUsage,
-                   data.cpus,
-                   data.maxDiskStorage,
-                   data.xmlConfigPath,
-                   data.isoDiskPath,
-                   data.virtualDiskPath,
-                   data.screenshotPreviewPath,
-                   data.autostart,
-                   data.enableAccel3d,
-                   data.parent)
+    : QObject(nullptr)
+    , m_hypervisorType(data.hypervisorType)
+    , m_indexId(data.indexId)
+    , m_name(data.name)
+    , m_uuid(data.uuid)
+    , m_shortOsId(data.shortOsId)
+    , m_osId(data.osId)
+    , m_isActive(data.isActive)
+    , m_state(data.state)
+    , m_maxRam(data.maxRam)
+    , m_ramUsage(data.ramUsage)
+    , m_cpus(data.cpus)
+    , m_maxDiskStorage(data.maxDiskStorage)
+    , m_xmlConfigPath(data.xmlConfigPath)
+    , m_isoDiskPath(data.isoDiskPath)
+    , m_virtualDiskPath(data.virtualDiskPath)
+    , m_screenshotPreviewPath(data.screenshotPreviewPath)
+    , m_autostart(data.autostart)
+    , m_enableAccel3d(data.enableAccel3d)
 {
 }
 
-DomainConfig::DomainConfig(const QString &hypervisorType,
-                           const int indexId,
-                           const QString &name,
-                           const QString &uuid,
-                           const QString &shortOsId,
-                           const QString &osId,
-                           bool isActive,
-                           QString state,
-                           int maxRam,
-                           int ramUsage,
-                           int cpus,
-                           int maxDiskStorage,
-                           const QString &xmlConfigPath,
-                           const QString &isoDiskPath,
-                           const QString &virtualDiskPath,
-                           const QString &screenshotPreviewPath,
-                           bool autostart,
-                           bool enableAccel3d,
-                           QObject *parent)
-    : QObject(parent)
-    , m_hypervisorType(hypervisorType)
-    , m_indexId(indexId)
-    , m_name(name)
-    , m_uuid(uuid)
-    , m_shortOsId(shortOsId)
-    , m_osId(osId)
-    , m_isActive(isActive)
-    , m_state(state)
-    , m_maxRam(maxRam)
-    , m_ramUsage(ramUsage)
-    , m_cpus(cpus)
-    , m_maxDiskStorage(maxDiskStorage)
-    , m_xmlConfigPath(xmlConfigPath)
-    , m_isoDiskPath(isoDiskPath)
-    , m_virtualDiskPath(virtualDiskPath)
-    , m_screenshotPreviewPath(screenshotPreviewPath)
-    , m_autostart(autostart)
-    , m_enableAccel3d(enableAccel3d)
+void DomainConfig::apply(const DomainConfigData &data)
 {
+    setName(data.name);
+    setActive(data.isActive);
+    setState(data.state);
+    setMaxRam(data.maxRam);
+    setRamUsage(data.ramUsage);
+    setCpus(data.cpus);
+    setMaxDiskStorage(data.maxDiskStorage);
+    setAutostart(data.autostart);
+    setPaths(data.xmlConfigPath, data.isoDiskPath, data.virtualDiskPath, data.screenshotPreviewPath);
 }
 
 void DomainConfig::setActive(bool active)
@@ -153,4 +106,18 @@ void DomainConfig::setMaxDiskStorage(int maxDiskStorage)
         m_maxDiskStorage = maxDiskStorage;
         Q_EMIT maxDiskStorageChanged(maxDiskStorage);
     }
+}
+
+void DomainConfig::setPaths(const QString &xmlConfigPath, const QString &isoDiskPath, const QString &virtualDiskPath, const QString &screenshotPreviewPath)
+{
+    if (m_xmlConfigPath == xmlConfigPath && m_isoDiskPath == isoDiskPath && m_virtualDiskPath == virtualDiskPath
+        && m_screenshotPreviewPath == screenshotPreviewPath) {
+        return;
+    }
+
+    m_xmlConfigPath = xmlConfigPath;
+    m_isoDiskPath = isoDiskPath;
+    m_virtualDiskPath = virtualDiskPath;
+    m_screenshotPreviewPath = screenshotPreviewPath;
+    Q_EMIT pathsChanged();
 }

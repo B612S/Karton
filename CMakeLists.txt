@@ -26,7 +26,6 @@ include(ECMSetupVersion)
 find_package(Qt6 REQUIRED COMPONENTS
     Core
     Quick
-    Test
     Gui
     GuiPrivate
     QuickControls2
@@ -63,8 +62,6 @@ install(FILES
 ecm_find_qmlmodule(org.kde.kirigami REQUIRED)
 
 add_subdirectory(src)
-
-install(PROGRAMS org.kde.karton.desktop DESTINATION ${KDE_INSTALL_APPDIR})
 
 file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES *.cpp *.h)
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})

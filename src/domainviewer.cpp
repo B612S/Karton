@@ -23,16 +23,10 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     , m_commandRunner(new CommandRunner(this))
     , m_domain(nullptr)
     , m_spiceUri(QString())
-    , m_host(QStringLiteral("localhost"))
-    , m_port(5900)
-    , m_password(QString())
     , m_connected(false)
     , m_session(nullptr)
-    , m_display_channel(nullptr)
     , m_inputs_channel(nullptr)
-    , m_playback_channel(nullptr)
     , m_current_button_mask(0)
-    , m_audio(nullptr)
     , m_audioSink(nullptr)
     , m_audioDevice(nullptr)
     , m_audioFormat()
@@ -86,18 +80,15 @@ void DomainViewer::handleHostPort(int exitCode, const QString &output)
         return;
     }
 
-    QString trimmedOutput = output.trimmed();
-    QUrl url(output.trimmed());
+    m_spiceUri = output.trimmed();
 
-    if (!url.isValid()) {
+    const QUrl url(m_spiceUri);
+    if (m_spiceUri.isEmpty() || !url.isValid()) {
         qCCritical(KARTON_DEBUG) << "Invalid SPICE URI given to virsh domdisplay";
         return;
     }
-    m_host = url.host();
-    m_port = url.port(); // defaults to -1 if not found
-    m_spiceUri = url.toString();
 
-    if (m_spiceUri.startsWith(QStringLiteral("spice+unix:///tmp/spice"))) {
+    if (m_spiceUri.startsWith(QStringLiteral("spice+unix://"))) {
         qCInfo(KARTON_DEBUG) << "Detected UNIX socket. Using GL scanout rendering.";
         m_renderMode = RenderMode::GlScanout;
     } else {
@@ -113,17 +104,15 @@ void DomainViewer::handleHostPort(int exitCode, const QString &output)
 bool DomainViewer::setupSpiceSession()
 {
     // TODO: replace virsh CLI, use libvirt API: https://libvirt.org/html/libvirt-libvirt-domain.html#VIR_MIGRATE_PARAM_GRAPHICS_URI
-    // once finished, handleHostPort() will set the host and port provided by the output.
-    bool commandStarted = m_commandRunner->runCommand(QStringLiteral("virsh domdisplay %1").arg(m_domain->config()->name()));
-    return commandStarted;
+    // once finished, handleHostPort() will set the URI provided by the output.
+    return m_commandRunner->runCommand(QStringLiteral("virsh"),
+                                       {QStringLiteral("-c"), QStringLiteral("qemu:///session"), QStringLiteral("domdisplay"), m_domain->config()->name()});
 }
 
 bool DomainViewer::connectToSpice()
 {
     qCInfo(KARTON_DEBUG) << "Connecting to SPICE...";
     qCInfo(KARTON_DEBUG) << "   SPICE URI:" << m_spiceUri;
-    qCInfo(KARTON_DEBUG) << "   host: " << m_host;
-    qCInfo(KARTON_DEBUG) << "   post" << m_port;
 
     if (!m_domain) {
         qCCritical(KARTON_DEBUG) << "connectToSpice() called but domain is null!";
@@ -141,7 +130,7 @@ bool DomainViewer::connectToSpice()
     if (!spice_session_connect(m_session)) {
         g_object_unref(m_session);
         m_session = nullptr;
-        m_audio = nullptr;
+        m_connected = false;
         return false;
     }
     qCInfo(KARTON_DEBUG) << "Established connection! connected to " << domain()->config()->name();
@@ -161,14 +150,12 @@ void DomainViewer::disconnectFromSpice()
 
     if (m_session) {
         spice_session_disconnect(m_session);
-
         g_object_unref(m_session);
         m_session = nullptr;
-        m_display_channel = nullptr;
-        m_audio = nullptr;
-        m_playback_channel = nullptr;
-        m_connected = false;
     }
+
+    m_inputs_channel = nullptr;
+    m_connected = false;
 }
 
 void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *channel, gpointer user_data)
@@ -177,7 +164,7 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
 
     DomainViewer *item = static_cast<DomainViewer *>(user_data);
 
-    item->checkChannelStatus(); // uncomment for channel debug msgs
+    item->checkChannelStatus();
     if (SPICE_IS_DISPLAY_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE display connected";
         item->attachDisplayChannel(channel);
@@ -188,13 +175,16 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
     } else if (SPICE_IS_PLAYBACK_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Audio playback connected";
         spice_channel_connect(channel);
-        item->m_playback_channel = SPICE_PLAYBACK_CHANNEL(channel);
 
         g_signal_connect(channel, "playback-start", G_CALLBACK(playback_start_callback), item);
         g_signal_connect(channel, "playback-data", G_CALLBACK(playback_data_callback), item);
         g_signal_connect(channel, "playback-stop", G_CALLBACK(playback_stop_callback), item);
+    } else if (SPICE_IS_CURSOR_CHANNEL(channel)) {
+        // Cursors are composited by the display channel; nothing to do here.
     } else {
-        qCWarning(KARTON_DEBUG) << "Unrecognised SPICE channel type";
+        gint type = 0;
+        g_object_get(channel, "channel-type", &type, NULL);
+        qCDebug(KARTON_DEBUG) << "Unhandled SPICE channel type:" << QString::fromUtf8(spice_channel_type_to_string(type));
     }
 }
 
@@ -203,7 +193,6 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
 void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
 {
     spice_channel_connect(channel);
-    m_display_channel = channel;
 
     switch (m_renderMode) {
     case RenderMode::GlScanout:
@@ -242,12 +231,16 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
 void DomainViewer::saveFrameToDomain()
 {
+    qCDebug(KARTON_DEBUG) << "saveFrameToDomain called";
+
     if (!window()) {
         qCDebug(KARTON_DEBUG) << "saveFrameToDomain: No window available";
         return;
     }
 
-    if (!isVisible() || width() <= 0 || height() <= 0) {
+    // Do not require isVisible() here: the window is already hidden when
+    // onClosing runs, but the scene graph can still be grabbed.
+    if (width() <= 0 || height() <= 0) {
         qCDebug(KARTON_DEBUG) << "saveFrameToDomain: Item not ready for grabbing";
         return;
     }
@@ -256,10 +249,13 @@ void DomainViewer::saveFrameToDomain()
     QImage fullImage = window()->grabWindow();
 
     if (!fullImage.isNull()) {
-        // crop it to the actual QQI
-        QRectF itemBounds = mapRectToScene(boundingRect());
-        QRect cropRect = itemBounds.toRect().intersected(fullImage.rect());
-        QImage finalImage = cropRect.isEmpty() ? fullImage : fullImage.copy(cropRect);
+        // grabWindow() returns device pixels, while mapRectToScene() works in
+        // logical coordinates.
+        const qreal dpr = window()->devicePixelRatio();
+        const QRectF itemBounds = mapRectToScene(boundingRect());
+        const QRect cropRect =
+            QRectF(itemBounds.x() * dpr, itemBounds.y() * dpr, itemBounds.width() * dpr, itemBounds.height() * dpr).toRect().intersected(fullImage.rect());
+        const QImage finalImage = cropRect.isEmpty() ? fullImage : fullImage.copy(cropRect);
 
         qCDebug(KARTON_DEBUG) << "Sending QImage frame to save... - " << finalImage.size() << ", " << m_domain->config()->name();
         m_domain->savePreviewFrame(finalImage.convertToFormat(QImage::Format_RGB32));
@@ -412,6 +408,10 @@ void DomainViewer::wheelEvent(QWheelEvent *event)
 
 void DomainViewer::mouseMoveEvent(QMouseEvent *event)
 {
+    if (!m_inputs_channel || !m_connected) {
+        return;
+    }
+
     int button_mask = 0;
     if (event->buttons() & Qt::LeftButton)
         button_mask |= SPICE_MOUSE_BUTTON_MASK_LEFT;
@@ -442,7 +442,7 @@ void DomainViewer::hoverMoveEvent(QHoverEvent *event)
 {
     static int hoverCounter = 0;
     if (++hoverCounter % 20 == 0) {
-        qCInfo(KARTON_DEBUG) << "Mouse hover at (" << event->position().x() << "," << event->position().y() << ")";
+        qCDebug(KARTON_DEBUG) << "Mouse hover at (" << event->position().x() << "," << event->position().y() << ")";
     }
     if (m_inputs_channel && m_connected) {
         qreal x = event->position().x();
@@ -460,8 +460,12 @@ void DomainViewer::hoverMoveEvent(QHoverEvent *event)
 
 void DomainViewer::mousePressEvent(QMouseEvent *event)
 {
-    qCInfo(KARTON_DEBUG) << "Mouse click at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
+    qCDebug(KARTON_DEBUG) << "Mouse click at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
     setFocus(true);
+
+    if (!m_inputs_channel || !m_connected) {
+        return;
+    }
 
     switch (event->button()) {
     case Qt::LeftButton:
@@ -485,7 +489,12 @@ void DomainViewer::mousePressEvent(QMouseEvent *event)
 
 void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
 {
-    qCInfo(KARTON_DEBUG) << "Mouse release at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
+    qCDebug(KARTON_DEBUG) << "Mouse release at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
+
+    if (!m_inputs_channel || !m_connected) {
+        return;
+    }
+
     int button = 0;
     switch (event->button()) {
     case Qt::LeftButton:
@@ -512,7 +521,7 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
 void DomainViewer::checkChannelStatus()
 {
     if (!m_session) {
-        qCInfo(KARTON_DEBUG) << "Channel check: No active session";
+        qCDebug(KARTON_DEBUG) << "Channel check: No active session";
         return;
     }
     if (!SPICE_IS_SESSION(m_session)) {
@@ -521,8 +530,9 @@ void DomainViewer::checkChannelStatus()
         return;
     }
 
+    // Transfer container: the channels themselves stay owned by the session.
     GList *channels = spice_session_get_channels(m_session);
-    qCInfo(KARTON_DEBUG) << "Channel check: Found" << (channels ? g_list_length(channels) : 0) << "channels";
+    qCDebug(KARTON_DEBUG) << "Channel check: Found" << (channels ? g_list_length(channels) : 0) << "channels";
 
     bool hasDisplayChannel = false;
     for (GList *iter = channels; iter; iter = iter->next) {
@@ -531,19 +541,17 @@ void DomainViewer::checkChannelStatus()
         g_object_get(channel, "channel-type", &type, NULL);
         const gchar *type_str = spice_channel_type_to_string(type);
 
-        qCInfo(KARTON_DEBUG) << "  - Channel type:" << QString::fromUtf8(type_str);
+        qCDebug(KARTON_DEBUG) << "  - Channel type:" << QString::fromUtf8(type_str);
 
         if (SPICE_IS_DISPLAY_CHANNEL(channel)) {
             hasDisplayChannel = true;
-            qCInfo(KARTON_DEBUG) << "    Found display channel";
-            gint channel_id;
-            g_object_get(channel, "channel-id", &channel_id, NULL);
-            qCInfo(KARTON_DEBUG) << "    Display channel ID:" << channel_id;
+            qCDebug(KARTON_DEBUG) << "    Found display channel";
         }
     }
 
+    g_list_free(channels);
+
     if (!hasDisplayChannel) {
-        qCWarning(KARTON_DEBUG) << "No display channel found after" << (m_connected ? "successful connection!" : "failed connection");
+        qCDebug(KARTON_DEBUG) << "No display channel yet" << (m_connected ? "(connected)" : "(connecting)");
     }
 }
-

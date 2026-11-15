@@ -3,6 +3,8 @@
 
 #include "domainxmlbuilder.h"
 
+#include <libvirt/virterror.h>
+
 #include <QDomDocument>
 #include <QDomElement>
 #include <QDomText>
@@ -21,16 +23,26 @@
 #define ETH_ALEN 6
 #endif
 
-virDomainPtr DomainXmlBuilder::setupDomain(virConnectPtr conn, const DomainConfig *config)
+bool DomainXmlBuilder::setupDomain(virConnectPtr conn, const DomainConfig *config)
 {
-    QString xmlString = generateXML(conn, config);
-    virDomainPtr dom = virDomainDefineXML(conn, xmlString.toStdString().c_str());
-    // this function generates a new XML file: ~/.config/libvirt/qemu/[name].xml
+    const QString xmlString = generateXML(config);
+    if (xmlString.isEmpty()) {
+        return false;
+    }
 
-    return dom;
+    // This also writes the persistent XML config to
+    // ~/.config/libvirt/qemu/[name].xml.
+    virDomainPtr domain = virDomainDefineXML(conn, xmlString.toUtf8().constData());
+    if (!domain) {
+        qCWarning(KARTON_DEBUG) << "Failed to define domain:" << virGetLastErrorMessage();
+        return false;
+    }
+    virDomainFree(domain);
+
+    return true;
 }
 
-QString DomainXmlBuilder::generateXML(virConnectPtr conn, const DomainConfig *config)
+QString DomainXmlBuilder::generateXML(const DomainConfig *config)
 {
     OsinfoConfig osinfo;
     const QString osId = osinfo.getOsIdFromShortId(config->shortOsId());
@@ -43,10 +55,6 @@ QString DomainXmlBuilder::generateXML(virConnectPtr conn, const DomainConfig *co
     QDomDocument document;
     QDomElement root = document.createElement(QStringLiteral("domain"));
     root.setAttribute(QStringLiteral("type"), QStringLiteral("kvm")); // TODO: parameterize libos
-
-    virDomainPtr *domains = nullptr;
-    int numDomains = virConnectListAllDomains(conn, &domains, 0);
-    root.setAttribute(QStringLiteral("id"), QString::number(numDomains + 1));
     document.appendChild(root);
 
     // name element
@@ -107,45 +115,15 @@ QString DomainXmlBuilder::generateXML(virConnectPtr conn, const DomainConfig *co
     QDomElement apic = document.createElement(QStringLiteral("apic"));
     features.appendChild(apic);
 
-    // QMap<QString, QString> vmport; // probably not necessary (was in virt-install)
-    // vmport[QStringLiteral("state")] = QStringLiteral("off");
-    // addElementWithAttributes(document, features, QStringLiteral("vmport"), QString(), vmport);
-
     // cpu element
     QMap<QString, QString> cpu;
     cpu[QStringLiteral("mode")] = QStringLiteral("host-passthrough");
-    // cpu[QStringLiteral("check")] = QStringLiteral("none");
-    // cpu[QStringLiteral("migratable")] = QStringLiteral("on");
     addElementWithAttributes(document, root, QStringLiteral("cpu"), QString(), cpu);
 
     // clock element
     QDomElement clock = document.createElement(QStringLiteral("clock"));
     clock.setAttribute(QStringLiteral("offset"), QStringLiteral("utc"));
     root.appendChild(clock);
-    // QMap<QString, QString> timer; // some nodes i saw made by virt-install, maybe use in future?
-    // timer[(QStringLiteral("name"))] = QStringLiteral("rtc");
-    // timer[(QStringLiteral("tickpolicy"))] = QStringLiteral("catchup");
-    // addElementWithAttributes(document, clock, QStringLiteral("timer"), QString(), timer);
-    // timer[(QStringLiteral("name"))] = QStringLiteral("pit");
-    // timer[(QStringLiteral("tickpolicy"))] = QStringLiteral("delay");
-    // addElementWithAttributes(document, clock, QStringLiteral("timer"), QString(), timer);
-    // QMap<QString, QString> timer2;
-    // timer2[(QStringLiteral("name"))] = QStringLiteral("hept");
-    // timer2[(QStringLiteral("present"))] = QStringLiteral("no");
-    // addElementWithAttributes(document, clock, QStringLiteral("timer"), QString(), timer2);
-
-    // // off elements
-    // addElement(document, root, QStringLiteral("on_poweroff"), QStringLiteral("destroy"));
-    // addElement(document, root, QStringLiteral("on_reboot"), QStringLiteral("restart"));
-    // addElement(document, root, QStringLiteral("on_crash"), QStringLiteral("destroy"));
-
-    // // pm element
-    // QDomElement pm = document.createElement(QStringLiteral("pm"));
-    // root.appendChild(pm);
-    // QMap<QString, QString> suspend;
-    // suspend[QStringLiteral("enabled")] = QStringLiteral("no");
-    // addElementWithAttributes(document, pm, QStringLiteral("suspend-to-mem"), QString(), suspend);
-    // addElementWithAttributes(document, pm, QStringLiteral("suspend-to-disk"), QString(), suspend);
 
     // devices element
     QDomElement devices = document.createElement(QStringLiteral("devices"));
@@ -178,9 +156,7 @@ QString DomainXmlBuilder::generateXML(virConnectPtr conn, const DomainConfig *co
 
     // devices->network interfaces element
     // Userspace connection https://libvirt.org/formatdomain.html#id44
-    addNetworkInterfaceDevices(document,
-                               devices,
-                               {.type = QStringLiteral("user"), .mac = genMac(), .source = QString(), .linkState = true, .model = QStringLiteral("virtio")});
+    addNetworkInterfaceDevices(document, devices, {.type = QStringLiteral("user"), .mac = genMac(), .source = QString(), .model = QStringLiteral("virtio")});
 
     // devices->graphics element
     const bool enableAccel3d = config->enableAccel3d();
@@ -212,25 +188,31 @@ QString DomainXmlBuilder::generateXML(virConnectPtr conn, const DomainConfig *co
     // write to file
     QString xmlString = document.toString(4);
 
-    qCInfo(KARTON_DEBUG).noquote() << "Generated XML:";
-    qCInfo(KARTON_DEBUG).noquote() << xmlString;
+    qCDebug(KARTON_DEBUG).noquote() << "Generated XML:";
+    qCDebug(KARTON_DEBUG).noquote() << xmlString;
     return xmlString;
 }
 
 QString DomainXmlBuilder::updateXML(const QString &xmlDesc, const EditableConfig &config)
 {
     QDomDocument document;
-    document.setContent(xmlDesc);
+    if (!document.setContent(xmlDesc)) {
+        qCWarning(KARTON_DEBUG) << "Failed to parse domain XML";
+        return {};
+    }
     QDomElement root = document.documentElement();
 
     addHardwareElements(document, root, config.maxRam, config.cpus);
 
     // metadata->Karton: only the one attribute, the others (screenshotPreviewPath) are
-    // not editable and must survive
-    const QDomNodeList kartonDataNodes = root.elementsByTagName(QStringLiteral("karton:data"));
-    if (!kartonDataNodes.isEmpty()) {
-        QDomElement kartonData = kartonDataNodes.at(0).toElement();
-        kartonData.setAttribute(QStringLiteral("maxDiskStorage"), QString::number(config.maxDiskStorage * 1024));
+    // not editable and must survive. A value of 0 means the disk size is
+    // unknown (e.g. a domain not created by Karton), so leave it untouched.
+    if (config.maxDiskStorage > 0) {
+        const QDomNodeList kartonDataNodes = root.elementsByTagName(QStringLiteral("karton:data"));
+        if (!kartonDataNodes.isEmpty()) {
+            QDomElement kartonData = kartonDataNodes.at(0).toElement();
+            kartonData.setAttribute(QStringLiteral("maxDiskStorage"), QString::number(config.maxDiskStorage * 1024));
+        }
     }
 
     return document.toString(4);
@@ -250,7 +232,7 @@ void DomainXmlBuilder::addHardwareElements(QDomDocument &document, QDomElement &
 {
     QMap<QString, QString> mem;
     mem[QStringLiteral("unit")] = QStringLiteral("MiB");
-    replaceElement(document, root, QStringLiteral("memory"), QString::number(maxRam * 1024), mem); // GB->MB
+    replaceElement(document, root, QStringLiteral("memory"), QString::number(maxRam * 1024), mem); // GiB -> MiB
     replaceElement(document, root, QStringLiteral("currentMemory"), QString::number(maxRam * 1024), mem);
 
     QMap<QString, QString> vcpu;
@@ -307,15 +289,6 @@ void DomainXmlBuilder::addNetworkInterfaceDevices(QDomDocument &document, QDomEl
     QMap<QString, QString> model;
     model[QStringLiteral("type")] = config.model;
     addElementWithAttributes(document, interface, QStringLiteral("model"), QString(), model);
-
-    if (config.linkState) {
-        QMap<QString, QString> address;
-        address[QStringLiteral("type")] = QStringLiteral("pci");
-        address[QStringLiteral("domain")] = QStringLiteral("0x0000");
-        address[QStringLiteral("bus")] = QStringLiteral("0x01");
-        address[QStringLiteral("slot")] = QStringLiteral("0x00");
-        addElementWithAttributes(document, interface, QStringLiteral("address"), QString(), address);
-    }
 }
 
 void DomainXmlBuilder::addGraphicsDevices(QDomDocument &document, QDomElement &parent, const GraphicsConfig &config)

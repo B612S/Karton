@@ -4,16 +4,20 @@
 #include "karton.h"
 
 #include <libvirt/libvirt.h>
+#include <libvirt/virterror.h>
 
 #include <KLocalizedString>
 #include <QDir>
+#include <QDomDocument>
+#include <QDomElement>
 #include <QFile>
 #include <QObject>
+#include <QRegularExpression>
 #include <QStandardPaths>
+#include <utility>
 
 #include "domain.h"
 #include "domainconfig.h"
-#include "domainviewer.h"
 #include "domainxmlbuilder.h"
 #include "domainxmlreader.h"
 #include "karton_debug.h"
@@ -24,11 +28,8 @@ Karton::Karton(QObject *parent)
     , m_conn(nullptr)
     , m_domains()
     , m_monitor(nullptr)
-    , m_domainViewer(nullptr)
-    , m_currentDomain(nullptr)
     , m_commandRunner(new CommandRunner(this))
 {
-    connect(m_commandRunner, &CommandRunner::commandFinished, this, &Karton::commandFinished);
     init();
 }
 
@@ -38,12 +39,11 @@ Karton::~Karton()
         virConnectClose(m_conn);
         m_conn = nullptr;
     }
-    cleanupDomainViewer();
 }
 
 Karton *Karton::self()
 {
-    static Karton *k = new Karton();
+    static Karton *k = new Karton(nullptr);
     return k;
 }
 
@@ -70,7 +70,7 @@ bool Karton::init()
     // Currently set to session, but could also do system for root..
     m_conn = virConnectOpen("qemu:///session");
     if (!m_conn) {
-        qCCritical(KARTON_DEBUG) << "Failed to connect to hypervisor";
+        qCCritical(KARTON_DEBUG) << "Failed to connect to hypervisor:" << virGetLastErrorMessage();
         return false;
     }
 
@@ -84,24 +84,10 @@ bool Karton::init()
     return true;
 }
 
-void Karton::setCurrentDomain(Domain *domain)
-{
-    if (m_currentDomain != domain) {
-        m_currentDomain = domain;
-        Q_EMIT currentDomainChanged();
-    }
-}
-Domain *Karton::currentDomain()
-{
-    if (!m_currentDomain)
-        qWarning() << "Warning: currentDomain is null!";
-    return m_currentDomain;
-}
-
 // searchDomain(domain) returns index position of the domain in m_domains
 int Karton::searchDomain(const virDomainPtr domainPtr)
 {
-    QString searchUuid = Domain::uuidString(domainPtr);
+    const QString searchUuid = Domain::uuidString(domainPtr);
 
     for (int i = 0; i < m_domains.size(); i++) {
         if (searchUuid == m_domains[i]->config()->uuid()) {
@@ -109,6 +95,12 @@ int Karton::searchDomain(const virDomainPtr domainPtr)
         }
     }
     return -1;
+}
+
+static bool isValidDomainName(const QString &name)
+{
+    static const QRegularExpression expression(QStringLiteral("^[A-Za-z0-9._-]+$"));
+    return expression.match(name).hasMatch();
 }
 
 // get string from state
@@ -139,7 +131,11 @@ static QString domainStateString(unsigned int state)
 // refresh a singular domain, used to update list
 void Karton::refreshDomain(const virDomainPtr domainPtr)
 {
-    int index = searchDomain(domainPtr);
+    if (!domainPtr) {
+        return;
+    }
+
+    const int index = searchDomain(domainPtr);
     if (index == -1) {
         qCWarning(KARTON_DEBUG) << "Domain not found in list.";
         return;
@@ -147,92 +143,127 @@ void Karton::refreshDomain(const virDomainPtr domainPtr)
 
     Domain *domain = m_domains[index];
 
-    bool isActive = virDomainIsActive(domainPtr);
-
-    virDomainInfo domInfo;
-    virDomainGetInfo(domainPtr, &domInfo);
-    QString state = domainStateString(domInfo.state);
-
-    int ramUsage = domInfo.memory / (1024 * 1024);
+    virDomainInfo domInfo = {};
+    if (virDomainGetInfo(domainPtr, &domInfo) < 0) {
+        qCWarning(KARTON_DEBUG) << "Failed to get domain info:" << virGetLastErrorMessage();
+        return;
+    }
 
     int autoFlag = 0;
-    virDomainGetAutostart(domainPtr, &autoFlag);
-    bool autostart = (autoFlag != 0);
+    if (virDomainGetAutostart(domainPtr, &autoFlag) < 0) {
+        autoFlag = domain->autostart() ? 1 : 0;
+    }
 
     // updates only mutable fields
-    domain->setActive(isActive);
-    domain->setState(state);
-    domain->setRamUsage(ramUsage);
-    domain->setAutostart(autostart);
+    domain->setActive(virDomainIsActive(domainPtr) == 1);
+    domain->setState(domainStateString(domInfo.state));
+    domain->setRamUsage(domInfo.memory / (1024 * 1024));
+    domain->setAutostart(autoFlag != 0);
 }
 
-// Refresh the complete list of domains
+// Refresh the complete list of domains. Existing Domain objects are updated in
+// place so that QML pages holding them keep working.
 void Karton::refreshDomainList()
 {
-    m_domains.clear();
+    if (!m_conn) {
+        return;
+    }
 
     virDomainPtr *domains = nullptr;
-    int numDomains = virConnectListAllDomains(m_conn, &domains, 0);
-    m_domains.reserve(numDomains);
+    const int numDomains = virConnectListAllDomains(m_conn, &domains, 0);
+    if (numDomains < 0) {
+        qCWarning(KARTON_DEBUG) << "Failed to list domains:" << virGetLastErrorMessage();
+        free(domains);
+        return;
+    }
 
-    for (int i = 0; i < numDomains; i++) {
-        // getting all information from libvirt
+    QVector<Domain *> updated;
+    updated.reserve(numDomains);
+    QVector<Domain *> added;
+    for (int i = 0; i < numDomains; ++i) {
         virDomainPtr domainPtr = domains[i];
-        const char *name = virDomainGetName(domains[i]);
-        bool isActive = virDomainIsActive(domains[i]);
+        const QString uuid = Domain::uuidString(domainPtr);
+        if (uuid.isEmpty()) {
+            qCWarning(KARTON_DEBUG) << "Skipping domain without a UUID";
+            virDomainFree(domainPtr);
+            continue;
+        }
+        virDomainInfo domInfo = {};
+        if (virDomainGetInfo(domainPtr, &domInfo) < 0) {
+            qCWarning(KARTON_DEBUG) << "Failed to get domain info:" << virGetLastErrorMessage();
+            virDomainFree(domainPtr);
+            continue;
+        }
 
-        virDomainInfo domInfo;
-        virDomainGetInfo(domains[i], &domInfo);
-        QString state = domainStateString(domInfo.state);
+        const QString name = QString::fromUtf8(virDomainGetName(domainPtr));
+        const QString xmlConfigPath = getXmlConfigPath(name);
 
-        int maxRam = domInfo.maxMem / (1024 * 1024); // convert to MB
-        int ramUsage = domInfo.memory / (1024 * 1024);
-        int cpus = domInfo.nrVirtCpu;
+        DomainXmlReader reader(xmlConfigPath);
 
-        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-        QString stateDir = QStandardPaths::writableLocation(QStandardPaths::StateLocation);
-        QString xmlConfigPath = getXmlConfigPath(QString::fromUtf8(name));
-
-        DomainXmlReader *reader = new DomainXmlReader(xmlConfigPath);
-
-        QString screenshotPreviewPath = reader->m_xmlInfo.screenshotPreviewPath;
-        if (screenshotPreviewPath == QString()) { // set default path if not found
-            screenshotPreviewPath = QStringLiteral("%1/previews/%2.png").arg(stateDir).arg(Domain::uuidString(domainPtr));
+        QString screenshotPreviewPath = reader.m_xmlInfo.screenshotPreviewPath;
+        if (screenshotPreviewPath.isEmpty()) { // set default path if not found
+            screenshotPreviewPath = QStringLiteral("%1/previews/%2.png").arg(QStandardPaths::writableLocation(QStandardPaths::StateLocation), uuid);
         }
 
         int autoFlag = 0;
-        virDomainGetAutostart(domains[i], &autoFlag);
-        bool autostart = (autoFlag != 0);
+        virDomainGetAutostart(domainPtr, &autoFlag);
 
-        using DomainConfigData = DomainConfig::DomainConfigData;
-        DomainConfigData configData = {.hypervisorType = reader->m_xmlInfo.hypervisorType,
-                                       .indexId = reader->m_xmlInfo.indexId,
-                                       .name = QString::fromUtf8(name),
-                                       .uuid = Domain::uuidString(domainPtr),
-                                       .shortOsId = reader->m_xmlInfo.shortOsId,
-                                       .osId = reader->m_xmlInfo.osId,
-                                       .isActive = isActive,
-                                       .state = state,
-                                       .maxRam = maxRam,
-                                       .ramUsage = ramUsage,
-                                       .cpus = cpus,
-                                       .maxDiskStorage = reader->m_xmlInfo.maxDiskStorage / 1024,
-                                       .xmlConfigPath = xmlConfigPath,
-                                       .isoDiskPath = reader->m_xmlInfo.isoDiskPath,
-                                       .virtualDiskPath = reader->m_xmlInfo.virtualDiskPath,
-                                       .screenshotPreviewPath = screenshotPreviewPath,
-                                       .autostart = autostart,
-                                       .parent = this};
+        const DomainConfig::DomainConfigData configData = {
+            .hypervisorType = reader.m_xmlInfo.hypervisorType,
+            .indexId = reader.m_xmlInfo.indexId,
+            .name = name,
+            .uuid = uuid,
+            .shortOsId = reader.m_xmlInfo.shortOsId,
+            .osId = reader.m_xmlInfo.osId,
+            .isActive = virDomainIsActive(domainPtr) == 1,
+            .state = domainStateString(domInfo.state),
+            .maxRam = static_cast<int>(domInfo.maxMem / (1024 * 1024)), // KiB -> GiB
+            .ramUsage = static_cast<int>(domInfo.memory / (1024 * 1024)), // KiB -> GiB
+            .cpus = static_cast<int>(domInfo.nrVirtCpu),
+            .maxDiskStorage = reader.m_xmlInfo.maxDiskStorage / 1024, // MiB -> GiB
+            .xmlConfigPath = xmlConfigPath,
+            .isoDiskPath = reader.m_xmlInfo.isoDiskPath,
+            .virtualDiskPath = reader.m_xmlInfo.virtualDiskPath,
+            .screenshotPreviewPath = screenshotPreviewPath,
+            .autostart = autoFlag != 0,
+        };
 
-        DomainConfig *config = new DomainConfig(configData);
-        Domain *domain = new Domain(domainPtr, config, this);
-        m_domains.emplace_back(domain);
+        Domain *domain = nullptr;
+        for (Domain *candidate : std::as_const(m_domains)) {
+            if (candidate->config()->uuid() == uuid) {
+                domain = candidate;
+                break;
+            }
+        }
+
+        if (domain) {
+            domain->setDomainPtr(domainPtr);
+            domain->apply(configData);
+        } else {
+            auto *config = new DomainConfig(configData);
+            domain = new Domain(domainPtr, config, this);
+            added.append(domain);
+        }
+
+        updated.append(domain);
     }
 
-    if (!m_domains.isEmpty()) {
-        setCurrentDomain(m_domains.first());
-    }
     free(domains);
+
+    // Drop domains that disappeared from libvirt. deleteLater() keeps QML pages
+    // that are still being torn down from touching a destroyed object.
+    const QVector<Domain *> previousDomains = m_domains;
+    m_domains = updated;
+
+    for (Domain *domain : std::as_const(added)) {
+        Q_EMIT domainAdded(domain);
+    }
+    for (Domain *domain : previousDomains) {
+        if (!m_domains.contains(domain)) {
+            Q_EMIT domainRemoved(domain);
+            domain->deleteLater();
+        }
+    }
 }
 
 QVector<Domain *> Karton::domains()
@@ -242,11 +273,16 @@ QVector<Domain *> Karton::domains()
 
 bool Karton::startDomain(const Domain *domain)
 {
-    virDomainPtr domainPtr = domain->domainPtr();
-    int result = virDomainCreate(domainPtr);
+    if (!domain) {
+        return false;
+    }
 
-    if (result < 0) {
-        QString errorMsg = QStringLiteral("Failed to start domain: %1").arg(domain->config()->name());
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainCreate(domainPtr) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to start domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -257,14 +293,28 @@ bool Karton::startDomain(const Domain *domain)
 
 bool Karton::stopDomain(const Domain *domain)
 {
+    if (!domain) {
+        return false;
+    }
+
     virDomainPtr domainPtr = domain->domainPtr();
-    virDomainInfo info;
-    virDomainGetInfo(domainPtr, &info);
+    virDomainInfo info = {};
+    if (virDomainGetInfo(domainPtr, &info) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to get state of domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
 
     if (info.state == VIR_DOMAIN_RUNNING || info.state == VIR_DOMAIN_PAUSED) {
-        int result = virDomainShutdown(domainPtr);
-        if (result < 0) {
-            QString errorMsg = QStringLiteral("Failed to stop domain: %1").arg(domain->config()->name());
+        if (virDomainShutdown(domainPtr) < 0) {
+            const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                           "Failed to stop domain %1: %2",
+                                           domain->config()->name(),
+                                           QString::fromUtf8(virGetLastErrorMessage()));
             qCWarning(KARTON_DEBUG) << errorMsg;
             Q_EMIT errorOccurred(errorMsg);
             return false;
@@ -277,11 +327,16 @@ bool Karton::stopDomain(const Domain *domain)
 
 bool Karton::forceStopDomain(const Domain *domain)
 {
-    virDomainPtr domainPtr = domain->domainPtr();
-    int result = virDomainDestroy(domainPtr);
+    if (!domain) {
+        return false;
+    }
 
-    if (result < 0) {
-        QString errorMsg = QStringLiteral("Failed to force-stop domain: %1").arg(domain->config()->name());
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainDestroy(domainPtr) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to force-stop domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -292,11 +347,16 @@ bool Karton::forceStopDomain(const Domain *domain)
 
 bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 {
+    if (!domain) {
+        return false;
+    }
+
     virDomainPtr domainPtr = domain->domainPtr();
-    int result = virDomainUndefine(domainPtr);
-
-    if (result < 0) {
-        QString errorMsg = i18nc("%1 is the name of the domain", "Failed to undefine domain: %1", domain->config()->name());
+    if (virDomainUndefine(domainPtr) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to undefine domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -304,213 +364,318 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 
     qCInfo(KARTON_DEBUG) << "Successfully undefined domain:" << domain->config()->name();
 
-    if (deleteDisk) {
-        if (!QFile::remove(domain->config()->virtualDiskPath())) {
-            QString errorMsg = i18nc("%1 is path of the disk file", "Failed to delete disk file: %1", domain->config()->virtualDiskPath());
-            qCWarning(KARTON_DEBUG) << errorMsg;
-            Q_EMIT errorOccurred(errorMsg);
-            return false;
-        }
-        qCInfo(KARTON_DEBUG) << "Successfully deleted disk image of " << domain->config()->name();
-    }
-    if (!QFile::remove(domain->config()->screenshotPreviewPath())) {
-        QString errorMsg = i18nc("%1 is path of the image file", "Failed to delete image file: %1", domain->config()->virtualDiskPath());
+    bool success = true;
+
+    const QString diskPath = domain->config()->virtualDiskPath();
+    if (deleteDisk && !diskPath.isEmpty() && QFile::exists(diskPath) && !QFile::remove(diskPath)) {
+        const QString errorMsg = i18nc("%1 is the path of the disk file", "Failed to delete disk file: %1", diskPath);
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
-        return false;
+        success = false;
+    } else if (deleteDisk && !diskPath.isEmpty()) {
+        qCInfo(KARTON_DEBUG) << "Successfully deleted disk image of" << domain->config()->name();
     }
-    qCInfo(KARTON_DEBUG) << "Successfully deleted preview image of " << domain->config()->name();
 
-    qCInfo(KARTON_DEBUG) << "Successfully undefined domain:" << domain->config()->name();
-    return true;
+    const QString previewPath = domain->config()->screenshotPreviewPath();
+    if (!previewPath.isEmpty() && QFile::exists(previewPath) && !QFile::remove(previewPath)) {
+        const QString errorMsg = i18nc("%1 is the path of the preview image", "Failed to delete preview image: %1", previewPath);
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        success = false;
+    }
+
+    auto *removableDomain = const_cast<Domain *>(domain);
+    if (m_domains.removeOne(removableDomain)) {
+        Q_EMIT domainRemoved(removableDomain);
+        removableDomain->deleteLater();
+    }
+
+    return success;
 }
 
 bool Karton::createDomain(const QVariantMap &config)
 {
-    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    QString basePath = QStringLiteral("%1/libvirt").arg(dataDir);
-    QDir baseDir(basePath); // generate directory if not there
-    if (!baseDir.mkpath(QStringLiteral("images")) || !baseDir.mkpath(QStringLiteral("kde-karton/config"))) {
-        qCCritical(KARTON_DEBUG) << "Failed to create directory for images and config: " << basePath;
+    if (!m_conn) {
+        Q_EMIT errorOccurred(i18n("Not connected to libvirt"));
         return false;
     }
 
-    using DomainConfigData = DomainConfig::DomainConfigData;
-    DomainConfigData configData = {.hypervisorType = QString(),
-                                   .indexId = 0,
-                                   .name = config.value(QStringLiteral("name")).toString(),
-                                   .uuid = QString(),
-                                   .shortOsId = config.value(QStringLiteral("shortOsId")).toString(),
-                                   .osId = QString(),
-                                   .isActive = false,
-                                   .state = QString(),
-                                   .maxRam = config.value(QStringLiteral("memoryGB")).toInt(),
-                                   .ramUsage = config.value(QStringLiteral("memoryGB")).toInt(),
-                                   .cpus = config.value(QStringLiteral("cpus")).toInt(),
-                                   .maxDiskStorage = config.value(QStringLiteral("storageGB")).toInt(),
-                                   .xmlConfigPath = getXmlConfigPath(config.value(QStringLiteral("name")).toString()),
-                                   .isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString(),
-                                   .virtualDiskPath = getVirtualDiskPath(config.value(QStringLiteral("name")).toString()),
-                                   .autostart = false,
-                                   .enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool(),
-                                   .parent = this};
+    const QString name = config.value(QStringLiteral("name")).toString().trimmed();
+    const int memoryGB = config.value(QStringLiteral("memoryGB")).toInt();
+    const int cpus = config.value(QStringLiteral("cpus")).toInt();
+    const int storageGB = config.value(QStringLiteral("storageGB")).toInt();
 
-    auto domainConfig = std::make_unique<DomainConfig>(configData);
+    if (!isValidDomainName(name)) {
+        Q_EMIT errorOccurred(i18nc("%1 is the requested name of the virtual machine", "Invalid virtual machine name: %1", name));
+        return false;
+    }
+    if (memoryGB <= 0 || cpus <= 0 || storageGB <= 0) {
+        Q_EMIT errorOccurred(i18n("Invalid virtual machine configuration"));
+        return false;
+    }
+
+    const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QString basePath = QStringLiteral("%1/libvirt").arg(dataDir);
+    QDir baseDir(basePath);
+    if (!baseDir.mkpath(QStringLiteral("images"))) {
+        qCCritical(KARTON_DEBUG) << "Failed to create directory for images:" << basePath;
+        Q_EMIT errorOccurred(i18nc("%1 is a directory path", "Failed to create image directory: %1", basePath));
+        return false;
+    }
+
+    DomainConfig::DomainConfigData configData;
+    configData.name = name;
+    configData.shortOsId = config.value(QStringLiteral("shortOsId")).toString();
+    configData.maxRam = memoryGB;
+    configData.ramUsage = memoryGB;
+    configData.cpus = cpus;
+    configData.maxDiskStorage = storageGB;
+    configData.xmlConfigPath = getXmlConfigPath(name);
+    configData.isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString();
+    configData.virtualDiskPath = getVirtualDiskPath(name);
+    configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool();
+
+    DomainConfig domainConfig(configData);
+
+    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
+                                            {QStringLiteral("create"),
+                                             QStringLiteral("-f"),
+                                             QStringLiteral("qcow2"),
+                                             domainConfig.virtualDiskPath(),
+                                             QStringLiteral("%1G").arg(domainConfig.maxDiskStorage())})) {
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain", "Failed to create disk image for domain: %1", name));
+        return false;
+    }
 
     DomainXmlBuilder builder;
-    if (!m_commandRunner->runCommand(
-            QStringLiteral("qemu-img create -f qcow2 %1 %2G").arg(domainConfig->virtualDiskPath()).arg(domainConfig->maxDiskStorage()))) {
+    if (!builder.setupDomain(m_conn, &domainConfig)) {
+        QFile::remove(domainConfig.virtualDiskPath());
+        qCWarning(KARTON_DEBUG) << "Failed to define domain:" << name;
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain", "Failed to create domain: %1", name));
         return false;
     }
-    if (!builder.setupDomain(m_conn, domainConfig.get())) {
-        qCInfo(KARTON_DEBUG) << "Failed to setup domain...";
-        return false;
-    }
-    // TODO: Use storage pool (poolcreate, gen pool xml, parse xml for location)
+
+    qCInfo(KARTON_DEBUG) << "Successfully created domain:" << name;
     refreshDomainList();
     return true;
 }
 
 bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
 {
+    if (!domain || !m_conn) {
+        return false;
+    }
+
     virDomainPtr domainPtr = domain->domainPtr();
     DomainConfig *domainConfig = domain->config();
 
-    if (virDomainIsActive(domainPtr)) {
-        QString errorMsg = i18nc("%1 is the name of the domain", "Cannot edit configuration while domain is running: %1", domainConfig->name());
+    if (virDomainIsActive(domainPtr) == 1) {
+        const QString errorMsg = i18nc("%1 is the name of the domain", "Cannot edit configuration while domain is running: %1", domainConfig->name());
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
 
-    const QString newName = config.value(QStringLiteral("name")).toString();
+    const QString newName = config.value(QStringLiteral("name")).toString().trimmed();
     const int newMemoryGB = config.value(QStringLiteral("memoryGB")).toInt();
     const int newCpus = config.value(QStringLiteral("cpus")).toInt();
     const int newStorageGB = config.value(QStringLiteral("storageGB")).toInt();
 
-    if (newStorageGB < domainConfig->maxDiskStorage()) {
-        QString errorMsg = i18n("Disk storage cannot be shrunk");
+    if (!isValidDomainName(newName)) {
+        const QString errorMsg = i18nc("%1 is the requested name of the virtual machine", "Invalid virtual machine name: %1", newName);
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+    if (newMemoryGB <= 0 || newCpus <= 0 || newStorageGB <= 0) {
+        const QString errorMsg = i18n("Invalid virtual machine configuration");
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
 
-    // weird case: must virDomainRename rather than
-    // just rewriting the <name> element and redefining (libvirt rejects that as a uuid conflict)
-    if (newName != domainConfig->name()) {
-        if (virDomainRename(domainPtr, newName.toUtf8().constData(), 0) < 0) {
-            QString errorMsg = i18nc("%1 is the old name, %2 is the new name", "Failed to rename domain %1 to %2", domainConfig->name(), newName);
+    // Karton stores the disk size in domain metadata. Domains defined by other
+    // tools do not have it; in that case the size is unknown and must not be
+    // touched.
+    const int oldStorageGB = domainConfig->maxDiskStorage();
+    const bool storageKnown = oldStorageGB > 0;
+    if (storageKnown && newStorageGB < oldStorageGB) {
+        const QString errorMsg = i18nc("%1 is the name of the domain", "Disk storage cannot be shrunk for domain: %1", domainConfig->name());
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    char *xmlDesc = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
+    if (!xmlDesc) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to read configuration for domain %1: %2",
+                                       domainConfig->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    DomainXmlBuilder builder;
+    const QString xmlString = builder.updateXML(QString::fromUtf8(xmlDesc), {.maxRam = newMemoryGB, .cpus = newCpus, .maxDiskStorage = newStorageGB});
+    free(xmlDesc);
+
+    if (xmlString.isEmpty()) {
+        const QString errorMsg = i18nc("%1 is the name of the domain", "Failed to update configuration for domain: %1", domainConfig->name());
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    // Grow the disk before redefining the domain. Growing is safe even if the
+    // subsequent define fails, while the opposite order would leave the config
+    // and the disk out of sync.
+    if (storageKnown && newStorageGB > oldStorageGB) {
+        if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
+                                                {QStringLiteral("resize"), domainConfig->virtualDiskPath(), QStringLiteral("%1G").arg(newStorageGB)})) {
+            const QString errorMsg = i18nc("%1 is the name of the domain", "Failed to resize disk for domain: %1", domainConfig->name());
             qCWarning(KARTON_DEBUG) << errorMsg;
             Q_EMIT errorOccurred(errorMsg);
             return false;
         }
     }
 
-    char *xmlDesc = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
-    if (!xmlDesc) {
-        QString errorMsg = i18nc("%1 is the name of the domain", "Failed to read configuration for domain: %1", domainConfig->name());
-        qCWarning(KARTON_DEBUG) << errorMsg;
-        Q_EMIT errorOccurred(errorMsg);
-        return false;
-    }
-
-    DomainXmlBuilder builder;
-    QString xmlString = builder.updateXML(QString::fromUtf8(xmlDesc), {.maxRam = newMemoryGB, .cpus = newCpus, .maxDiskStorage = newStorageGB});
-    free(xmlDesc);
-
-    // TODO: very fragile and silent. add more handling and test for this. currently cant shrink
-    // task: explore qemu cli for better ways.
-    if (newStorageGB <= domainConfig->maxDiskStorage()) {
-        QString errorMsg = i18nc("%1 is the name of the domain", "Shrinking disk size is not supported for domain: %1", domainConfig->name());
-        qCWarning(KARTON_DEBUG) << errorMsg;
-        Q_EMIT errorOccurred(errorMsg);
-        return false;
-    }
-    if (!m_commandRunner->runCommand(QStringLiteral("qemu-img resize %1 %2G").arg(domainConfig->virtualDiskPath()).arg(newStorageGB))) {
-        QString errorMsg = i18nc("%1 is the name of the domain", "Failed to resize disk for domain: %1", domainConfig->name());
-        qCWarning(KARTON_DEBUG) << errorMsg;
-        Q_EMIT errorOccurred(errorMsg);
-        return false;
-    }
-
-    virDomainPtr redefined = virDomainDefineXML(m_conn, xmlString.toStdString().c_str());
+    virDomainPtr redefined = virDomainDefineXML(m_conn, xmlString.toUtf8().constData());
     if (!redefined) {
-        QString errorMsg = i18nc("%1 is the name of the domain", "Failed to update configuration for domain: %1", domainConfig->name());
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to update configuration for domain %1: %2",
+                                       domainConfig->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
     virDomainFree(redefined);
 
+    // Renaming must happen separately: redefining the XML with a different
+    // <name> but the same UUID is rejected by libvirt as a UUID conflict.
+    if (newName != domainConfig->name()) {
+        if (virDomainRename(domainPtr, newName.toUtf8().constData(), 0) < 0) {
+            const QString errorMsg = i18nc("%1 is the old name, %2 is the new name, %3 is the error message",
+                                           "Failed to rename domain %1 to %2: %3",
+                                           domainConfig->name(),
+                                           newName,
+                                           QString::fromUtf8(virGetLastErrorMessage()));
+            qCWarning(KARTON_DEBUG) << errorMsg;
+            Q_EMIT errorOccurred(errorMsg);
+            refreshDomainList();
+            return false;
+        }
+    }
+
     qCInfo(KARTON_DEBUG) << "Successfully updated configuration for domain:" << newName;
 
-    domainConfig->setName(newName);
-    domainConfig->setMaxRam(newMemoryGB);
-    domainConfig->setCpus(newCpus);
-    domainConfig->setMaxDiskStorage(newStorageGB);
+    // Reload the paths (a rename also changes the XML config file path).
+    refreshDomainList();
     return true;
 }
 
 QString Karton::getXmlConfigPath(const QString &domainName)
 {
-    QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    const QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     return QStringLiteral("%1/libvirt/qemu/%2.xml").arg(configDir, domainName);
 }
 
 QString Karton::getVirtualDiskPath(const QString &domainName)
 {
-    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QStringLiteral("%1/libvirt/images/%2.qcow2").arg(dataDir, domainName);
-}
-
-void Karton::cleanupDomainViewer()
-{
-    if (m_domainViewer) {
-        m_domainViewer->disconnectFromSpice();
-        delete m_domainViewer;
-        m_domainViewer = nullptr;
-    }
-}
-
-bool Karton::viewDomain(const Domain *domain)
-{
-    m_currentDomain = const_cast<Domain *>(domain);
-    Q_EMIT currentDomainChanged();
-
-    return true;
 }
 
 bool Karton::ejectDisk(const Domain *domain)
 {
+    if (!domain) {
+        return false;
+    }
+
     virDomainPtr domainPtr = domain->domainPtr();
+    if (!domainPtr) {
+        return false;
+    }
 
-    // replaces the current device with the same drive minus its source, i.e. empty
+    const bool isActive = virDomainIsActive(domainPtr) == 1;
+
+    char *xmlDesc = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
+    if (!xmlDesc) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to read configuration for domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    QDomDocument document;
+    const auto result = document.setContent(QString::fromUtf8(xmlDesc));
+    free(xmlDesc);
+
+    if (!result) {
+        const QString errorMsg = i18nc("%1 is the name of the domain", "Failed to parse configuration for domain: %1", domain->config()->name());
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    QString targetDev;
+    QString targetBus;
+    QString diskType = QStringLiteral("file");
+
+    const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+    for (int i = 0; i < disks.count(); ++i) {
+        const QDomElement disk = disks.at(i).toElement();
+        if (disk.attribute(QStringLiteral("device")) != QStringLiteral("cdrom")) {
+            continue;
+        }
+        diskType = disk.attribute(QStringLiteral("type"), QStringLiteral("file"));
+        const QDomElement target = disk.firstChildElement(QStringLiteral("target"));
+        targetDev = target.attribute(QStringLiteral("dev"));
+        targetBus = target.attribute(QStringLiteral("bus"));
+        break;
+    }
+
+    if (targetDev.isEmpty()) {
+        const QString errorMsg = i18nc("%1 is the name of the domain", "No CD-ROM device found in domain: %1", domain->config()->name());
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    // Replaces the current device with the same drive minus its source, i.e. empty.
     DomainXmlBuilder builder;
-    QString ejectXml = builder.generateDiskXML({.diskType = QStringLiteral("file"),
-                                                .device = QStringLiteral("cdrom"),
-                                                .driver = QStringLiteral("qemu"),
-                                                .format = QStringLiteral("raw"),
-                                                .sourcePath = QString(),
-                                                .target = QStringLiteral("sda"),
-                                                .bus = QStringLiteral("sata"),
-                                                .readonly = true});
+    const QString ejectXml = builder.generateDiskXML({.diskType = diskType,
+                                                      .device = QStringLiteral("cdrom"),
+                                                      .driver = QStringLiteral("qemu"),
+                                                      .format = QStringLiteral("raw"),
+                                                      .sourcePath = QString(),
+                                                      .target = targetDev,
+                                                      .bus = targetBus,
+                                                      .readonly = true});
 
-    // only affect the live domain if it's running.
-    // otherwise just update the persistent config
+    // Only affect the live domain if it's running; otherwise just update the
+    // persistent config.
     unsigned int flags = VIR_DOMAIN_AFFECT_CONFIG;
-    if (virDomainIsActive(domainPtr)) {
+    if (isActive) {
         flags |= VIR_DOMAIN_AFFECT_LIVE;
     }
 
-    int result = virDomainUpdateDeviceFlags(domainPtr, ejectXml.toUtf8().constData(), flags);
-
-    if (result < 0) {
-        QString errorMsg = i18nc("%1 is the name of the domain", "Failed to eject ISO disk from domain: %1", domain->config()->name());
+    if (virDomainUpdateDeviceFlags(domainPtr, ejectXml.toUtf8().constData(), flags) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to eject ISO disk from domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
 
     qCInfo(KARTON_DEBUG) << "Successfully ejected ISO disk from domain:" << domain->config()->name();
+    refreshDomainList();
     return true;
 }

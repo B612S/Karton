@@ -9,42 +9,57 @@ import org.kde.karton
 Kirigami.ApplicationWindow {
     id: viewerWindow
     required property Domain domain
-    
+
     title: domain ? i18nc("%1 is the name of the virtual machine", "VM Viewer - %1", domain.config.name) : i18n("VM Viewer")
-    
+
     width: Kirigami.Units.gridUnit * 53
     height: Kirigami.Units.gridUnit * 36
 
-    onClosing: {
+    onClosing: (close) => {
         domainViewer.saveFrameToDomain();
         domainViewer.disconnectFromSpice();
+        close.accepted = true;
+        // The window is created dynamically from VMPage and has no parent, so
+        // it has to be destroyed explicitly.
+        Qt.callLater(function() {
+            viewerWindow.destroy();
+        });
+    }
+
+    Connections {
+        target: Karton
+        function onDomainRemoved(removedDomain) {
+            if (removedDomain === viewerWindow.domain) {
+                viewerWindow.close();
+            }
+        }
     }
 
     Connections {
         target: domainViewer
         function onImplicitWidthChanged() {
             if (domainViewer.implicitWidth > 0)
-                viewerWindow.width = domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio
+                viewerWindow.width = domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio;
         }
         function onImplicitHeightChanged() {
             if (domainViewer.implicitHeight > 0)
                 viewerWindow.height = domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio
-                                      + pageStack.globalToolBar.height
+                                      + pageStack.globalToolBar.height;
         }
     }
 
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
-        padding: 0 
+        padding: 0
 
         actions: [
             Kirigami.Action {
                 icon.name: "view-fullscreen"
                 onTriggered: {
                     if (viewerWindow.visibility === Window.FullScreen) {
-                        viewerWindow.showNormal()
+                        viewerWindow.showNormal();
                     } else {
-                        viewerWindow.showFullScreen()
+                        viewerWindow.showFullScreen();
                     }
                 }
             }
@@ -57,9 +72,9 @@ Kirigami.ApplicationWindow {
                 window: domainViewer.Window.window
             }
 
-            // Pre-cancel out scaling, and show VM pixels at 1:1
-            // falls back to a default size (hardcoded) until the first GL scanout sets implicitWidth/Height.
-            // fixes 0 width/height bug.
+            // Pre-cancel out scaling, and show VM pixels at 1:1.
+            // Falls back to a default size (hardcoded) until the first GL scanout sets implicitWidth/Height.
+            // Fixes 0 width/height bug.
             width: implicitWidth > 0 ? implicitWidth / dprHelper.devicePixelRatio : Kirigami.Units.gridUnit * 56.55
             height: implicitHeight > 0 ? implicitHeight / dprHelper.devicePixelRatio : Kirigami.Units.gridUnit * 36
 
@@ -67,18 +82,12 @@ Kirigami.ApplicationWindow {
 
             focus: true
             activeFocusOnTab: true
-            onActiveFocusChanged: {
-                console.log("DomainViewer focus changed to:", activeFocus)
-            }
-            onFocusChanged: {
-                console.log("DomainViewer focus property changed to:", focus)
-            }
+
             MouseArea {
                 anchors.fill: parent
                 onPressed: {
-                    console.log("MouseArea click. giving focus to domainviewer")
-                    parent.forceActiveFocus()
-                    mouse.accepted = false
+                    parent.forceActiveFocus();
+                    mouse.accepted = false;
                 }
             }
         }

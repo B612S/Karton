@@ -22,10 +22,10 @@ class DomainConfig : public QObject
     Q_PROPERTY(int ramUsage READ ramUsage NOTIFY ramUsageChanged)
     Q_PROPERTY(int cpus READ cpus NOTIFY cpusChanged)
     Q_PROPERTY(int maxDiskStorage READ maxDiskStorage NOTIFY maxDiskStorageChanged)
-    Q_PROPERTY(QString xmlConfigPath READ xmlConfigPath CONSTANT)
-    Q_PROPERTY(QString isoDiskPath READ isoDiskPath CONSTANT)
-    Q_PROPERTY(QString virtualDiskPath READ virtualDiskPath CONSTANT)
-    Q_PROPERTY(QString screenshotPreviewPath READ screenshotPreviewPath CONSTANT)
+    Q_PROPERTY(QString xmlConfigPath READ xmlConfigPath NOTIFY pathsChanged)
+    Q_PROPERTY(QString isoDiskPath READ isoDiskPath NOTIFY pathsChanged)
+    Q_PROPERTY(QString virtualDiskPath READ virtualDiskPath NOTIFY pathsChanged)
+    Q_PROPERTY(QString screenshotPreviewPath READ screenshotPreviewPath NOTIFY pathsChanged)
     Q_PROPERTY(bool autostart READ autostart NOTIFY autostartChanged)
     Q_PROPERTY(bool enableAccel3d READ enableAccel3d CONSTANT)
 
@@ -38,50 +38,36 @@ Q_SIGNALS:
     void maxRamChanged(int maxRam);
     void cpusChanged(int cpus);
     void maxDiskStorageChanged(int maxDiskStorage);
+    void pathsChanged();
 
 public:
     struct DomainConfigData {
         QString hypervisorType;
-        int indexId;
+        int indexId = 0;
         QString name;
         QString uuid;
         QString shortOsId;
         QString osId;
-        bool isActive;
+        bool isActive = false;
         QString state;
-        int maxRam;
-        int ramUsage;
-        int cpus;
-        int maxDiskStorage;
+        int maxRam = 0;
+        int ramUsage = 0;
+        int cpus = 0;
+        int maxDiskStorage = 0;
         QString xmlConfigPath;
         QString isoDiskPath;
         QString virtualDiskPath;
         QString screenshotPreviewPath;
-        bool autostart;
+        bool autostart = false;
         bool enableAccel3d = true;
-        QObject *parent = nullptr;
     };
+
     explicit DomainConfig(QObject *parent = nullptr);
     explicit DomainConfig(const DomainConfigData &data);
-    explicit DomainConfig(const QString &hypervisorType,
-                          int indexId,
-                          const QString &name,
-                          const QString &uuid,
-                          const QString &shortOsId,
-                          const QString &osId,
-                          bool isActive,
-                          QString state,
-                          int maxRam,
-                          int ramUsage,
-                          int cpus,
-                          int maxDiskStorage,
-                          const QString &xmlConfigPath,
-                          const QString &isoDiskPath,
-                          const QString &virtualDiskPath,
-                          const QString &screenshotPreviewPath,
-                          bool autostart,
-                          bool enableAccel3d = true,
-                          QObject *parent = nullptr);
+
+    // Updates the mutable parts of the configuration in place and emits the
+    // corresponding change signals.
+    void apply(const DomainConfigData &data);
 
     // getters
     [[nodiscard]] QString hypervisorType() const
@@ -165,24 +151,25 @@ public:
     void setMaxRam(int maxRam);
     void setCpus(int cpus);
     void setMaxDiskStorage(int maxDiskStorage);
+    void setPaths(const QString &xmlConfigPath, const QString &isoDiskPath, const QString &virtualDiskPath, const QString &screenshotPreviewPath);
 
 private:
     QString m_hypervisorType;
-    int m_indexId;
+    int m_indexId = 0;
     QString m_name;
     QString m_uuid;
     QString m_shortOsId;
     QString m_osId;
-    bool m_isActive;
+    bool m_isActive = false;
     QString m_state;
-    int m_maxRam;
-    int m_ramUsage;
-    int m_cpus;
-    int m_maxDiskStorage;
+    int m_maxRam = 0;
+    int m_ramUsage = 0;
+    int m_cpus = 0;
+    int m_maxDiskStorage = 0;
     QString m_xmlConfigPath;
     QString m_isoDiskPath;
     QString m_virtualDiskPath;
     QString m_screenshotPreviewPath;
-    bool m_autostart;
-    bool m_enableAccel3d;
+    bool m_autostart = false;
+    bool m_enableAccel3d = true;
 };

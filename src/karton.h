@@ -6,12 +6,11 @@
 
 #include <QJSEngine>
 #include <QObject>
-#include <QProcess>
 #include <QQmlEngine>
+#include <QVector>
 
 #include "commandrunner.h"
 #include "domain.h"
-#include "domainviewer.h"
 #include <qqmlintegration.h>
 
 class LibvirtMonitor;
@@ -25,14 +24,21 @@ class Karton : public QObject
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
-    Q_PROPERTY(Domain *currentDomain READ currentDomain NOTIFY currentDomainChanged) // TODO extract
+    Q_PROPERTY(bool connected READ connected CONSTANT)
 
 public:
-    explicit Karton(QObject *parent = nullptr);
+    // Deliberately not default-constructible: Qt then uses create() for the
+    // QML singleton instead of constructing a second instance.
+    explicit Karton(QObject *parent);
     ~Karton();
     Q_DISABLE_COPY_MOVE(Karton)
     static Karton *create(QQmlEngine *qmlEngine, QJSEngine *);
     static Karton *self();
+
+    [[nodiscard]] bool connected() const
+    {
+        return m_conn != nullptr;
+    }
 
     QVector<Domain *> domains();
     void refreshDomain(const virDomainPtr domainPtr);
@@ -41,27 +47,20 @@ public:
     QString getVirtualDiskPath(const QString &domainName);
     QString getXmlConfigPath(const QString &domainName);
 
-    void cleanupDomainViewer();
-    void setCurrentDomain(Domain *domain);
-    Domain *currentDomain();
-
 Q_SIGNALS:
-    void currentDomainChanged();
-    void commandFinished(int exitCode, const QString &output);
+    void domainsChanged(const virDomainPtr domainPtr, int event, int detail);
+    void errorOccurred(const QString &errorMessage);
+    void domainAdded(Domain *domain);
+    void domainRemoved(Domain *domain);
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
     Q_INVOKABLE bool stopDomain(const Domain *domain);
-    Q_INVOKABLE bool viewDomain(const Domain *domain);
     Q_INVOKABLE bool forceStopDomain(const Domain *domain);
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
     Q_INVOKABLE bool ejectDisk(const Domain *domain);
-
-Q_SIGNALS:
-    void domainsChanged(const virDomainPtr domainPtr, int event, int detail);
-    void errorOccurred(const QString &errorMessage);
 
 private Q_SLOTS:
     void onDomainStateChanged(const virDomainPtr domainPtr, int event, int detail);
@@ -70,9 +69,6 @@ private:
     virConnectPtr m_conn;
     QVector<Domain *> m_domains;
     LibvirtMonitor *m_monitor;
-
-    DomainViewer *m_domainViewer = nullptr;
-    Domain *m_currentDomain = nullptr;
     CommandRunner *m_commandRunner;
 
     bool init();

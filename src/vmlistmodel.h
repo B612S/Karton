@@ -28,8 +28,6 @@ public:
     VMModel(QObject *parent = nullptr);
     ~VMModel() override;
     Q_DISABLE_COPY_MOVE(VMModel)
-    static VMModel *create(QQmlEngine *qmlEngine, QJSEngine *);
-    static VMModel *self();
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -38,8 +36,10 @@ public:
     void refreshAllDomains();
 private Q_SLOTS:
     void onDomainsChanged(const virDomainPtr domainPtr, int event, int detail);
+    void onDomainRemoved(Domain *domain);
 
 private:
     QList<Domain *> m_datas;
     Karton *m_karton;
+    bool m_resetting = false;
 };

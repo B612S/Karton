@@ -34,8 +34,8 @@ public:
         bool readonly;
     };
 
-    virDomainPtr setupDomain(virConnectPtr conn, const DomainConfig *config);
-    QString generateXML(virConnectPtr conn, const DomainConfig *config);
+    bool setupDomain(virConnectPtr conn, const DomainConfig *config);
+    QString generateXML(const DomainConfig *config);
     QString updateXML(const QString &xmlDesc, const EditableConfig &config);
     QString generateDiskXML(const DiskDeviceConfig &config);
 
@@ -44,7 +44,6 @@ private:
         QString type;
         QString mac;
         QString source;
-        bool linkState;
         QString model;
     };
 

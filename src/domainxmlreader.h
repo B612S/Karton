@@ -3,17 +3,12 @@
 
 #pragma once
 
-#include <QObject>
 #include <QString>
 #include <QXmlStreamReader>
 
-class DomainXmlReader : public QObject
+class DomainXmlReader
 {
-    Q_OBJECT
-
 public:
-    DomainXmlReader(const QString &path);
-    ~DomainXmlReader();
     struct XmlInfo {
         QString hypervisorType;
         int indexId = 0;
@@ -24,7 +19,13 @@ public:
         QString virtualDiskPath;
         QString screenshotPreviewPath;
     };
+
+    explicit DomainXmlReader(const QString &path);
+
     XmlInfo readConfigFile(const QString &path);
-    QString retrieveDiskPath(QXmlStreamReader &xmlReader, QXmlStreamReader::TokenType token);
+
     XmlInfo m_xmlInfo;
+
+private:
+    QString retrieveDiskPath(QXmlStreamReader &xmlReader);
 };

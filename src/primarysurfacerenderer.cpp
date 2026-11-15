@@ -72,18 +72,16 @@ void PrimarySurfaceRenderer::display_invalidate_callback(SpiceDisplayChannel *ch
 {
     Q_UNUSED(channel);
 
+    Q_UNUSED(x);
+    Q_UNUSED(y);
+    Q_UNUSED(width);
+    Q_UNUSED(height);
+
     auto *self = static_cast<PrimarySurfaceRenderer *>(user_data);
     {
         QMutexLocker locker(&self->m_frameLock);
-        if (self->m_frameBuffer && !self->m_frame.isNull()) {
-            // Copy from spice-glib framebuffer to the QImage to render - inefficient
-            const auto *source = reinterpret_cast<const uint *>(self->m_frameBuffer);
-            for (int row = y; row < y + height; ++row) {
-                for (int col = x; col < x + width; ++col) {
-                    self->m_frame.setPixel(col, row, source[self->m_imageWidth * row + col]);
-                }
-            }
-        }
+        // m_frame already wraps SPICE's framebuffer, so there is nothing to
+        // copy here; the texture is created from it in updatePaintNode().
         self->m_frameUpdated = true;
     }
 
@@ -94,7 +92,7 @@ QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *
 {
     QMutexLocker locker(&m_frameLock);
 
-    if (!m_frameUpdated || m_frame.isNull() || m_frame.width() <= 0 || m_frame.height() <= 0) {
+    if (m_frame.isNull() || m_frame.width() <= 0 || m_frame.height() <= 0) {
         delete oldNode;
         return nullptr;
     }
@@ -105,10 +103,17 @@ QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *
         node->setOwnsTexture(true);
     }
 
+    node->setRect(bounds);
+
+    // Keep the existing texture when the frame did not change; deleting the
+    // node here used to make the VM display go black on unrelated repaints.
+    if (!m_frameUpdated && node->texture()) {
+        return node;
+    }
+
     QSGTexture *texture = window->createTextureFromImage(m_frame);
     if (texture) {
         node->setTexture(texture);
-        node->setRect(bounds);
         m_frameUpdated = false;
     }
 

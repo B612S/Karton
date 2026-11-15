@@ -38,8 +38,6 @@ class OsinfoConfig : public QObject
 public:
     explicit OsinfoConfig();
     ~OsinfoConfig();
-    static OsinfoConfig *create(QQmlEngine *qmlEngine, QJSEngine *);
-    static OsinfoConfig *self();
 
     QString getOsIdFromShortId(const QString &short_id);
     Q_INVOKABLE QString getShortIdFromId(const QString &id);
@@ -47,10 +45,9 @@ public:
     QString getOsArchitecture(const QString &osId);
 
 private:
-    bool initOsDb();
-
     QStringList m_osList;
 
     GObjectPtr<OsinfoLoader> m_loader;
-    GObjectPtr<OsinfoDb> m_db;
+    // Owned by m_loader; must not be unreffed by us.
+    OsinfoDb *m_db = nullptr;
 };

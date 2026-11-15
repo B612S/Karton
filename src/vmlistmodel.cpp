@@ -10,9 +10,19 @@ VMModel::VMModel(QObject *parent)
     : QAbstractListModel(parent)
     , m_karton(Karton::self())
 {
-    // qCDebug(KARTON_DEBUG) << "vmmodellist: Karton instance:" << m_karton;
     if (m_karton) {
         connect(m_karton, &Karton::domainsChanged, this, &VMModel::onDomainsChanged);
+        // Deleting a domain must not re-enter refreshAllDomains() while the model
+        // is already being reset.
+        connect(
+            m_karton,
+            &Karton::domainAdded,
+            this,
+            [this] {
+                refreshAllDomains();
+            },
+            Qt::QueuedConnection);
+        connect(m_karton, &Karton::domainRemoved, this, &VMModel::onDomainRemoved);
         refreshAllDomains();
     } else {
         qCCritical(KARTON_DEBUG) << "vmmodellist: karton is null!";
@@ -20,7 +30,9 @@ VMModel::VMModel(QObject *parent)
 }
 int VMModel::rowCount(const QModelIndex &parent) const
 {
-    Q_UNUSED(parent);
+    if (parent.isValid()) {
+        return 0;
+    }
 
     return m_datas.size();
 }
@@ -30,29 +42,14 @@ VMModel::~VMModel()
     m_datas.clear();
 }
 
-VMModel *VMModel::self()
-{
-    static VMModel *v = new VMModel(Karton::self());
-    return v;
-}
-
-VMModel *VMModel::create(QQmlEngine *qmlEngine, QJSEngine *)
-{
-    Q_UNUSED(qmlEngine);
-
-    return VMModel::self();
-}
-
 QVariant VMModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_datas.size()) {
         return {};
     }
 
-    const Domain *domain = m_datas[index.row()];
-
     if (role == DomainRole) {
-        return QVariant::fromValue(domain);
+        return QVariant::fromValue(m_datas[index.row()]);
     }
     return {};
 }
@@ -63,21 +60,46 @@ QHash<int, QByteArray> VMModel::roleNames() const
 
 void VMModel::onDomainsChanged(const virDomainPtr domainPtr, int event, int detail)
 {
-    Q_UNUSED(event);
     Q_UNUSED(detail);
+
+    // An undefined domain may still return valid virDomainInfo() data, so do
+    // not rely on updateDomains() to notice that it disappeared.
+    if (event == VIR_DOMAIN_EVENT_UNDEFINED) {
+        refreshAllDomains();
+        return;
+    }
 
     if (domainPtr) {
         updateDomains(domainPtr);
     }
 }
+void VMModel::onDomainRemoved(Domain *domain)
+{
+    // refreshAllDomains() will rebuild the list without this domain.
+    if (m_resetting) {
+        return;
+    }
+
+    const int index = m_datas.indexOf(domain);
+    if (index < 0) {
+        return;
+    }
+
+    beginRemoveRows(QModelIndex(), index, index);
+    m_datas.removeAt(index);
+    endRemoveRows();
+}
+
 void VMModel::refreshAllDomains()
 {
     qCInfo(KARTON_DEBUG) << "vmlistmodel: Refreshing all domains.";
+    m_resetting = true;
     beginResetModel();
     m_datas.clear();
     m_karton->refreshDomainList();
     m_datas = m_karton->domains();
     endResetModel();
+    m_resetting = false;
 }
 
 void VMModel::updateDomains(const virDomainPtr domainPtr)
@@ -85,12 +107,8 @@ void VMModel::updateDomains(const virDomainPtr domainPtr)
     QString domainUuid = Domain::uuidString(domainPtr);
     qCDebug(KARTON_DEBUG) << "Domain UUID:" << domainUuid;
 
-    bool domainExists = false;
-    virDomainInfo info;
-    int ret = virDomainGetInfo(domainPtr, &info);
-    domainExists = (ret == 0);
-
-    if (!domainExists) {
+    virDomainInfo info = {};
+    if (virDomainGetInfo(domainPtr, &info) < 0) {
         refreshAllDomains();
         return;
     }

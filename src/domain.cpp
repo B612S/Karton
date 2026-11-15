@@ -3,9 +3,10 @@
 
 #include "domain.h"
 
+#include <array>
+
 #include <QDir>
-#include <QFile>
-#include <QStandardPaths>
+#include <QFileInfo>
 #include <QString>
 
 #include "domainconfig.h"
@@ -27,6 +28,9 @@ Domain::Domain(const virDomainPtr domainPtr, DomainConfig *config, QObject *pare
     , m_domainPtr(domainPtr)
     , m_config(config)
 {
+    Q_ASSERT(m_config);
+    m_config->setParent(this);
+
     connect(m_config, &DomainConfig::isActiveChanged, this, &Domain::isActiveChanged);
     connect(m_config, &DomainConfig::stateChanged, this, &Domain::stateChanged);
     connect(m_config, &DomainConfig::ramUsageChanged, this, &Domain::ramUsageChanged);
@@ -40,28 +44,40 @@ Domain::~Domain()
     }
 }
 
+void Domain::setDomainPtr(virDomainPtr domainPtr)
+{
+    if (m_domainPtr == domainPtr) {
+        return;
+    }
+    if (m_domainPtr) {
+        virDomainFree(m_domainPtr);
+    }
+    m_domainPtr = domainPtr;
+}
+
+void Domain::apply(const DomainConfig::DomainConfigData &data)
+{
+    m_config->apply(data);
+}
+
 void Domain::setActive(bool active)
 {
     m_config->setActive(active);
-    Q_EMIT isActiveChanged(active);
 }
 
 void Domain::setState(const QString &state)
 {
     m_config->setState(state);
-    Q_EMIT stateChanged(state);
 }
 
 void Domain::setRamUsage(int ramUsage)
 {
     m_config->setRamUsage(ramUsage);
-    Q_EMIT ramUsageChanged(ramUsage);
 }
 
 void Domain::setAutostart(bool autostart)
 {
     m_config->setAutostart(autostart);
-    Q_EMIT autostartChanged(autostart);
 }
 
 QString Domain::uuidString(virDomainPtr domainPtr)
@@ -80,18 +96,19 @@ QString Domain::uuidString(virDomainPtr domainPtr)
 
 void Domain::savePreviewFrame(QImage frame)
 {
-    qCDebug(KARTON_DEBUG) << "SavePreviewPath:" << this->config()->screenshotPreviewPath();
-    QDir baseDir(kartonDir());
-    if (!baseDir.mkpath(QStringLiteral("previews"))) {
-        qCCritical(KARTON_DEBUG) << "Failed to create preview directory: " << kartonDir();
+    qCDebug(KARTON_DEBUG) << "Saving preview to:" << m_config->screenshotPreviewPath();
+
+    const QString previewPath = m_config->screenshotPreviewPath();
+    QDir previewDir = QFileInfo(previewPath).dir();
+    if (!previewDir.exists() && !previewDir.mkpath(QStringLiteral("."))) {
+        qCWarning(KARTON_DEBUG) << "Failed to create preview directory:" << previewDir.absolutePath();
         return;
     }
-    frame.save(this->config()->screenshotPreviewPath());
+
+    if (!frame.save(previewPath)) {
+        qCWarning(KARTON_DEBUG) << "Failed to save preview image:" << previewPath;
+        return;
+    }
 
     Q_EMIT previewChanged();
-}
-QString Domain::kartonDir() const
-{
-    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::StateLocation);
-    return QStringLiteral("%1").arg(dataDir);
 }

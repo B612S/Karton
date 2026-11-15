@@ -78,6 +78,7 @@ void GlScanoutRenderer::handleGlScanout(const SpiceGlScanout *scanout)
     m_imageHeight = scanout->height;
     m_imageWidth = scanout->width;
     m_hasScanout = true;
+    m_scanoutPending = true;
 
     Q_EMIT frameSizeChanged();
     Q_EMIT frameReady();
@@ -181,9 +182,12 @@ void GlScanoutRenderer::createTextureFromScanout(const SpiceGlScanout *scanout)
 // triggered by update()
 QSGNode *GlScanoutRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds)
 {
-    // create opengl texture from scanout data
-    if (m_hasScanout && m_texId == 0) {
+    // Re-import the current scanout into the existing native texture. The
+    // scanout buffer (and therefore its fd) changes on every frame.
+    if (m_hasScanout && m_scanoutPending) {
+        cleanupEGLImage();
         createTextureFromScanout(&m_scanout);
+        m_scanoutPending = false;
     }
 
     if (!m_texId) {
@@ -193,9 +197,21 @@ QSGNode *GlScanoutRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNo
     }
 
     auto *textureNode = static_cast<QSGSimpleTextureNode *>(oldNode);
+    if (textureNode && (m_textureWidth != m_imageWidth || m_textureHeight != m_imageHeight)) {
+        // The scanout resolution changed; the RHI texture has to be recreated
+        // with the new size.
+        delete textureNode;
+        textureNode = nullptr;
+    }
     if (!textureNode) {
         textureNode = new QSGSimpleTextureNode();
         textureNode->setOwnsTexture(true);
+    }
+
+    textureNode->setRect(bounds);
+
+    if (textureNode->texture()) {
+        return textureNode;
     }
 
     QOpenGLContext *context = QOpenGLContext::currentContext();
@@ -212,22 +228,21 @@ QSGNode *GlScanoutRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNo
         gl->glBindTexture(GL_TEXTURE_2D, 0);
     }
 
-    // loading the gl image texture onto the QSG
-    QQuickWindow::CreateTextureOptions options;
+    // Loading the gl image texture onto the QSG.
     QRhi *rhi = window->rhi();
     if (!rhi) {
         qCDebug(KARTON_DEBUG) << "No RHI available";
         return textureNode;
     }
 
-    QRhiTexture::Format rhiFormat = QRhiTexture::RGBA8;
-    QRhiTexture *rhiTexture = rhi->newTexture(rhiFormat, QSize(m_imageWidth, m_imageHeight));
+    QRhiTexture *rhiTexture = rhi->newTexture(QRhiTexture::RGBA8, QSize(m_imageWidth, m_imageHeight));
     if (!rhiTexture) {
         qCDebug(KARTON_DEBUG) << "Failed to create RHI texture";
         return textureNode;
     }
 
-    // create native texture to be contained in RHI
+    // Create a native texture wrapper to be contained in RHI. The native GL
+    // texture itself stays owned by this renderer.
     QRhiTexture::NativeTexture nativeTex;
     nativeTex.object = m_texId;
     nativeTex.layout = 0;
@@ -238,7 +253,8 @@ QSGNode *GlScanoutRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNo
         return textureNode;
     }
 
-    QSGTexture *texture = window->createTextureFromRhiTexture(rhiTexture, options);
+    // The returned QSGTexture owns rhiTexture.
+    QSGTexture *texture = window->createTextureFromRhiTexture(rhiTexture);
     if (!texture) {
         qCDebug(KARTON_DEBUG) << "Failed to create QSG texture";
         delete rhiTexture;
@@ -246,7 +262,8 @@ QSGNode *GlScanoutRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNo
     }
 
     textureNode->setTexture(texture);
-    textureNode->setRect(bounds);
+    m_textureWidth = m_imageWidth;
+    m_textureHeight = m_imageHeight;
 
     qCDebug(KARTON_DEBUG) << "GlScanoutRenderer: Successfully updated canvas.";
     qCDebug(KARTON_DEBUG) << "  Texture ID:" << m_texId;

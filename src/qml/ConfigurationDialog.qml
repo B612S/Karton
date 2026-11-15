@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
 import org.kde.kirigamiaddons.delegates as Delegates
 import org.kde.kirigamiaddons.formcard 1.0 as FormCard
@@ -20,6 +21,9 @@ Kirigami.Dialog {
     preferredHeight: Kirigami.Units.gridUnit * 22
 
     onOpened: {
+        if (!domain) {
+            return;
+        }
         categoryList.currentIndex = 0;
         nameField.text = domain.config.name;
         memorySpinBox.value = domain.config.maxRam;
@@ -33,7 +37,7 @@ Kirigami.Dialog {
             text: i18nc("verb, save VM configuration changes", "Save")
             icon.name: "dialog-ok"
             onTriggered: {
-                if (nameField.text.trim() === "") {
+                if (!configurationDialog.domain || nameField.text.trim() === "") {
                     return;
                 }
                 const domainConfig = {
@@ -95,7 +99,7 @@ Kirigami.Dialog {
                         label: i18nc("@label:textbox", "VM Name:")
                         Layout.fillWidth: true
                         validator: RegularExpressionValidator {
-                            regularExpression: /^[^\s]+$/
+                            regularExpression: /^[A-Za-z0-9._-]+$/
                         }
                     }
                 }
@@ -116,7 +120,7 @@ Kirigami.Dialog {
                         id: memorySpinBox
                         label: i18nc("@label:spinbox, RAM", "Memory (GB)")
                         from: 1
-                        to: 64
+                        to: Math.max(64, configurationDialog.domain ? configurationDialog.domain.config.maxRam : 64)
                         Layout.fillWidth: true
                     }
 
@@ -126,7 +130,7 @@ Kirigami.Dialog {
                         id: cpuSpinBox
                         label: i18nc("@label:spinbox, number of cpus", "CPUs")
                         from: 1
-                        to: 16
+                        to: Math.max(16, configurationDialog.domain ? configurationDialog.domain.config.cpus : 16)
                         Layout.fillWidth: true
                     }
                 }
@@ -139,15 +143,24 @@ Kirigami.Dialog {
             ColumnLayout {
                 spacing: 0
 
+                Controls.Label {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.largeSpacing
+                    wrapMode: Text.WordWrap
+                    visible: configurationDialog.domain && configurationDialog.domain.config.maxDiskStorage <= 0
+                    text: i18n("This virtual machine was not created by Karton, so its disk size is unknown and cannot be changed here.")
+                }
+
                 FormCard.FormCard {
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.largeSpacing
 
                     FormCard.FormSpinBoxDelegate {
                         id: storageSpinBox
+                        enabled: configurationDialog.domain ? configurationDialog.domain.config.maxDiskStorage > 0 : false
                         label: i18nc("@label:spinbox", "Disk Storage (GB)")
-                        from: 1
-                        to: 2048
+                        from: configurationDialog.domain ? Math.min(2048, Math.max(1, configurationDialog.domain.config.maxDiskStorage)) : 1
+                        to: Math.max(2048, configurationDialog.domain ? configurationDialog.domain.config.maxDiskStorage : 2048)
                         Layout.fillWidth: true
                     }
                 }

@@ -43,9 +43,12 @@ private:
     int m_imageHeight = 0;
     SpiceGlScanout m_scanout = {};
     bool m_hasScanout = false;
+    bool m_scanoutPending = false;
     EGLImageKHR m_eglImage = EGL_NO_IMAGE_KHR;
     PFNEGLDESTROYIMAGEKHRPROC m_eglDestroyImageKHR = nullptr;
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC m_glEGLImageTargetTexture2DOES = nullptr;
     PFNEGLCREATEIMAGEKHRPROC m_eglCreateImageKHR = nullptr;
     GLuint m_texId = 0;
+    int m_textureWidth = 0;
+    int m_textureHeight = 0;
 };

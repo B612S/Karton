@@ -7,22 +7,40 @@ import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
-
 Kirigami.ScrollablePage {
-    title: i18nc("noun, Virtual Machines","Virtual Machines")
+    id: root
+
+    title: i18nc("noun, Virtual Machines", "Virtual Machines")
     topPadding: 0
     bottomPadding: 0
     leftPadding: 0
     rightPadding: 0
-    
-    // implicitWidth: applicationWindow().isWidescreen ? Kirigami.Units.gridUnit * 3 : applicationWindow().width
-    
-    Component.onCompleted: {
-        Karton.errorOccurred.connect(function(errorMessage) {
-            showPassiveNotification(errorMessage, "long");
-        });
+
+    function openDomain(domain) {
+        const stack = applicationWindow().pageStack;
+        if (stack.depth > 1 && stack.currentItem && stack.currentItem.domain === domain) {
+            return;
+        }
+
+        const page = Qt.resolvedUrl("VMPage.qml");
+        if (stack.depth > 1) {
+            stack.replace(page, {
+                domain: domain
+            });
+        } else {
+            stack.push(page, {
+                domain: domain
+            });
+        }
     }
-    
+
+    Connections {
+        target: Karton
+        function onErrorOccurred(errorMessage) {
+            root.showPassiveNotification(errorMessage, "long");
+        }
+    }
+
     actions: [
         Kirigami.Action {
             icon.name: "list-add-symbolic"
@@ -37,18 +55,13 @@ Kirigami.ScrollablePage {
         id: addDomainDialog
     }
 
-    Component {
-        id: vmViewerWindowComponent
-        VMViewerWindow {}
-    }
-
     ListView {
         id: view
         model: VMModel
-        
+
         currentIndex: 0
-        
-        // When VM list empty... make placeholder welcome text the full page.
+
+        // When the VM list is empty, make the placeholder welcome text the full page.
         onCountChanged: {
             if (count === 0) {
                 while (applicationWindow().pageStack.depth > 1) {
@@ -60,31 +73,32 @@ Kirigami.ScrollablePage {
         delegate: Controls.ItemDelegate {
             width: ListView.view.width
             highlighted: ListView.isCurrentItem
-            
+
             leftPadding: Kirigami.Units.gridUnit
             rightPadding: leftPadding
             topPadding: Kirigami.Units.largeSpacing
             bottomPadding: topPadding
 
             ListView.onIsCurrentItemChanged: {
-                if (ListView.isCurrentItem) {
-                    while (applicationWindow().pageStack.depth > 1) { 
-                        applicationWindow().pageStack.pop();
-                    }
-                    applicationWindow().pageStack.push(Qt.resolvedUrl("VMPage.qml"), {domain: domain});
-                } 
+                if (ListView.isCurrentItem && applicationWindow().isWidescreen) {
+                    // Defer the push until the delegate has been placed in the
+                    // scene, otherwise the page cannot be shown yet.
+                    Qt.callLater(() => root.openDomain(domain));
+                }
             }
 
             onClicked: {
-                ListView.view.currentIndex = model.index;
+                view.currentIndex = model.index;
+                root.openDomain(domain);
             }
+
             contentItem: RowLayout {
                 id: delegateLayout
                 spacing: Kirigami.Units.largeSpacing
 
                 Kirigami.Icon {
-                    source: "computer-symbolic" 
-                    // TODO: Add OS Icon -> eventually, have screencap of VM window
+                    source: "computer-symbolic"
+                    // TODO: Add OS icon -> eventually, have screencap of VM window
                     Layout.fillHeight: true
                     Layout.maximumHeight: Kirigami.Units.iconSizes.huge
                     Layout.preferredWidth: height
@@ -112,9 +126,9 @@ Kirigami.ScrollablePage {
 
             visible: view.count === 0
 
-            text: i18nc("@title, greet user to Karton", "Welcome to Karton!")
-            explanation: i18n("Create a new virtual machine to proceed.")
-            icon.name: "computer-symbolic"
+            text: Karton.connected ? i18nc("@title, greet user to Karton", "Welcome to Karton!") : i18n("Cannot connect to libvirt")
+            explanation: Karton.connected ? i18n("Create a new virtual machine to proceed.") : i18n("Check that libvirt is running and that the qemu:///session connection is available.")
+            icon.name: Karton.connected ? "computer-symbolic" : "dialog-error"
         }
     }
 }

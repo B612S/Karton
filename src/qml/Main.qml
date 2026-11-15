@@ -3,8 +3,6 @@
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 
 import QtQuick
-import QtQuick.Layouts
-import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
 
 Kirigami.ApplicationWindow {

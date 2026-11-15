@@ -27,7 +27,6 @@ Q_SIGNALS:
     void stateChanged(const QString &state);
     void ramUsageChanged(const int usage);
     void autostartChanged(const bool autostart);
-    void configChanged();
     void previewChanged();
 
 public:
@@ -64,6 +63,10 @@ public:
         return m_config->autostart();
     }
 
+    // Takes ownership of domainPtr and releases the previously held reference.
+    void setDomainPtr(virDomainPtr domainPtr);
+    void apply(const DomainConfig::DomainConfigData &data);
+
     void setActive(bool active);
     void setState(const QString &state);
     void setRamUsage(int ramUsage);
@@ -72,7 +75,6 @@ public:
     void savePreviewFrame(QImage frame);
 
 private:
-    QString kartonDir() const;
     virDomainPtr m_domainPtr;
     DomainConfig *m_config;
 };

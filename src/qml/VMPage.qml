@@ -10,26 +10,40 @@ import org.kde.karton
 
 Kirigami.ScrollablePage {
     id: root
-    title: domain.config.name
+
+    title: domain ? domain.config.name : ""
     property Domain domain: null
-    readonly property bool isRunning: domain.config.state === "running"
-    
+    readonly property bool isRunning: domain ? domain.isActive : false
+
     topPadding: 0
     bottomPadding: Kirigami.Units.gridUnit
     leftPadding: 0
     rightPadding: 0
 
+    Connections {
+        target: Karton
+        function onDomainRemoved(removedDomain) {
+            if (removedDomain === root.domain && applicationWindow().pageStack.currentItem === root) {
+                // Pop before the Domain object is destroyed, otherwise the
+                // bindings below would briefly see a null domain.
+                applicationWindow().pageStack.pop();
+            }
+        }
+    }
+
     actions: [
         Kirigami.Action {
-            icon.name: isRunning ? "system-shutdown" : "media-playback-start" 
+            icon.name: isRunning ? "system-shutdown" : "media-playback-start"
             text: isRunning ? i18nc("verb, stop a VM", "Stop") : i18nc("verb, start a VM", "Start")
             onTriggered: {
                 if (isRunning) {
-                    Karton.stopDomain(domain);
-                    showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Stopping VM: %1!", domain.config.name));
+                    if (Karton.stopDomain(domain)) {
+                        showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Stopping VM: %1!", domain.config.name));
+                    }
                 } else {
-                    Karton.startDomain(domain)
-                    showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", domain.config.name));
+                    if (Karton.startDomain(domain)) {
+                        showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", domain.config.name));
+                    }
                 }
             }
         },
@@ -38,8 +52,9 @@ Kirigami.ScrollablePage {
             icon.name: "process-stop"
             visible: isRunning
             onTriggered: {
-                Karton.forceStopDomain(domain)
-                showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", domain.config.name));
+                if (Karton.forceStopDomain(domain)) {
+                    showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", domain.config.name));
+                }
             }
         },
         Kirigami.Action {
@@ -47,10 +62,6 @@ Kirigami.ScrollablePage {
             icon.name: "delete"
             visible: !isRunning
             onTriggered: {
-                if (domain.config.state === "running") {
-                    showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Error: %1 is still running!", domain.config.name));
-                    return;
-                }
                 deleteConfirmationDialog.domain = domain;
                 deleteConfirmationDialog.open();
             }
@@ -61,13 +72,16 @@ Kirigami.ScrollablePage {
             icon.name: "computer-laptop-symbolic"
             visible: isRunning
             onTriggered: {
-                let component = Qt.createComponent("VMViewerWindow.qml")
-                if (component.status === Component.Ready) {
-                    let window = component.createObject(null, {domain: domain})
-                    if (window) {
-                        window.show()
-                        showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Opening viewer for: %1", domain.config.name))
-                    }
+                const component = Qt.createComponent("VMViewerWindow.qml");
+                if (component.status !== Component.Ready) {
+                    console.error("Failed to create VM viewer:", component.errorString());
+                    return;
+                }
+                const window = component.createObject(null, {
+                    domain: domain
+                });
+                if (!window) {
+                    console.error("Failed to create VM viewer window");
                 }
             }
         },
@@ -82,7 +96,7 @@ Kirigami.ScrollablePage {
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
-        
+
         Rectangle {
             Layout.fillWidth: true
             color: "black"
@@ -92,7 +106,7 @@ Kirigami.ScrollablePage {
                 id: previewImage
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectFit
-                source: "file://" + domain.config.screenshotPreviewPath
+                source: domain ? "file://" + domain.config.screenshotPreviewPath : ""
 
                 Connections {
                     target: domain
@@ -125,9 +139,11 @@ Kirigami.ScrollablePage {
                 hoverEnabled: true
                 onClicked: {
                     if (!isRunning) {
+                        // The domain has to be running before SPICE is available.
                         Karton.startDomain(domain);
+                        return;
                     }
-                    viewVMAction.trigger()
+                    viewVMAction.trigger();
                 }
             }
         }
@@ -136,50 +152,50 @@ Kirigami.ScrollablePage {
 
             FormCard.FormTextDelegate {
                 text: i18n("UUID")
-                description: domain.config.uuid
+                description: domain ? domain.config.uuid : ""
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
                 text: i18n("State")
-                description: domain.config.state
+                description: domain ? domain.config.state : ""
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
                 text: i18n("Maximum Memory (GB)")
-                description: domain.config.maxRam
+                description: domain ? domain.config.maxRam : ""
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
                 text: i18n("Memory Usage (GB)")
-                description: domain.config.ramUsage
+                description: domain ? domain.config.ramUsage : ""
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
                 text: i18n("CPUs")
-                description: domain.config.cpus
+                description: domain ? domain.config.cpus : ""
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
                 text: i18n("Virtual Disk Path")
-                description: domain.config.virtualDiskPath
+                description: domain ? domain.config.virtualDiskPath : ""
             }
             FormCard.FormDelegateSeparator {}
             FormCard.FormTextDelegate {
                 text: i18n("ISO Disk Path")
-                description: domain.config.isoDiskPath
+                description: domain ? domain.config.isoDiskPath : ""
                 trailing: Controls.Button {
                     text: "Eject"
                     icon.name: "media-eject"
                     onClicked: {
                         if (Karton.ejectDisk(domain)) {
                             showPassiveNotification(i18nc("%1 is the name of the virtual machine", "ISO Disk ejected for VM: %1", domain.config.name));
-                            return;
                         }
                     }
                 }
             }
         }
     }
+
     ConfigurationDialog {
         id: configurationDialog
         domain: root.domain
@@ -191,9 +207,9 @@ Kirigami.ScrollablePage {
             deleteConfirmationDialog.domain ? deleteConfirmationDialog.domain.config.name : "")
 
         padding: Kirigami.Units.largeSpacing
-        preferredWidth: root.width - Kirigami.Units.gridUnit * 30
-        preferredHeight: root.height - Kirigami.Units.gridUnit * 30
-        
+        preferredWidth: Math.max(Kirigami.Units.gridUnit * 20, root.width - Kirigami.Units.gridUnit * 30)
+        preferredHeight: Math.max(Kirigami.Units.gridUnit * 14, root.height - Kirigami.Units.gridUnit * 30)
+
         showCloseButton: false
         standardButtons: Kirigami.Dialog.NoButton
         flatFooterButtons: false
@@ -204,9 +220,9 @@ Kirigami.ScrollablePage {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: deleteConfirmationDialog.domain ? i18nc("%1 is the virtual machine name",
-`You are about to remove the virtual machine, '%1'. 
-Would you like to remove the disk image as well? 
-This action cannot be undone.`, 
+`You are about to remove the virtual machine, '%1'.
+Would you like to remove the disk image as well?
+This action cannot be undone.`,
             deleteConfirmationDialog.domain.config.name) : ""
         }
         customFooterActions: [
@@ -221,26 +237,36 @@ This action cannot be undone.`,
             Kirigami.Action {
                 text: i18nc("action, delete VM but keep disk image", "Keep File")
                 icon.name: "edit-delete-remove"
-                
+
                 onTriggered: {
-                    if (deleteConfirmationDialog.domain) {
-                        Karton.deleteDomain(deleteConfirmationDialog.domain, false);
-                        showPassiveNotification(i18nc("%1 is the virtual machine name", "Deleted VM: %1", deleteConfirmationDialog.domain.config.name));
-                        deleteConfirmationDialog.domain = null;
-                        deleteConfirmationDialog.close();
+                    const domainToDelete = deleteConfirmationDialog.domain;
+                    if (!domainToDelete) {
+                        return;
+                    }
+                    const domainName = domainToDelete.config.name;
+                    const window = applicationWindow();
+                    deleteConfirmationDialog.domain = null;
+                    deleteConfirmationDialog.close();
+                    if (Karton.deleteDomain(domainToDelete, false) && window) {
+                        window.showPassiveNotification(i18nc("%1 is the virtual machine name", "Deleted VM: %1", domainName));
                     }
                 }
             },
             Kirigami.Action {
                 text: i18nc("action, delete VM and disk image", "Delete Disk")
                 icon.name: "delete"
-                
+
                 onTriggered: {
-                    if (deleteConfirmationDialog.domain) {
-                        Karton.deleteDomain(deleteConfirmationDialog.domain, true);
-                        showPassiveNotification(i18nc("%1 is the virtual machine name", "Deleted VM: %1", deleteConfirmationDialog.domain.config.name));
-                        deleteConfirmationDialog.domain = null;
-                        deleteConfirmationDialog.close();
+                    const domainToDelete = deleteConfirmationDialog.domain;
+                    if (!domainToDelete) {
+                        return;
+                    }
+                    const domainName = domainToDelete.config.name;
+                    const window = applicationWindow();
+                    deleteConfirmationDialog.domain = null;
+                    deleteConfirmationDialog.close();
+                    if (Karton.deleteDomain(domainToDelete, true) && window) {
+                        window.showPassiveNotification(i18nc("%1 is the virtual machine name", "Deleted VM: %1", domainName));
                     }
                 }
             }

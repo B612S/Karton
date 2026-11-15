@@ -16,6 +16,9 @@ Kirigami.Dialog {
     property bool showError: false
     modal: true
 
+    preferredWidth: Kirigami.Units.gridUnit * 40
+    preferredHeight: Kirigami.Units.gridUnit * 36
+
     function getShortOsId(path) {
         return OsinfoConfig.getShortIdFromId(OsinfoConfig.getOsIdFromDisk(path));
     }
@@ -29,30 +32,32 @@ Kirigami.Dialog {
             text: i18nc("verb, creation button for a new VM", "Create")
             icon.name: "dialog-ok"
             onTriggered: {
+                showError = false;
+                const shortOsId = osTextField.text.trim();
                 if (nameField.text.trim() === ""
                     || diskImageField.text.trim() === ""
-                    || !OsinfoConfig.osList.includes(osField.editText.trim())) {
+                    || !OsinfoConfig.osList.includes(shortOsId)) {
                     showError = true;
                     return;
                 }
                 const domainConfig = {
                     name: nameField.text.trim(),
-                    shortOsId: osField.editText.trim(),
+                    shortOsId: shortOsId,
                     isoDiskPath: diskImageField.text,
                     memoryGB: memorySpinBox.value,
                     storageGB: storageSpinBox.value,
                     cpus: cpuSpinBox.value,
                     enableAccel3d: enableAccel3dCheckBox.checked
                 };
-                Karton.createDomain(domainConfig);
+                if (!Karton.createDomain(domainConfig)) {
+                    return;
+                }
                 showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Created VM: %1", nameField.text));
                 addDomainDialog.close();
             }
         }
     ]
 
-    preferredWidth: parent.width - Kirigami.Units.gridUnit * 10
-    preferredHeight: parent.height - Kirigami.Units.gridUnit * 10
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
@@ -75,7 +80,7 @@ Kirigami.Dialog {
                 placeholderText: i18n("Enter VM Name")
                 Layout.fillWidth: true
                 validator: RegularExpressionValidator {
-                    regularExpression: /^[^\s]+$/
+                    regularExpression: /^[A-Za-z0-9._-]+$/
                 }
             }
 
@@ -85,7 +90,7 @@ Kirigami.Dialog {
                 nameFilters: [i18nc("name filter for the file dialog",
                                     "Disk images (*.qcow2 *.raw *.img *.iso *.vdi *.vmdk)")]
                 onAccepted: {
-                    diskImageField.text = fileDialog.selectedFile.toString().replace("file://", "");
+                    diskImageField.text = decodeURIComponent(fileDialog.selectedFile.toString().replace(/^file:\/\//, ""));
                     let shortOsId = getShortOsId(diskImageField.text);
                     if (shortOsId === "") {
                         osTextField.placeholderText = i18n("Could not identify the OS. Please enter an OS Variant.");
@@ -139,7 +144,10 @@ Kirigami.Dialog {
                             id: osTextField
                             placeholderText: i18n("Select or enter an OS variant")
                             background: Item {}
-                            onTextEdited: suggestionsPopup.updateSuggestions()
+                            onTextEdited: {
+                                osField.editText = text;
+                                suggestionsPopup.updateSuggestions();
+                            }
                             onActiveFocusChanged: {
                                 if (activeFocus) {
                                     suggestionsPopup.updateSuggestions();
@@ -173,6 +181,7 @@ Kirigami.Dialog {
                                     text: modelData
                                     onClicked: {
                                         osTextField.text = modelData;
+                                        osField.editText = modelData;
                                         suggestionsPopup.close();
                                         osTextField.forceActiveFocus();
                                     }
@@ -216,8 +225,6 @@ Kirigami.Dialog {
                 value: 2
                 Layout.fillWidth: true
             }
-
-            // FormCard.FormDelegateSeparator {}
 
             FormCard.FormCheckDelegate {
                 id: enableAccel3dCheckBox

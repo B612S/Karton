@@ -6,14 +6,12 @@
 #include <linux/input-event-codes.h>
 #include <spice-client.h>
 
-#include <QHash>
-#include <QObject>
-#include <QQuickItem>
-#include <QSGNode>
-
 #include <QAudioFormat>
 #include <QAudioSink>
 #include <QIODevice>
+#include <QObject>
+#include <QQuickItem>
+#include <QSGNode>
 
 #include <memory>
 
@@ -26,12 +24,10 @@ class DomainViewer : public QQuickItem
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(Domain *domain READ domain WRITE setDomain NOTIFY domainChanged REQUIRED)
-    Q_PROPERTY(QString host MEMBER m_host NOTIFY hostChanged)
-    Q_PROPERTY(int port MEMBER m_port NOTIFY portChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
-    ~DomainViewer();
+    ~DomainViewer() override;
 
     Domain *domain() const
     {
@@ -60,37 +56,8 @@ public:
 
     Q_INVOKABLE void saveFrameToDomain();
 
-    QString host() const
-    {
-        return m_host;
-    }
-    void setHost(const QString &host)
-    {
-        if (m_host != host) {
-            m_host = host;
-            Q_EMIT hostChanged();
-        }
-    }
-
-    int port() const
-    {
-        return m_port;
-    }
-    void setPort(int port)
-    {
-        if (m_port != port) {
-            m_port = port;
-            Q_EMIT portChanged();
-        }
-    }
-
 Q_SIGNALS:
     void domainChanged();
-    void frameUpdated();
-    void connectionChanged(bool connected);
-
-    void portChanged();
-    void hostChanged();
 
 private Q_SLOTS:
     void handleHostPort(int exitCode, const QString &output);
@@ -113,24 +80,18 @@ private:
     CommandRunner *m_commandRunner;
     Domain *m_domain;
     QString m_spiceUri;
-    QString m_host;
-    int m_port;
-    QString m_password;
     bool m_connected = false;
     RenderMode m_renderMode = RenderMode::GlScanout;
 
     std::unique_ptr<SpiceDisplayRenderer> m_renderer;
 
     SpiceSession *m_session = nullptr;
-    SpiceChannel *m_display_channel = nullptr;
     SpiceInputsChannel *m_inputs_channel = nullptr;
-    SpicePlaybackChannel *m_playback_channel;
 
     int m_current_button_mask = 0;
 
-    SpiceAudio *m_audio;
-    QAudioSink *m_audioSink;
-    QIODevice *m_audioDevice;
+    QAudioSink *m_audioSink = nullptr;
+    QIODevice *m_audioDevice = nullptr;
     QAudioFormat m_audioFormat;
 
     static constexpr quint32 x11_wayland_evdev_offset = 8;
