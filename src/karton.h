@@ -70,6 +70,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
     Q_INVOKABLE bool ejectDisk(const Domain *domain);
     Q_INVOKABLE void saveConnectionUri(const QString &uri);
+    Q_INVOKABLE bool setAutostart(const Domain *domain, bool autostart);
 
 private Q_SLOTS:
     void onDomainStateChanged(const virDomainPtr domainPtr, int event, int detail);

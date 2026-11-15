@@ -183,6 +183,11 @@ When testing destructive operations, prefer domains whose names start with
   `qemu-img info -U --output=json` (cached per path; `-U` is required while a
   running VM holds the image lock) and written into the Karton metadata on the
   next configuration save.
+- Autostart is toggled from the General configuration tab through
+  `Karton::setAutostart()`; it is also read back into `DomainConfig::autostart`.
+- Application icons are installed under the reverse-DNS name
+  `org.kde.karton`, matching `org.kde.karton.desktop` and `QGuiApplication`'s
+  window icon lookup.
 - `InstallationDialog.qml` is a three-step wizard: installation source,
   resources (memory/storage/format) and system (firmware/network/CPU/
   acceleration). Keep the content of each step short; the previous single long

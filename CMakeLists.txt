@@ -55,6 +55,7 @@ find_package(KF6KirigamiAddons 1.11.0 REQUIRED)
 install(FILES
     img/karton_logo.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
+    RENAME org.kde.karton.svg
 )
 install(FILES
     org.kde.karton.desktop

@@ -380,6 +380,27 @@ bool Karton::forceStopDomain(const Domain *domain)
     return true;
 }
 
+bool Karton::setAutostart(const Domain *domain, bool autostart)
+{
+    if (!domain) {
+        return false;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainSetAutostart(domainPtr, autostart ? 1 : 0) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to change autostart for domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    const_cast<Domain *>(domain)->setAutostart(autostart);
+    return true;
+}
+
 bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 {
     if (!domain) {

@@ -6,7 +6,7 @@
 [Desktop Entry]
 Categories=System;Emulator;
 Exec=karton
-Icon=karton_logo
+Icon=org.kde.karton
 Terminal=false
 Type=Application
 

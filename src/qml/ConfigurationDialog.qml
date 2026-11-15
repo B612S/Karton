@@ -30,6 +30,7 @@ Kirigami.Dialog {
         saving = false;
         pendingName = "";
         nameField.text = domain.config.name;
+        autostartCheck.checked = domain.autostart;
         memorySpinBox.value = domain.config.maxRam;
         cpuSpinBox.value = domain.config.cpus;
         storageSpinBox.value = domain.config.maxDiskStorage;
@@ -124,6 +125,19 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
                         validator: RegularExpressionValidator {
                             regularExpression: /^[A-Za-z0-9._-]+$/
+                        }
+                    }
+
+                    FormCard.FormDelegateSeparator {}
+
+                    FormCard.FormCheckDelegate {
+                        id: autostartCheck
+                        text: i18n("Start on boot")
+                        Layout.fillWidth: true
+                        onToggled: {
+                            if (configurationDialog.domain && checked !== configurationDialog.domain.autostart) {
+                                Karton.setAutostart(configurationDialog.domain, checked);
+                            }
                         }
                     }
                 }

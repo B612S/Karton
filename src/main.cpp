@@ -61,8 +61,9 @@ int main(int argc, char *argv[])
                      i18nc("Application name", "Karton"),
                      QStringLiteral(KARTON_VERSION_STRING),
                      i18nc("Application description", "Manage and run virtual machines with ease"),
-                     KAboutLicense::GPL,
+                     KAboutLicense::GPL_V3,
                      i18nc("Copyright statement", "(C) KDE"));
+    about.setDesktopFileName(QStringLiteral("org.kde.karton"));
 
     about.addAuthor(i18nc("author name", "Aaron Rainbolt"), i18nc("author role", "Initial developer"), QStringLiteral("arraybolt3@gmail.com"));
     about.addAuthor(i18nc("author name", "Derek Lin"), i18nc("author role", "Developer"), QStringLiteral("derekhongdalin@gmail.com"));
