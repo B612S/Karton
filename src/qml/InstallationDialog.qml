@@ -50,6 +50,7 @@ Kirigami.Dialog {
             isoDiskPath: diskImageField.text,
             memoryGB: memorySpinBox.value,
             storageGB: storageSpinBox.value,
+            diskFormat: diskFormatCombo.currentText,
             cpus: cpuSpinBox.value,
             enableAccel3d: enableAccel3dCheckBox.checked
         };
@@ -291,6 +292,16 @@ Kirigami.Dialog {
                     from: 1
                     to: 2048
                     value: 4
+                    Layout.fillWidth: true
+                }
+
+                FormCard.FormDelegateSeparator {}
+
+                FormCard.FormComboBoxDelegate {
+                    id: diskFormatCombo
+                    text: i18n("Disk format:")
+                    model: ["qcow2", "raw", "vmdk"]
+                    currentIndex: 0
                     Layout.fillWidth: true
                 }
 

@@ -14,6 +14,7 @@ This project is still in early development and will likely break existing virtua
 - Displays list of existing VMs
 - Basic functionality to start, stop, and view VMs
 - Installing and deleting VMs
+- qcow2, raw and vmdk virtual disks
 
 ## Dependencies
 - Kirigami

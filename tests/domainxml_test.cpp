@@ -15,6 +15,7 @@ class DomainXmlTest : public QObject
 private Q_SLOTS:
     void readerParsesMetadataAndDisks();
     void readerStopsAtDiskBoundary();
+    void readerParsesRawDiskFormat();
     void builderUpdatesHardwareAndPreservesMetadata();
     void builderLeavesUnknownStorageUntouched();
     void builderAddsMetadataWhenMissing();
@@ -59,6 +60,7 @@ void DomainXmlTest::readerParsesMetadataAndDisks()
     QCOMPARE(info.shortOsId, QStringLiteral("example1"));
     QCOMPARE(info.osId, QStringLiteral("http://example.com/os/1"));
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.qcow2"));
+    QCOMPARE(info.diskFormat, QStringLiteral("qcow2"));
     QVERIFY(info.isoDiskPath.isEmpty());
 }
 
@@ -69,6 +71,24 @@ void DomainXmlTest::readerStopsAtDiskBoundary()
 
     QVERIFY(info.isoDiskPath.isEmpty());
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.qcow2"));
+}
+
+void DomainXmlTest::readerParsesRawDiskFormat()
+{
+    const QByteArray xml = R"(<domain type='kvm'>
+  <name>raw</name>
+  <devices>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source file='/tmp/disk.raw'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+  </devices>
+</domain>)";
+
+    const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml(xml);
+    QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.raw"));
+    QCOMPARE(info.diskFormat, QStringLiteral("raw"));
 }
 
 void DomainXmlTest::builderUpdatesHardwareAndPreservesMetadata()
@@ -146,6 +166,9 @@ void DomainXmlTest::builderGeneratesEjectDisk()
     QCOMPARE(disk.attribute(QStringLiteral("type")), QStringLiteral("file"));
     QCOMPARE(disk.attribute(QStringLiteral("device")), QStringLiteral("cdrom"));
     QVERIFY(disk.firstChildElement(QStringLiteral("source")).isNull());
+
+    const QDomElement driver = disk.firstChildElement(QStringLiteral("driver"));
+    QCOMPARE(driver.attribute(QStringLiteral("type")), QStringLiteral("raw"));
 
     const QDomElement target = disk.firstChildElement(QStringLiteral("target"));
     QCOMPARE(target.attribute(QStringLiteral("dev")), QStringLiteral("sda"));

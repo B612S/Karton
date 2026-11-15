@@ -55,10 +55,15 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
             }
         } else if (xmlReader.name() == QStringLiteral("disk")) {
             const QString device = xmlReader.attributes().value(QStringLiteral("device")).toString();
+            QString format = QStringLiteral("qcow2");
+            const QString path = retrieveDiskPath(xmlReader, &format);
             if (device == QStringLiteral("disk")) {
-                info.virtualDiskPath = retrieveDiskPath(xmlReader);
+                info.virtualDiskPath = path;
+                if (!format.isEmpty()) {
+                    info.diskFormat = format;
+                }
             } else if (device == QStringLiteral("cdrom")) {
-                info.isoDiskPath = retrieveDiskPath(xmlReader);
+                info.isoDiskPath = path;
             }
         }
     }
@@ -70,16 +75,26 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
     return info;
 }
 
-QString DomainXmlReader::retrieveDiskPath(QXmlStreamReader &xmlReader)
+QString DomainXmlReader::retrieveDiskPath(QXmlStreamReader &xmlReader, QString *format)
 {
+    QString path;
+
     while (!xmlReader.atEnd()) {
         const QXmlStreamReader::TokenType token = xmlReader.readNext();
-        if (token == QXmlStreamReader::StartElement && xmlReader.name() == QStringLiteral("source")) {
-            return xmlReader.attributes().value(QStringLiteral("file")).toString();
+        if (token == QXmlStreamReader::StartElement) {
+            if (xmlReader.name() == QStringLiteral("source")) {
+                path = xmlReader.attributes().value(QStringLiteral("file")).toString();
+            } else if (format && xmlReader.name() == QStringLiteral("driver")) {
+                const QString type = xmlReader.attributes().value(QStringLiteral("type")).toString();
+                if (!type.isEmpty()) {
+                    *format = type;
+                }
+            }
         }
         if (token == QXmlStreamReader::EndElement && xmlReader.name() == QStringLiteral("disk")) {
             break;
         }
     }
-    return QString();
+
+    return path;
 }

@@ -256,6 +256,7 @@ void Karton::refreshDomainList()
             .xmlConfigPath = xmlConfigPath,
             .isoDiskPath = reader.m_xmlInfo.isoDiskPath,
             .virtualDiskPath = reader.m_xmlInfo.virtualDiskPath,
+            .diskFormat = reader.m_xmlInfo.diskFormat,
             .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
@@ -445,6 +446,11 @@ bool Karton::createDomain(const QVariantMap &config)
         Q_EMIT errorOccurred(i18n("Invalid virtual machine configuration"));
         return false;
     }
+    const QString diskFormat = config.value(QStringLiteral("diskFormat"), QStringLiteral("qcow2")).toString();
+    if (diskFormat != QStringLiteral("qcow2") && diskFormat != QStringLiteral("raw") && diskFormat != QStringLiteral("vmdk")) {
+        Q_EMIT errorOccurred(i18n("Unsupported disk format"));
+        return false;
+    }
 
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     const QString basePath = QStringLiteral("%1/libvirt").arg(dataDir);
@@ -464,7 +470,8 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.maxDiskStorage = storageGB;
     configData.xmlConfigPath = getXmlConfigPath(name);
     configData.isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString();
-    configData.virtualDiskPath = getVirtualDiskPath(name);
+    configData.virtualDiskPath = getVirtualDiskPath(name, diskFormat);
+    configData.diskFormat = diskFormat;
     // SPICE GL scanout requires an OpenGL scene graph. With Vulkan the viewer
     // uses the primary surface path instead.
     configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool() && !vulkanRendering();
@@ -473,7 +480,7 @@ bool Karton::createDomain(const QVariantMap &config)
 
     m_commandRunner->runCommand(
         QStringLiteral("qemu-img"),
-        {QStringLiteral("create"), QStringLiteral("-f"), QStringLiteral("qcow2"), diskPath, QStringLiteral("%1G").arg(storageGB)},
+        {QStringLiteral("create"), QStringLiteral("-f"), diskFormat, diskPath, QStringLiteral("%1G").arg(storageGB)},
         [this, name, diskPath, configData](bool success, const QString &output) {
             if (!success) {
                 QFile::remove(diskPath);
@@ -654,10 +661,16 @@ QString Karton::getXmlConfigPath(const QString &domainName)
     return QStringLiteral("%1/libvirt/qemu/%2.xml").arg(configDir, domainName);
 }
 
-QString Karton::getVirtualDiskPath(const QString &domainName)
+QString Karton::getVirtualDiskPath(const QString &domainName, const QString &format)
 {
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return QStringLiteral("%1/libvirt/images/%2.qcow2").arg(dataDir, domainName);
+    QString suffix = QStringLiteral("qcow2");
+    if (format == QStringLiteral("raw")) {
+        suffix = QStringLiteral("raw");
+    } else if (format == QStringLiteral("vmdk")) {
+        suffix = QStringLiteral("vmdk");
+    }
+    return QStringLiteral("%1/libvirt/images/%2.%3").arg(dataDir, domainName, suffix);
 }
 
 int Karton::diskSizeGB(const QString &path)

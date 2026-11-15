@@ -136,7 +136,7 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
                     .diskType = QStringLiteral("file"),
                     .device = QStringLiteral("disk"),
                     .driver = QStringLiteral("qemu"),
-                    .format = QStringLiteral("qcow2"),
+                    .format = config->diskFormat(),
                     .sourcePath = config->virtualDiskPath(),
                     .target = QStringLiteral("vda"),
                     .bus = QStringLiteral("virtio"),

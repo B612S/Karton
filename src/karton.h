@@ -49,7 +49,7 @@ public:
     void refreshDomain(const virDomainPtr domainPtr);
     int searchDomain(virDomainPtr domainPtr);
     void refreshDomainList();
-    QString getVirtualDiskPath(const QString &domainName);
+    QString getVirtualDiskPath(const QString &domainName, const QString &format = QStringLiteral("qcow2"));
     QString getXmlConfigPath(const QString &domainName);
     int diskSizeGB(const QString &path);
 

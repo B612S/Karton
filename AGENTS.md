@@ -171,6 +171,10 @@ When testing destructive operations, prefer domains whose names start with
   disk. Preserve unknown metadata when rewriting XML —
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
+- New virtual disks can be created as `qcow2` (default), `raw` or `vmdk`.
+  The format is stored in the domain XML `<driver type="…"/>` and exposed as
+  `DomainConfig::diskFormat`; editing an existing domain does not convert its
+  format.
 - For domains without Karton metadata, the disk size is queried with
   `qemu-img info -U --output=json` (cached per path; `-U` is required while a
   running VM holds the image lock) and written into the Karton metadata on the

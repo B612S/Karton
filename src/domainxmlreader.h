@@ -20,6 +20,7 @@ public:
         QString shortOsId;
         QString isoDiskPath;
         QString virtualDiskPath;
+        QString diskFormat = QStringLiteral("qcow2");
         QString screenshotPreviewPath;
     };
 
@@ -30,5 +31,5 @@ public:
     XmlInfo m_xmlInfo;
 
 private:
-    static QString retrieveDiskPath(QXmlStreamReader &xmlReader);
+    static QString retrieveDiskPath(QXmlStreamReader &xmlReader, QString *format = nullptr);
 };
