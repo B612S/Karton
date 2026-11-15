@@ -45,7 +45,7 @@ fallback is not desired.
 
 ## Installation
 ```
-git clone https://invent.kde.org/sitter/karton.git
+git clone https://github.com/B612S/karton.git
 cd karton
 mkdir build
 cd build

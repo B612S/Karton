@@ -80,3 +80,6 @@ CMakeLists.txt.user*
 # --------
 *.dll
 *.exe
+
+# Local agent scratch directory
+.dsh-tmp/

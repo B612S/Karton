@@ -9,7 +9,7 @@ pkgver="${pkgver:-1.0.0}"
 pkgrel=1
 pkgdesc="Libvirt-based virtual machine manager for KDE (local build)"
 arch=('x86_64' 'aarch64')
-url="https://github.com/B612S/Karton"
+url="https://github.com/B612S/karton"
 license=('GPL-3.0-or-later')
 options=('strip' '!debug')
 
@@ -52,7 +52,6 @@ prepare() {
         --exclude='./build' \
         --exclude='./build-*' \
         --exclude='./pkg' \
-        --exclude='./Karton' \
         --exclude='./src' \
         --exclude='*.pkg.tar.*' \
         -cf - . | tar -C "$srcdir/karton" -xf -

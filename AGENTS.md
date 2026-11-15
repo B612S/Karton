@@ -279,7 +279,7 @@ When testing destructive operations, prefer domains whose names start with
 
 ## Git workflow
 
-- `origin` is the personal fork `https://github.com/B612S/Karton` and `main` is
+- `origin` is the personal fork `https://github.com/B612S/karton` and `main` is
   the working branch. `upstream` is `https://github.com/kenoi1/Karton`.
 - Push work to `origin/main` only. Do not push to `upstream`.
 - Write imperative, descriptive commit messages (e.g. "Fix storage check when
