@@ -259,6 +259,7 @@ void Karton::refreshDomainList()
             .diskFormat = reader.m_xmlInfo.diskFormat,
             .firmware = reader.m_xmlInfo.firmware,
             .networkModel = reader.m_xmlInfo.networkModel,
+            .secureBoot = reader.m_xmlInfo.secureBoot,
             .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
@@ -507,6 +508,7 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.diskFormat = diskFormat;
     configData.firmware = firmware;
     configData.networkModel = networkModel;
+    configData.secureBoot = config.value(QStringLiteral("secureBoot"), false).toBool();
     // SPICE GL scanout requires an OpenGL scene graph. With Vulkan the viewer
     // uses the primary surface path instead.
     configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool() && !vulkanRendering();

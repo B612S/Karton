@@ -15,7 +15,7 @@ This project is still in early development and will likely break existing virtua
 - Basic functionality to start, stop, and view VMs
 - Installing and deleting VMs
 - qcow2, raw and vmdk virtual disks
-- BIOS and UEFI firmware
+- BIOS and UEFI firmware, optional Secure Boot
 - Optional autostart on boot
 - User-mode networking with virtio or e1000, or no network
 

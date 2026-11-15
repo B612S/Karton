@@ -55,6 +55,9 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
             if (xmlReader.attributes().hasAttribute(QStringLiteral("screenshotPreviewPath"))) {
                 info.screenshotPreviewPath = xmlReader.attributes().value(QStringLiteral("screenshotPreviewPath")).toString();
             }
+        } else if (xmlReader.name() == QStringLiteral("loader")) {
+            const QString secure = xmlReader.attributes().value(QStringLiteral("secure")).toString();
+            info.secureBoot = secure == QStringLiteral("yes");
         } else if (xmlReader.name() == QStringLiteral("interface")) {
             parseInterface(info, xmlReader);
         } else if (xmlReader.name() == QStringLiteral("disk")) {

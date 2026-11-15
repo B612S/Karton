@@ -177,8 +177,10 @@ When testing destructive operations, prefer domains whose names start with
   format.
 - New domains can use BIOS or UEFI firmware (`DomainConfig::firmware`).
   UEFI sets `<os firmware='efi'>` and selects the non-Secure-Boot firmware
-  variant via `<loader secure='no'/>`, because the default firmware descriptor
-  otherwise rejects unsigned installers and guest drivers.
+  variant via `<loader secure='no'/>` by default, because the default firmware
+  descriptor otherwise rejects unsigned installers and guest drivers. An
+  optional Secure Boot checkbox in the installer enables
+  `<loader secure='yes'/>` instead (`DomainConfig::secureBoot`).
 - For domains without Karton metadata, the disk size is queried with
   `qemu-img info -U --output=json` (cached per path; `-U` is required while a
   running VM holds the image lock) and written into the Karton metadata on the

@@ -108,7 +108,7 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
         // otherwise pick the secure-boot variant, which rejects unsigned
         // installers and guest drivers.
         QMap<QString, QString> loader;
-        loader[QStringLiteral("secure")] = QStringLiteral("no");
+        loader[QStringLiteral("secure")] = config->secureBoot() ? QStringLiteral("yes") : QStringLiteral("no");
         addElementWithAttributes(document, os, QStringLiteral("loader"), QString(), loader);
     }
     QMap<QString, QString> boot1;

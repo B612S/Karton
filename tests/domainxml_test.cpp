@@ -18,6 +18,7 @@ private Q_SLOTS:
     void readerStopsAtDiskBoundary();
     void readerParsesRawDiskFormat();
     void readerParsesFirmware();
+    void readerParsesSecureBoot();
     void builderGeneratesUefiRawDomain();
     void builderCanDisableNetwork();
     void builderUpdatesHardwareAndPreservesMetadata();
@@ -94,6 +95,21 @@ void DomainXmlTest::readerParsesFirmware()
     QCOMPARE(info.firmware, QStringLiteral("efi"));
 }
 
+void DomainXmlTest::readerParsesSecureBoot()
+{
+    const QByteArray xml = R"(<domain type='kvm'>
+  <name>secure</name>
+  <os firmware='efi'>
+    <type arch='x86_64'>hvm</type>
+    <loader secure='yes'/>
+  </os>
+</domain>)";
+
+    const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml(xml);
+    QCOMPARE(info.firmware, QStringLiteral("efi"));
+    QVERIFY(info.secureBoot);
+}
+
 void DomainXmlTest::readerParsesRawDiskFormat()
 {
     const QByteArray xml = R"(<domain type='kvm'>
@@ -166,6 +182,17 @@ void DomainXmlTest::builderGeneratesUefiRawDomain()
         foundNetwork = true;
     }
     QVERIFY(foundNetwork);
+
+    DomainConfig::DomainConfigData secureData = data;
+    secureData.secureBoot = true;
+    DomainConfig secureConfig(secureData);
+    const QString secureXml = builder.generateXML(&secureConfig);
+    QVERIFY2(!secureXml.isEmpty(), "generateXML() returned an empty document");
+
+    QDomDocument secureDocument;
+    QVERIFY2(secureDocument.setContent(secureXml), qPrintable(secureXml));
+    const QDomElement secureOs = secureDocument.documentElement().firstChildElement(QStringLiteral("os"));
+    QCOMPARE(secureOs.firstChildElement(QStringLiteral("loader")).attribute(QStringLiteral("secure")), QStringLiteral("yes"));
 }
 
 void DomainXmlTest::builderCanDisableNetwork()

@@ -53,6 +53,7 @@ Kirigami.Dialog {
             diskFormat: diskFormatCombo.currentText,
             firmware: firmwareCombo.currentIndex === 1 ? "efi" : "bios",
             networkModel: networkModelCombo.currentIndex === 2 ? "none" : (networkModelCombo.currentIndex === 1 ? "e1000" : "virtio"),
+            secureBoot: firmwareCombo.currentIndex === 1 && secureBootCheck.checked,
             cpus: cpuSpinBox.value,
             enableAccel3d: enableAccel3dCheckBox.checked
         };
@@ -329,6 +330,15 @@ Kirigami.Dialog {
                     text: i18n("Firmware:")
                     model: ["BIOS", "UEFI"]
                     currentIndex: 0
+                    Layout.fillWidth: true
+                }
+
+                FormCard.FormDelegateSeparator {}
+
+                FormCard.FormCheckDelegate {
+                    id: secureBootCheck
+                    text: i18n("Secure Boot")
+                    enabled: firmwareCombo.currentIndex === 1
                     Layout.fillWidth: true
                 }
 
