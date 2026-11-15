@@ -58,6 +58,8 @@ Q_SIGNALS:
     void errorOccurred(const QString &errorMessage);
     void domainAdded(Domain *domain);
     void domainRemoved(Domain *domain);
+    void domainCreated(bool success, const QString &name);
+    void domainEdited(bool success, const QString &name);
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);

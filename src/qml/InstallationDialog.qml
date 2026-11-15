@@ -14,6 +14,8 @@ Kirigami.Dialog {
     id: addDomainDialog
     padding: Kirigami.Units.largeSpacing
     property bool showError: false
+    property bool creating: false
+    property string pendingName: ""
     modal: true
 
     preferredWidth: Kirigami.Units.gridUnit * 40
@@ -31,17 +33,19 @@ Kirigami.Dialog {
         Kirigami.Action {
             text: i18nc("verb, creation button for a new VM", "Create")
             icon.name: "dialog-ok"
+            enabled: !addDomainDialog.creating
             onTriggered: {
                 showError = false;
+                const name = nameField.text.trim();
                 const shortOsId = osTextField.text.trim();
-                if (nameField.text.trim() === ""
+                if (name === ""
                     || diskImageField.text.trim() === ""
                     || !OsinfoConfig.osList.includes(shortOsId)) {
                     showError = true;
                     return;
                 }
                 const domainConfig = {
-                    name: nameField.text.trim(),
+                    name: name,
                     shortOsId: shortOsId,
                     isoDiskPath: diskImageField.text,
                     memoryGB: memorySpinBox.value,
@@ -49,14 +53,34 @@ Kirigami.Dialog {
                     cpus: cpuSpinBox.value,
                     enableAccel3d: enableAccel3dCheckBox.checked
                 };
+
+                addDomainDialog.pendingName = name;
+                addDomainDialog.creating = true;
                 if (!Karton.createDomain(domainConfig)) {
+                    addDomainDialog.creating = false;
+                    addDomainDialog.pendingName = "";
                     return;
                 }
-                showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Created VM: %1", nameField.text));
-                addDomainDialog.close();
+                applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Creating VM: %1", name));
             }
         }
     ]
+
+    Connections {
+        target: Karton
+        function onDomainCreated(success, name) {
+            if (name !== addDomainDialog.pendingName) {
+                return;
+            }
+
+            addDomainDialog.creating = false;
+            addDomainDialog.pendingName = "";
+            if (success) {
+                addDomainDialog.close();
+                applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Created VM: %1", name));
+            }
+        }
+    }
 
 
     ColumnLayout {

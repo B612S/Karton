@@ -30,3 +30,23 @@ target_link_libraries(karton-xml-tests PRIVATE
 )
 
 add_test(NAME karton-xml-tests COMMAND karton-xml-tests)
+
+add_executable(karton-commandrunner-tests
+    commandrunner_test.cpp
+    ${CMAKE_BINARY_DIR}/src/karton_debug.cpp
+    ${CMAKE_SOURCE_DIR}/src/commandrunner.cpp
+)
+
+set_target_properties(karton-commandrunner-tests PROPERTIES AUTOMOC ON)
+
+target_include_directories(karton-commandrunner-tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_BINARY_DIR}/src
+)
+
+target_link_libraries(karton-commandrunner-tests PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+add_test(NAME karton-commandrunner-tests COMMAND karton-commandrunner-tests)

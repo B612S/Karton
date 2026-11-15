@@ -37,7 +37,7 @@ during development or testing must pass `-c <same URI>` (usually
 | `src/libvirtmonitor.*`, `src/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `src/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `src/qml/` | Kirigami QML pages and dialogs. |
-| `tests/` | QtTest-based unit tests for the XML parser/builder. |
+| `tests/` | QtTest-based unit tests for the XML parser/builder and command runner. |
 
 QML sources are compiled into the binary by `ecm_add_qml_module()` under the URI
 `org.kde.karton`. When adding a QML file, add it to the `ecm_target_qml_sources()`
@@ -89,8 +89,9 @@ Run the automated tests with:
 ctest --test-dir build --output-on-failure
 ```
 
-They currently cover the domain XML parser and builder. A build plus a manual
-smoke test is still the baseline for UI changes. Use a throwaway domain so nothing important is touched:
+They currently cover the domain XML parser/builder and the asynchronous command
+runner. A build plus a manual smoke test is still the baseline for UI changes.
+Use a throwaway domain so nothing important is touched:
 
 ```sh
 qemu-img create -f qcow2 ~/.local/share/libvirt/images/agent-test.qcow2 2G
@@ -150,10 +151,14 @@ When testing destructive operations, prefer domains whose names start with
   The event callback emits synchronously on the GUI thread; keep handlers cheap
   and do not block.
 - `CommandRunner::runCommand()` starts a program with an explicit argument list
-  (no shell), so it does not support pipes, globbing, or shell escape
-  sequences. It only reports whether the process *started*; use
-  `runCommandAndWait()` when you need the exit code, or `commandFinished` for
-  the asynchronous result.
+  (no shell) and invokes a callback with the exit status and output. It does not
+  support pipes, globbing, or shell escape sequences. Use
+  `runCommandAndWait()` only for short commands where blocking is acceptable
+  (currently cached `qemu-img info` queries). VM creation and disk resizing use
+  the asynchronous path and report completion through `domainCreated` /
+  `domainEdited`.
+- The QML dialogs keep themselves open while an asynchronous create/edit is in
+  flight; do not close them optimistically after calling `Karton`.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c qemu:///session` to match the application's

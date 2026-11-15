@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QObject>
+#include <QPointer>
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QSGRendererInterface>
@@ -454,28 +455,38 @@ bool Karton::createDomain(const QVariantMap &config)
     // uses the primary surface path instead.
     configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool() && !vulkanRendering();
 
-    DomainConfig domainConfig(configData);
+    const QString diskPath = configData.virtualDiskPath;
 
-    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
-                                            {QStringLiteral("create"),
-                                             QStringLiteral("-f"),
-                                             QStringLiteral("qcow2"),
-                                             domainConfig.virtualDiskPath(),
-                                             QStringLiteral("%1G").arg(domainConfig.maxDiskStorage())})) {
-        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain", "Failed to create disk image for domain: %1", name));
-        return false;
-    }
+    m_commandRunner->runCommand(
+        QStringLiteral("qemu-img"),
+        {QStringLiteral("create"), QStringLiteral("-f"), QStringLiteral("qcow2"), diskPath, QStringLiteral("%1G").arg(storageGB)},
+        [this, name, diskPath, configData](bool success, const QString &output) {
+            if (!success) {
+                QFile::remove(diskPath);
+                const QString errorMsg =
+                    i18nc("%1 is the name of the domain, %2 is the error message", "Failed to create disk image for domain %1: %2", name, output);
+                qCWarning(KARTON_DEBUG) << errorMsg;
+                Q_EMIT errorOccurred(errorMsg);
+                Q_EMIT domainCreated(false, name);
+                return;
+            }
 
-    DomainXmlBuilder builder;
-    if (!builder.setupDomain(m_conn, &domainConfig)) {
-        QFile::remove(domainConfig.virtualDiskPath());
-        qCWarning(KARTON_DEBUG) << "Failed to define domain:" << name;
-        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain", "Failed to create domain: %1", name));
-        return false;
-    }
+            DomainConfig domainConfig(configData);
+            DomainXmlBuilder builder;
+            if (!builder.setupDomain(m_conn, &domainConfig)) {
+                QFile::remove(diskPath);
+                const QString errorMsg = i18nc("%1 is the name of the domain", "Failed to create domain: %1", name);
+                qCWarning(KARTON_DEBUG) << errorMsg;
+                Q_EMIT errorOccurred(errorMsg);
+                Q_EMIT domainCreated(false, name);
+                return;
+            }
 
-    qCInfo(KARTON_DEBUG) << "Successfully created domain:" << name;
-    refreshDomainList();
+            qCInfo(KARTON_DEBUG) << "Successfully created domain:" << name;
+            refreshDomainList();
+            Q_EMIT domainCreated(true, name);
+        });
+
     return true;
 }
 
@@ -547,39 +558,34 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
         return false;
     }
 
-    // Grow the disk before redefining the domain. Growing is safe even if the
-    // subsequent define fails, while the opposite order would leave the config
-    // and the disk out of sync.
-    if (storageKnown && newStorageGB > oldStorageGB) {
-        if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
-                                                {QStringLiteral("resize"), domainConfig->virtualDiskPath(), QStringLiteral("%1G").arg(newStorageGB)})) {
-            const QString errorMsg = i18nc("%1 is the name of the domain", "Failed to resize disk for domain: %1", domainConfig->name());
+    const QString oldName = domainConfig->name();
+
+    // Redefine the persistent XML, then rename if needed. Renaming must happen
+    // separately: redefining the XML with a different <name> but the same UUID
+    // is rejected by libvirt as a UUID conflict.
+    const auto applyXml = [this, xmlString, newName, oldName](Domain *target) -> bool {
+        if (!target) {
+            Q_EMIT errorOccurred(i18n("The virtual machine was removed"));
+            return false;
+        }
+
+        virDomainPtr domainPtr = target->domainPtr();
+        virDomainPtr redefined = virDomainDefineXML(m_conn, xmlString.toUtf8().constData());
+        if (!redefined) {
+            const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                           "Failed to update configuration for domain %1: %2",
+                                           oldName,
+                                           QString::fromUtf8(virGetLastErrorMessage()));
             qCWarning(KARTON_DEBUG) << errorMsg;
             Q_EMIT errorOccurred(errorMsg);
             return false;
         }
-        m_diskSizeCache.remove(domainConfig->virtualDiskPath());
-    }
+        virDomainFree(redefined);
 
-    virDomainPtr redefined = virDomainDefineXML(m_conn, xmlString.toUtf8().constData());
-    if (!redefined) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to update configuration for domain %1: %2",
-                                       domainConfig->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
-        qCWarning(KARTON_DEBUG) << errorMsg;
-        Q_EMIT errorOccurred(errorMsg);
-        return false;
-    }
-    virDomainFree(redefined);
-
-    // Renaming must happen separately: redefining the XML with a different
-    // <name> but the same UUID is rejected by libvirt as a UUID conflict.
-    if (newName != domainConfig->name()) {
-        if (virDomainRename(domainPtr, newName.toUtf8().constData(), 0) < 0) {
+        if (newName != oldName && virDomainRename(domainPtr, newName.toUtf8().constData(), 0) < 0) {
             const QString errorMsg = i18nc("%1 is the old name, %2 is the new name, %3 is the error message",
                                            "Failed to rename domain %1 to %2: %3",
-                                           domainConfig->name(),
+                                           oldName,
                                            newName,
                                            QString::fromUtf8(virGetLastErrorMessage()));
             qCWarning(KARTON_DEBUG) << errorMsg;
@@ -587,13 +593,45 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
             refreshDomainList();
             return false;
         }
+
+        qCInfo(KARTON_DEBUG) << "Successfully updated configuration for domain:" << newName;
+
+        // Reload the paths (a rename also changes the XML config file path).
+        refreshDomainList();
+        return true;
+    };
+
+    // Grow the disk before redefining the domain. Growing is safe even if the
+    // subsequent define fails, while the opposite order would leave the config
+    // and the disk out of sync. The resize runs asynchronously so the GUI stays
+    // responsive.
+    if (storageKnown && newStorageGB > oldStorageGB) {
+        const QString diskPath = domainConfig->virtualDiskPath();
+        QPointer<Domain> guard(const_cast<Domain *>(domain));
+
+        m_commandRunner->runCommand(
+            QStringLiteral("qemu-img"),
+            {QStringLiteral("resize"), diskPath, QStringLiteral("%1G").arg(newStorageGB)},
+            [this, guard, applyXml, newName, diskPath](bool success, const QString &output) {
+                if (!success) {
+                    const QString errorMsg =
+                        i18nc("%1 is the name of the domain, %2 is the error message", "Failed to resize disk for domain %1: %2", newName, output);
+                    qCWarning(KARTON_DEBUG) << errorMsg;
+                    Q_EMIT errorOccurred(errorMsg);
+                    Q_EMIT domainEdited(false, newName);
+                    return;
+                }
+
+                m_diskSizeCache.remove(diskPath);
+                const bool applied = applyXml(guard.data());
+                Q_EMIT domainEdited(applied, newName);
+            });
+        return true;
     }
 
-    qCInfo(KARTON_DEBUG) << "Successfully updated configuration for domain:" << newName;
-
-    // Reload the paths (a rename also changes the XML config file path).
-    refreshDomainList();
-    return true;
+    const bool success = applyXml(const_cast<Domain *>(domain));
+    Q_EMIT domainEdited(success, newName);
+    return success;
 }
 
 QString Karton::getXmlConfigPath(const QString &domainName)

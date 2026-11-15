@@ -4,33 +4,40 @@
 #include "commandrunner.h"
 
 #include <QProcess>
+#include <QTimer>
 
 #include "karton_debug.h"
 
-bool CommandRunner::runCommand(const QString &program, const QStringList &arguments)
+void CommandRunner::runCommand(const QString &program, const QStringList &arguments, CommandCallback callback)
 {
     qCDebug(KARTON_DEBUG) << "Running command:" << program << arguments;
 
     auto *process = new QProcess(this);
-    connect(process, &QProcess::finished, this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+    connect(process, &QProcess::finished, this, [process, callback](int exitCode, QProcess::ExitStatus exitStatus) {
         const QString output = QString::fromLocal8Bit(process->readAllStandardOutput());
-        if (exitStatus != QProcess::NormalExit || exitCode != 0) {
-            const QString error = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
-            if (!error.isEmpty()) {
-                qCWarning(KARTON_DEBUG) << "Command failed:" << process->program() << error;
-            }
+        const QString error = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
+        const bool success = exitStatus == QProcess::NormalExit && exitCode == 0;
+
+        if (!success && !error.isEmpty()) {
+            qCWarning(KARTON_DEBUG) << "Command failed:" << process->program() << error;
         }
+
         process->deleteLater();
-        Q_EMIT commandFinished(exitCode, output);
+        callback(success, success ? output : (error.isEmpty() ? output : error));
     });
 
     process->start(program, arguments);
     if (!process->waitForStarted()) {
-        qCWarning(KARTON_DEBUG) << "Failed to start command:" << program;
+        const QString error = process->errorString();
+        qCWarning(KARTON_DEBUG) << "Failed to start command:" << program << error;
         process->deleteLater();
-        return false;
+
+        // Report the failure after the caller has returned and had a chance to
+        // set up its own pending state.
+        QTimer::singleShot(0, this, [callback, error] {
+            callback(false, error);
+        });
     }
-    return true;
 }
 
 bool CommandRunner::runCommandAndWait(const QString &program, const QStringList &arguments, QString *output)

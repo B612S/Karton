@@ -16,6 +16,8 @@ Kirigami.Dialog {
     modal: true
 
     property Domain domain: null
+    property bool saving: false
+    property string pendingName: ""
 
     preferredWidth: Kirigami.Units.gridUnit * 32
     preferredHeight: Kirigami.Units.gridUnit * 22
@@ -25,6 +27,8 @@ Kirigami.Dialog {
             return;
         }
         categoryList.currentIndex = 0;
+        saving = false;
+        pendingName = "";
         nameField.text = domain.config.name;
         memorySpinBox.value = domain.config.maxRam;
         cpuSpinBox.value = domain.config.cpus;
@@ -36,6 +40,7 @@ Kirigami.Dialog {
         Kirigami.Action {
             text: i18nc("verb, save VM configuration changes", "Save")
             icon.name: "dialog-ok"
+            enabled: !configurationDialog.saving
             onTriggered: {
                 if (!configurationDialog.domain || nameField.text.trim() === "") {
                     return;
@@ -46,13 +51,32 @@ Kirigami.Dialog {
                     storageGB: storageSpinBox.value,
                     cpus: cpuSpinBox.value
                 };
-                if (Karton.editDomain(configurationDialog.domain, domainConfig)) {
-                    showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Updated configuration for VM: %1", domainConfig.name));
-                    configurationDialog.close();
+
+                configurationDialog.pendingName = domainConfig.name;
+                configurationDialog.saving = true;
+                if (!Karton.editDomain(configurationDialog.domain, domainConfig)) {
+                    configurationDialog.saving = false;
+                    configurationDialog.pendingName = "";
                 }
             }
         }
     ]
+
+    Connections {
+        target: Karton
+        function onDomainEdited(success, name) {
+            if (name !== configurationDialog.pendingName) {
+                return;
+            }
+
+            configurationDialog.saving = false;
+            configurationDialog.pendingName = "";
+            if (success) {
+                configurationDialog.close();
+                applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Updated configuration for VM: %1", name));
+            }
+        }
+    }
 
     RowLayout {
         spacing: 0

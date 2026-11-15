@@ -7,21 +7,21 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 class CommandRunner : public QObject
 {
     Q_OBJECT
 
 public:
     using QObject::QObject;
+    using CommandCallback = std::function<void(bool success, const QString &output)>;
 
-    // Starts a command without blocking. commandFinished() is emitted when it
-    // exits and reports whether the process could be started.
-    bool runCommand(const QString &program, const QStringList &arguments);
+    // Starts a command without blocking. The callback runs on the object's
+    // thread with the exit status and stdout (or stderr on failure).
+    void runCommand(const QString &program, const QStringList &arguments, CommandCallback callback);
 
     // Runs a command and waits for it to finish. Returns true only when the
     // process started and exited with code 0.
     bool runCommandAndWait(const QString &program, const QStringList &arguments, QString *output = nullptr);
-
-Q_SIGNALS:
-    void commandFinished(int exitCode, const QString &output);
 };
