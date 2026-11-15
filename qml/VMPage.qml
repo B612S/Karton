@@ -76,6 +76,11 @@ Kirigami.ScrollablePage {
             onTriggered: snapshotsDialog.open()
         },
         Kirigami.Action {
+            text: i18n("PCI Devices")
+            icon.name: "computer"
+            onTriggered: pciDialog.open()
+        },
+        Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
             icon.name: "delete"
             visible: !isRunning
@@ -125,6 +130,16 @@ Kirigami.ScrollablePage {
     SnapshotsDialog {
         id: snapshotsDialog
         domain: root.domain
+    }
+
+    PciDevicesDialog {
+        id: pciDialog
+        domain: root.domain
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+P"
+        onActivated: pciDialog.open()
     }
 
     ColumnLayout {

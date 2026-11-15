@@ -31,6 +31,7 @@ This project is still in early development and will likely break existing virtua
 - Libvirt network management: list, start/stop, autostart, NAT creation and VM NIC attach/detach
 - Runtime USB passthrough from host to running VMs
 - VM snapshots: create, revert and delete internal snapshots
+- Runtime PCI passthrough with IOMMU group information and warnings
 
 ## Configuration
 The connection URI can be changed in the Connection Settings dialog (restart

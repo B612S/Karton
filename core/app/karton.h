@@ -86,6 +86,10 @@ public Q_SLOTS:
     Q_INVOKABLE bool createSnapshot(const Domain *domain, const QString &name, const QString &description, bool includeMemory);
     Q_INVOKABLE bool deleteSnapshot(const Domain *domain, const QString &name);
     Q_INVOKABLE bool revertSnapshot(const Domain *domain, const QString &name);
+    Q_INVOKABLE QVariantList pciDevices() const;
+    Q_INVOKABLE QVariantList domainPciDevices(const Domain *domain) const;
+    Q_INVOKABLE bool attachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
+    Q_INVOKABLE bool detachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
 
 Q_SIGNALS:
     void networksChanged();

@@ -199,6 +199,10 @@ When testing destructive operations, prefer domains whose names start with
   `qml/SnapshotsDialog.qml`. Internal snapshots of a running VM must include
   memory; the dialog enables that by default and the backend rejects a
   memory-less running snapshot with a clear error.
+- Runtime PCI passthrough is exposed through `Karton::pciDevices()`,
+  `domainPciDevices()`, `attachPciDevice()` and `detachPciDevice()`, with the UI
+  in `qml/PciDevicesDialog.qml`. The dialog warns that the device is detached
+  from the host and only enables Attach for devices with an IOMMU group.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's
