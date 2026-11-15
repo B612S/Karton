@@ -33,6 +33,7 @@ This project is still in early development and will likely break existing virtua
 - VM snapshots: create, revert and delete internal snapshots
 - Runtime PCI passthrough with IOMMU group information and warnings
 - VM cloning with copied disk images and regenerated UUID/MAC
+- Runtime disk and ISO hotplug
 
 ## Configuration
 The connection URI can be changed in the Connection Settings dialog (restart

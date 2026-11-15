@@ -92,6 +92,11 @@ public Q_SLOTS:
     Q_INVOKABLE bool attachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
     Q_INVOKABLE bool detachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
     Q_INVOKABLE bool cloneDomain(const Domain *domain, const QString &newName);
+    Q_INVOKABLE QVariantList domainDisks(const Domain *domain) const;
+    Q_INVOKABLE bool addDisk(const Domain *domain, int sizeGB, const QString &format);
+    Q_INVOKABLE bool attachDiskImage(const Domain *domain, const QString &path, const QString &format);
+    Q_INVOKABLE bool attachIso(const Domain *domain, const QString &path);
+    Q_INVOKABLE bool detachDisk(const Domain *domain, const QString &targetDev);
 
 Q_SIGNALS:
     void networksChanged();

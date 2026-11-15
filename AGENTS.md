@@ -208,6 +208,10 @@ When testing destructive operations, prefer domains whose names start with
   convert -U`, strips the UUID, MAC addresses, hostdevs, NVRAM and Karton
   metadata, and defines a stopped clone. The copy runs asynchronously through
   `CommandRunner`; partial destination files are removed on failure.
+- Disk/ISO hotplug is exposed through `Karton::domainDisks()`, `addDisk()`,
+  `attachDiskImage()`, `attachIso()` and `detachDisk()`, with the UI in
+  `qml/StorageDialog.qml`. New disks are created with `qemu-img create` and
+  attached as virtio devices; ISO images are attached as read-only SATA cdroms.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's

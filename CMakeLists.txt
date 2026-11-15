@@ -134,6 +134,7 @@ ecm_target_qml_sources(karton
     qml/SnapshotsDialog.qml
     qml/PciDevicesDialog.qml
     qml/CloneDialog.qml
+    qml/StorageDialog.qml
 )
 
 ecm_qt_declare_logging_category(

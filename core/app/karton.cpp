@@ -1746,6 +1746,314 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
     return true;
 }
 
+static QString normaliseDiskFormat(const QString &format)
+{
+    const QString lower = format.trimmed().toLower();
+    if (lower == QStringLiteral("raw") || lower == QStringLiteral("vmdk") || lower == QStringLiteral("qcow2")) {
+        return lower;
+    }
+    return QStringLiteral("qcow2");
+}
+
+static QString nextDiskTarget(const Domain *domain, const QString &prefix)
+{
+    if (!domain || !domain->domainPtr()) {
+        return {};
+    }
+
+    QSet<QString> usedTargets;
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    if (xml) {
+        QDomDocument document;
+        if (document.setContent(QString::fromUtf8(xml))) {
+            const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+            for (int i = 0; i < disks.count(); ++i) {
+                const QDomElement target = disks.at(i).toElement().firstChildElement(QStringLiteral("target"));
+                if (!target.isNull()) {
+                    usedTargets.insert(target.attribute(QStringLiteral("dev")));
+                }
+            }
+        }
+        free(xml);
+    }
+
+    for (char letter = 'b'; letter <= 'z'; ++letter) {
+        const QString candidate = prefix + QLatin1Char(letter);
+        if (!usedTargets.contains(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+static QString diskXmlForTarget(virDomainPtr domain, const QString &targetDev, unsigned int xmlFlags)
+{
+    if (!domain || targetDev.isEmpty()) {
+        return {};
+    }
+
+    char *xml = virDomainGetXMLDesc(domain, xmlFlags);
+    if (!xml) {
+        return {};
+    }
+
+    QString deviceXml;
+    QDomDocument document;
+    if (document.setContent(QString::fromUtf8(xml))) {
+        const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+        for (int i = 0; i < disks.count(); ++i) {
+            const QDomElement element = disks.at(i).toElement();
+            const QDomElement target = element.firstChildElement(QStringLiteral("target"));
+            if (target.attribute(QStringLiteral("dev")) == targetDev) {
+                QDomDocument deviceDocument;
+                deviceDocument.appendChild(deviceDocument.importNode(element, true));
+                deviceXml = deviceDocument.toString();
+                break;
+            }
+        }
+    }
+
+    free(xml);
+    return deviceXml;
+}
+
+QVariantList Karton::domainDisks(const Domain *domain) const
+{
+    QVariantList result;
+    if (!domain || !domain->domainPtr()) {
+        return result;
+    }
+
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    if (!xml) {
+        return result;
+    }
+
+    QDomDocument document;
+    if (document.setContent(QString::fromUtf8(xml))) {
+        const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+        for (int i = 0; i < disks.count(); ++i) {
+            const QDomElement element = disks.at(i).toElement();
+            const QDomElement source = element.firstChildElement(QStringLiteral("source"));
+            const QDomElement target = element.firstChildElement(QStringLiteral("target"));
+            const QDomElement driver = element.firstChildElement(QStringLiteral("driver"));
+            const QString sourcePath = source.attribute(QStringLiteral("file"));
+
+            QVariantMap info;
+            info.insert(QStringLiteral("device"), element.attribute(QStringLiteral("device")));
+            info.insert(QStringLiteral("type"), element.attribute(QStringLiteral("type")));
+            info.insert(QStringLiteral("target"), target.attribute(QStringLiteral("dev")));
+            info.insert(QStringLiteral("bus"), target.attribute(QStringLiteral("bus")));
+            info.insert(QStringLiteral("source"), sourcePath.isEmpty() ? source.attribute(QStringLiteral("dev")) : sourcePath);
+            info.insert(QStringLiteral("format"), driver.attribute(QStringLiteral("type")));
+            info.insert(QStringLiteral("readonly"), !element.firstChildElement(QStringLiteral("readonly")).isNull());
+            result.append(info);
+        }
+    }
+
+    free(xml);
+    return result;
+}
+
+bool Karton::addDisk(const Domain *domain, int sizeGB, const QString &format)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    if (sizeGB < 1 || sizeGB > 2048) {
+        Q_EMIT errorOccurred(i18n("Disk size must be between 1 and 2048 GB."));
+        return false;
+    }
+
+    const QString diskFormat = normaliseDiskFormat(format);
+    const QString targetDev = nextDiskTarget(domain, QStringLiteral("vd"));
+    if (targetDev.isEmpty()) {
+        Q_EMIT errorOccurred(i18n("No free virtio disk target is available."));
+        return false;
+    }
+
+    const QString domainName = domain->config()->name();
+    const QString path = getVirtualDiskPath(domainName + QLatin1Char('-') + targetDev, diskFormat);
+    if (QFile::exists(path)) {
+        Q_EMIT errorOccurred(i18nc("%1 is a file path", "The disk path already exists: %1", path));
+        return false;
+    }
+
+    QString output;
+    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
+                                            {QStringLiteral("create"), QStringLiteral("-f"), diskFormat, path, QStringLiteral("%1G").arg(sizeGB)},
+                                            &output)) {
+        Q_EMIT errorOccurred(i18nc("%1 is a disk path, %2 is the error", "Failed to create disk %1: %2", path, output));
+        return false;
+    }
+
+    const QString xml = QStringLiteral(
+                            "<disk type='file' device='disk'>"
+                            "<driver name='qemu' type='%1'/>"
+                            "<source file='%2'/>"
+                            "<target dev='%3' bus='virtio'/>"
+                            "</disk>")
+                            .arg(diskFormat, path, targetDev);
+
+    bool success = false;
+    if (domain->isActive()) {
+        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
+            Q_EMIT errorOccurred(
+                i18nc("%1 is a disk path, %2 is the error", "Failed to attach disk %1: %2", path, QString::fromUtf8(virGetLastErrorMessage())));
+        } else {
+            success = true;
+        }
+        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
+            qCWarning(KARTON_DEBUG) << "Failed to persist disk:" << virGetLastErrorMessage();
+        }
+    } else if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) == 0) {
+        success = true;
+    } else {
+        Q_EMIT errorOccurred(i18nc("%1 is a disk path, %2 is the error", "Failed to attach disk %1: %2", path, QString::fromUtf8(virGetLastErrorMessage())));
+    }
+
+    if (!success) {
+        QFile::remove(path);
+        return false;
+    }
+
+    refreshDomain(domain->domainPtr());
+    return true;
+}
+
+bool Karton::attachDiskImage(const Domain *domain, const QString &path, const QString &format)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    if (!QFileInfo::exists(path)) {
+        Q_EMIT errorOccurred(i18nc("%1 is a file path", "Disk image does not exist: %1", path));
+        return false;
+    }
+
+    const QString diskFormat = normaliseDiskFormat(format);
+    const QString targetDev = nextDiskTarget(domain, QStringLiteral("vd"));
+    if (targetDev.isEmpty()) {
+        Q_EMIT errorOccurred(i18n("No free virtio disk target is available."));
+        return false;
+    }
+
+    const QString xml = QStringLiteral(
+                            "<disk type='file' device='disk'>"
+                            "<driver name='qemu' type='%1'/>"
+                            "<source file='%2'/>"
+                            "<target dev='%3' bus='virtio'/>"
+                            "</disk>")
+                            .arg(diskFormat, path, targetDev);
+
+    bool success = false;
+    if (domain->isActive()) {
+        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
+            Q_EMIT errorOccurred(
+                i18nc("%1 is a disk path, %2 is the error", "Failed to attach disk %1: %2", path, QString::fromUtf8(virGetLastErrorMessage())));
+        } else {
+            success = true;
+        }
+        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
+            qCWarning(KARTON_DEBUG) << "Failed to persist disk:" << virGetLastErrorMessage();
+        }
+    } else if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) == 0) {
+        success = true;
+    } else {
+        Q_EMIT errorOccurred(i18nc("%1 is a disk path, %2 is the error", "Failed to attach disk %1: %2", path, QString::fromUtf8(virGetLastErrorMessage())));
+    }
+
+    if (success) {
+        refreshDomain(domain->domainPtr());
+    }
+    return success;
+}
+
+bool Karton::attachIso(const Domain *domain, const QString &path)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    if (!QFileInfo::exists(path)) {
+        Q_EMIT errorOccurred(i18nc("%1 is a file path", "ISO image does not exist: %1", path));
+        return false;
+    }
+
+    const QString targetDev = nextDiskTarget(domain, QStringLiteral("sd"));
+    if (targetDev.isEmpty()) {
+        Q_EMIT errorOccurred(i18n("No free SATA target is available for the ISO."));
+        return false;
+    }
+
+    const QString xml = QStringLiteral(
+                            "<disk type='file' device='cdrom'>"
+                            "<driver name='qemu' type='raw'/>"
+                            "<source file='%1'/>"
+                            "<target dev='%2' bus='sata'/>"
+                            "<readonly/>"
+                            "</disk>")
+                            .arg(path, targetDev);
+
+    bool success = false;
+    if (domain->isActive()) {
+        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
+            Q_EMIT errorOccurred(i18nc("%1 is an ISO path, %2 is the error", "Failed to attach ISO %1: %2", path, QString::fromUtf8(virGetLastErrorMessage())));
+        } else {
+            success = true;
+        }
+        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
+            qCWarning(KARTON_DEBUG) << "Failed to persist ISO:" << virGetLastErrorMessage();
+        }
+    } else if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) == 0) {
+        success = true;
+    } else {
+        Q_EMIT errorOccurred(i18nc("%1 is an ISO path, %2 is the error", "Failed to attach ISO %1: %2", path, QString::fromUtf8(virGetLastErrorMessage())));
+    }
+
+    if (success) {
+        refreshDomain(domain->domainPtr());
+    }
+    return success;
+}
+
+bool Karton::detachDisk(const Domain *domain, const QString &targetDev)
+{
+    if (!domain || !domain->domainPtr() || targetDev.isEmpty()) {
+        return false;
+    }
+
+    const QString liveXml = diskXmlForTarget(domain->domainPtr(), targetDev, 0);
+    const QString configXml = diskXmlForTarget(domain->domainPtr(), targetDev, VIR_DOMAIN_XML_INACTIVE);
+    if (liveXml.isEmpty() && configXml.isEmpty()) {
+        Q_EMIT errorOccurred(i18nc("%1 is a disk target", "No disk with target %1 was found.", targetDev));
+        return false;
+    }
+
+    bool success = true;
+    if (domain->isActive() && !liveXml.isEmpty()) {
+        if (virDomainDetachDeviceFlags(domain->domainPtr(), liveXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
+            Q_EMIT errorOccurred(
+                i18nc("%1 is a disk target, %2 is the error", "Failed to detach disk %1: %2", targetDev, QString::fromUtf8(virGetLastErrorMessage())));
+            success = false;
+        }
+    }
+
+    if (!configXml.isEmpty()) {
+        if (virDomainDetachDeviceFlags(domain->domainPtr(), configXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
+            Q_EMIT errorOccurred(i18nc("%1 is a disk target, %2 is the error",
+                                       "Failed to detach persistent disk %1: %2",
+                                       targetDev,
+                                       QString::fromUtf8(virGetLastErrorMessage())));
+            success = false;
+        }
+    }
+
+    if (success) {
+        refreshDomain(domain->domainPtr());
+    }
+    return success;
+}
+
 bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 {
     if (!domain) {

@@ -86,6 +86,11 @@ Kirigami.ScrollablePage {
             onTriggered: cloneDialog.open()
         },
         Kirigami.Action {
+            text: i18n("Storage")
+            icon.name: "drive-harddisk"
+            onTriggered: storageDialog.open()
+        },
+        Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
             icon.name: "delete"
             visible: !isRunning
@@ -147,6 +152,11 @@ Kirigami.ScrollablePage {
         domain: root.domain
     }
 
+    StorageDialog {
+        id: storageDialog
+        domain: root.domain
+    }
+
     Shortcut {
         sequence: "Ctrl+Shift+P"
         onActivated: pciDialog.open()
@@ -155,6 +165,11 @@ Kirigami.ScrollablePage {
     Shortcut {
         sequence: "Ctrl+Shift+C"
         onActivated: cloneDialog.open()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+D"
+        onActivated: storageDialog.open()
     }
 
     ColumnLayout {
