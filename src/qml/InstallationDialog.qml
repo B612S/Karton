@@ -10,59 +10,92 @@ import org.kde.kirigamiaddons.formcard 1.0 as FormCard
 import org.kde.karton
 
 Kirigami.Dialog {
-    title: i18n("Add New Virtual Machine")
     id: addDomainDialog
+
+    title: i18n("Add New Virtual Machine")
     padding: Kirigami.Units.largeSpacing
     property bool showError: false
     property bool creating: false
     property string pendingName: ""
+    property int step: 0
+    readonly property int lastStep: 1
     modal: true
 
     preferredWidth: Kirigami.Units.gridUnit * 40
-    preferredHeight: Kirigami.Units.gridUnit * 36
+    preferredHeight: Kirigami.Units.gridUnit * 27
 
     function getShortOsId(path) {
         return OsinfoConfig.getShortIdFromId(OsinfoConfig.getOsIdFromDisk(path));
     }
 
+    function validateSource() {
+        const shortOsId = osTextField.text.trim();
+        const valid = nameField.text.trim() !== ""
+            && diskImageField.text.trim() !== ""
+            && OsinfoConfig.osList.includes(shortOsId);
+        showError = !valid;
+        return valid;
+    }
+
+    function createVm() {
+        if (!validateSource()) {
+            step = 0;
+            return;
+        }
+
+        const name = nameField.text.trim();
+        const domainConfig = {
+            name: name,
+            shortOsId: osTextField.text.trim(),
+            isoDiskPath: diskImageField.text,
+            memoryGB: memorySpinBox.value,
+            storageGB: storageSpinBox.value,
+            cpus: cpuSpinBox.value,
+            enableAccel3d: enableAccel3dCheckBox.checked
+        };
+
+        pendingName = name;
+        creating = true;
+        if (!Karton.createDomain(domainConfig)) {
+            creating = false;
+            pendingName = "";
+            return;
+        }
+        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Creating VM: %1", name));
+    }
+
     onOpened: {
-        nameField.forceActiveFocus()
+        step = 0;
+        showError = false;
+        nameField.forceActiveFocus();
     }
 
     customFooterActions: [
         Kirigami.Action {
-            text: i18nc("verb, creation button for a new VM", "Create")
-            icon.name: "dialog-ok"
+            text: i18nc("verb, return to the previous wizard step", "Back")
+            icon.name: "go-previous"
+            visible: addDomainDialog.step > 0
+            enabled: !addDomainDialog.creating
+            onTriggered: addDomainDialog.step = Math.max(0, addDomainDialog.step - 1)
+        },
+        Kirigami.Action {
+            text: i18nc("verb, continue to the next wizard step", "Next")
+            icon.name: "go-next"
+            visible: addDomainDialog.step < addDomainDialog.lastStep
             enabled: !addDomainDialog.creating
             onTriggered: {
-                showError = false;
-                const name = nameField.text.trim();
-                const shortOsId = osTextField.text.trim();
-                if (name === ""
-                    || diskImageField.text.trim() === ""
-                    || !OsinfoConfig.osList.includes(shortOsId)) {
-                    showError = true;
+                if (addDomainDialog.step === 0 && !addDomainDialog.validateSource()) {
                     return;
                 }
-                const domainConfig = {
-                    name: name,
-                    shortOsId: shortOsId,
-                    isoDiskPath: diskImageField.text,
-                    memoryGB: memorySpinBox.value,
-                    storageGB: storageSpinBox.value,
-                    cpus: cpuSpinBox.value,
-                    enableAccel3d: enableAccel3dCheckBox.checked
-                };
-
-                addDomainDialog.pendingName = name;
-                addDomainDialog.creating = true;
-                if (!Karton.createDomain(domainConfig)) {
-                    addDomainDialog.creating = false;
-                    addDomainDialog.pendingName = "";
-                    return;
-                }
-                applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Creating VM: %1", name));
+                addDomainDialog.step = Math.min(addDomainDialog.lastStep, addDomainDialog.step + 1);
             }
+        },
+        Kirigami.Action {
+            text: i18nc("verb, creation button for a new VM", "Create")
+            icon.name: "dialog-ok"
+            visible: addDomainDialog.step === addDomainDialog.lastStep
+            enabled: !addDomainDialog.creating
+            onTriggered: addDomainDialog.createVm()
         }
     ]
 
@@ -82,132 +115,143 @@ Kirigami.Dialog {
         }
     }
 
+    StackLayout {
+        currentIndex: addDomainDialog.step
 
-    ColumnLayout {
-        spacing: Kirigami.Units.largeSpacing
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
 
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.gridUnit * 2
-            Layout.rightMargin: Kirigami.Units.gridUnit * 2
-            text: i18nc("Error message", "Please fill in all required fields")
-            type: Kirigami.MessageType.Error
-            visible: addDomainDialog.showError
-        }
+            Kirigami.Heading {
+                Layout.leftMargin: Kirigami.Units.gridUnit * 2
+                Layout.rightMargin: Kirigami.Units.gridUnit * 2
+                Layout.topMargin: Kirigami.Units.largeSpacing
+                level: 3
+                text: i18n("Installation source")
+            }
 
-        FormCard.FormCard {
-            Layout.fillWidth: true
-
-            FormCard.FormTextFieldDelegate {
-                id: nameField
-                label: i18nc("@label:textbox", "VM Name:")
-                placeholderText: i18n("Enter VM Name")
+            Kirigami.InlineMessage {
                 Layout.fillWidth: true
-                validator: RegularExpressionValidator {
-                    regularExpression: /^[A-Za-z0-9._-]+$/
-                }
+                Layout.leftMargin: Kirigami.Units.gridUnit * 2
+                Layout.rightMargin: Kirigami.Units.gridUnit * 2
+                text: i18nc("Error message", "Please fill in all required fields")
+                type: Kirigami.MessageType.Error
+                visible: addDomainDialog.showError
             }
 
-            Dialogs.FileDialog {
-                id: fileDialog
-                title: i18nc("@label:filedialog", "Choose a disk image")
-                nameFilters: [i18nc("name filter for the file dialog",
-                                    "Disk images (*.qcow2 *.raw *.img *.iso *.vdi *.vmdk)")]
-                onAccepted: {
-                    diskImageField.text = decodeURIComponent(fileDialog.selectedFile.toString().replace(/^file:\/\//, ""));
-                    let shortOsId = getShortOsId(diskImageField.text);
-                    if (shortOsId === "") {
-                        osTextField.placeholderText = i18n("Could not identify the OS. Please enter an OS Variant.");
-                        osField.editText = "";
-                        osTextField.text = osField.editText;
-                    } else {
-                        osField.editText = shortOsId;
-                        osTextField.text = osField.editText;
-                    }
-                }
-            }
+            FormCard.FormCard {
+                Layout.fillWidth: true
 
-            FormCard.FormDelegateSeparator {}
-            FormCard.AbstractFormDelegate {
-                background: null
-                contentItem: RowLayout {
+                FormCard.FormTextFieldDelegate {
+                    id: nameField
+                    label: i18nc("@label:textbox", "VM Name:")
+                    placeholderText: i18n("Enter VM Name")
                     Layout.fillWidth: true
-
-                    Controls.TextField {
-                        id: diskImageField
-                        Layout.fillWidth: true
-                        placeholderText: i18n("Select a disk image")
-                        readOnly: true
+                    validator: RegularExpressionValidator {
+                        regularExpression: /^[A-Za-z0-9._-]+$/
                     }
+                }
 
-                    Controls.Button {
-                        text: i18nc("verb, look for a file in explorer", "Browse")
-                        onClicked: {
-                            fileDialog.open();
+                Dialogs.FileDialog {
+                    id: fileDialog
+                    title: i18nc("@label:filedialog", "Choose a disk image")
+                    nameFilters: [i18nc("name filter for the file dialog",
+                                        "Disk images (*.qcow2 *.raw *.img *.iso *.vdi *.vmdk)")]
+                    onAccepted: {
+                        diskImageField.text = decodeURIComponent(fileDialog.selectedFile.toString().replace(/^file:\/\//, ""));
+                        let shortOsId = getShortOsId(diskImageField.text);
+                        if (shortOsId === "") {
+                            osTextField.placeholderText = i18n("Could not identify the OS. Please enter an OS Variant.");
+                            osField.editText = "";
+                            osTextField.text = osField.editText;
+                        } else {
+                            osField.editText = shortOsId;
+                            osTextField.text = osField.editText;
                         }
                     }
                 }
-            }
-            FormCard.AbstractFormDelegate {
-                background: null // removes hover selection
-                hoverEnabled: false
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
 
-                    Controls.Label {
-                        text: i18n("OS Variant:")
-                    }
-
-                    Controls.ComboBox {
-                        id: osField
+                FormCard.FormDelegateSeparator {}
+                FormCard.AbstractFormDelegate {
+                    background: null
+                    contentItem: RowLayout {
                         Layout.fillWidth: true
-                        editable: true
-                        currentIndex: -1
 
-                        contentItem: Controls.TextField {
-                            id: osTextField
-                            placeholderText: i18n("Select or enter an OS variant")
-                            background: Item {}
-                            onTextEdited: {
-                                osField.editText = text;
-                                suggestionsPopup.updateSuggestions();
+                        Controls.TextField {
+                            id: diskImageField
+                            Layout.fillWidth: true
+                            placeholderText: i18n("Select a disk image")
+                            readOnly: true
+                        }
+
+                        Controls.Button {
+                            text: i18nc("verb, look for a file in explorer", "Browse")
+                            onClicked: {
+                                fileDialog.open();
                             }
-                            onActiveFocusChanged: {
-                                if (activeFocus) {
+                        }
+                    }
+                }
+                FormCard.AbstractFormDelegate {
+                    background: null // removes hover selection
+                    hoverEnabled: false
+                    contentItem: ColumnLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Controls.Label {
+                            text: i18n("OS Variant:")
+                        }
+
+                        Controls.ComboBox {
+                            id: osField
+                            Layout.fillWidth: true
+                            editable: true
+                            currentIndex: -1
+
+                            contentItem: Controls.TextField {
+                                id: osTextField
+                                placeholderText: i18n("Select or enter an OS variant")
+                                background: Item {}
+                                onTextEdited: {
+                                    osField.editText = text;
                                     suggestionsPopup.updateSuggestions();
-                                } else {
-                                    suggestionsPopup.close();
+                                }
+                                onActiveFocusChanged: {
+                                    if (activeFocus) {
+                                        suggestionsPopup.updateSuggestions();
+                                    } else {
+                                        suggestionsPopup.close();
+                                    }
                                 }
                             }
-                        }
 
-                        // triggers on text edits in OS variant selection
-                        Controls.Popup {
-                            id: suggestionsPopup
-                            parent: osField
-                            y: osField.height
-                            width: osField.width
-                            padding: 0
-                            implicitHeight: Math.min(listView.contentHeight, Kirigami.Units.gridUnit * 10)
+                            // triggers on text edits in OS variant selection
+                            Controls.Popup {
+                                id: suggestionsPopup
+                                parent: osField
+                                y: osField.height
+                                width: osField.width
+                                padding: 0
+                                implicitHeight: Math.min(listView.contentHeight, Kirigami.Units.gridUnit * 10)
 
-                            function updateSuggestions() {
-                                const filterText = osTextField.text.toLowerCase();
-                                listView.model = OsinfoConfig.osList.filter((osVariant) => osVariant.toLowerCase().includes(filterText));
-                                listView.model.length > 0 ? open() : close();
-                            }
+                                function updateSuggestions() {
+                                    const filterText = osTextField.text.toLowerCase();
+                                    listView.model = OsinfoConfig.osList.filter((osVariant) => osVariant.toLowerCase().includes(filterText));
+                                    listView.model.length > 0 ? open() : close();
+                                }
 
-                            contentItem: ListView {
-                                id: listView
-                                implicitHeight: contentHeight
-                                clip: true
-                                delegate: Controls.ItemDelegate {
-                                    width: ListView.view.width
-                                    text: modelData
-                                    onClicked: {
-                                        osTextField.text = modelData;
-                                        osField.editText = modelData;
-                                        suggestionsPopup.close();
-                                        osTextField.forceActiveFocus();
+                                contentItem: ListView {
+                                    id: listView
+                                    implicitHeight: contentHeight
+                                    clip: true
+                                    delegate: Controls.ItemDelegate {
+                                        width: ListView.view.width
+                                        text: modelData
+                                        onClicked: {
+                                            osTextField.text = modelData;
+                                            osField.editText = modelData;
+                                            suggestionsPopup.close();
+                                            osTextField.forceActiveFocus();
+                                        }
                                     }
                                 }
                             }
@@ -217,45 +261,57 @@ Kirigami.Dialog {
             }
         }
 
-        FormCard.FormCard {
-            Layout.bottomMargin: Kirigami.Units.largeSpacing
-            FormCard.FormSpinBoxDelegate {
-                id: memorySpinBox
-                label: i18nc("@label:spinbox, RAM", "Memory (GB)")
-                value: 4
-                from: 1
-                to: 64
-                Layout.fillWidth: true
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.Heading {
+                Layout.leftMargin: Kirigami.Units.gridUnit * 2
+                Layout.rightMargin: Kirigami.Units.gridUnit * 2
+                Layout.topMargin: Kirigami.Units.largeSpacing
+                level: 3
+                text: i18n("Hardware")
             }
 
-            FormCard.FormDelegateSeparator {}
-
-            FormCard.FormSpinBoxDelegate {
-                id: storageSpinBox
-                label: i18nc("@label:spinbox", "Disk Storage (GB)")
-                from: 1
-                to: 2048
-                value: 4
+            FormCard.FormCard {
                 Layout.fillWidth: true
-            }
+                FormCard.FormSpinBoxDelegate {
+                    id: memorySpinBox
+                    label: i18nc("@label:spinbox, RAM", "Memory (GB)")
+                    value: 4
+                    from: 1
+                    to: 64
+                    Layout.fillWidth: true
+                }
 
-            FormCard.FormDelegateSeparator {}
+                FormCard.FormDelegateSeparator {}
 
-            FormCard.FormSpinBoxDelegate {
-                id: cpuSpinBox
-                label: i18nc("@label:spinbox, number of cpus", "CPUs")
-                from: 1
-                to: 16
-                value: 2
-                Layout.fillWidth: true
-            }
+                FormCard.FormSpinBoxDelegate {
+                    id: storageSpinBox
+                    label: i18nc("@label:spinbox", "Disk Storage (GB)")
+                    from: 1
+                    to: 2048
+                    value: 4
+                    Layout.fillWidth: true
+                }
 
-            FormCard.FormCheckDelegate {
-                id: enableAccel3dCheckBox
-                text: Karton.vulkanRendering ? i18nc("@option:check", "Hardware acceleration (requires OpenGL rendering)") : i18nc("@option:check", "Enable hardware acceleration")
-                checked: !Karton.vulkanRendering
-                enabled: !Karton.vulkanRendering
-                Layout.fillWidth: true
+                FormCard.FormDelegateSeparator {}
+
+                FormCard.FormSpinBoxDelegate {
+                    id: cpuSpinBox
+                    label: i18nc("@label:spinbox, number of cpus", "CPUs")
+                    from: 1
+                    to: 16
+                    value: 2
+                    Layout.fillWidth: true
+                }
+
+                FormCard.FormCheckDelegate {
+                    id: enableAccel3dCheckBox
+                    text: Karton.vulkanRendering ? i18nc("@option:check", "Hardware acceleration (requires OpenGL rendering)") : i18nc("@option:check", "Enable hardware acceleration")
+                    checked: !Karton.vulkanRendering
+                    enabled: !Karton.vulkanRendering
+                    Layout.fillWidth: true
+                }
             }
         }
     }

@@ -171,8 +171,12 @@ When testing destructive operations, prefer domains whose names start with
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
 - For domains without Karton metadata, the disk size is queried with
-  `qemu-img info --output=json` (cached per path) and written into the Karton
-  metadata on the next configuration save.
+  `qemu-img info -U --output=json` (cached per path; `-U` is required while a
+  running VM holds the image lock) and written into the Karton metadata on the
+  next configuration save.
+- `InstallationDialog.qml` is a two-step wizard: installation source, then
+  hardware. Keep the content of each step short; the previous single long form
+  triggered a `Kirigami.Dialog` binding loop on `y`.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph

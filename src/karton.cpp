@@ -658,7 +658,11 @@ int Karton::diskSizeGB(const QString &path)
     }
 
     QString output;
-    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"), {QStringLiteral("info"), QStringLiteral("--output=json"), path}, &output)) {
+    // -U / --force-share lets us inspect a disk image that a running VM has
+    // locked for writing.
+    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
+                                            {QStringLiteral("info"), QStringLiteral("-U"), QStringLiteral("--output=json"), path},
+                                            &output)) {
         return 0;
     }
 
