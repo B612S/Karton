@@ -140,15 +140,16 @@ When testing destructive operations, prefer domains whose names start with
   `virEventRunDefaultImpl()` from a 1-second `QTimer` on the GUI thread. The
   event callback emits synchronously, so handlers run on the GUI thread; keep
   them cheap and do not block.
-- `CommandRunner::runCommand()` uses `QProcess::startCommand()`, which splits the
-  string into arguments without a shell. It does not support pipes, globbing, or
-  shell escape sequences, and it only reports whether the process *started*.
-  Use `commandFinished` when you need the exit code.
+- `CommandRunner::runCommand()` starts a program with an explicit argument list
+  (no shell), so it does not support pipes, globbing, or shell escape
+  sequences. It only reports whether the process *started*; use
+  `runCommandAndWait()` when you need the exit code, or `commandFinished` for
+  the asynchronous result.
 - External `virsh` calls (e.g. in `DomainViewer`) must use
   `-c qemu:///session` to match the application's connection.
 - Karton stores its own data inside domain XML metadata:
   `<karton:data maxDiskStorage="…" screenshotPreviewPath="…"/>`.
-  `maxDiskStorage` is stored in KiB. Preserve unknown metadata when rewriting
+  `maxDiskStorage` is stored in MiB. Preserve unknown metadata when rewriting
   XML — `DomainXmlBuilder::updateXML()` intentionally edits only specific
   fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
