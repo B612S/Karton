@@ -53,6 +53,14 @@ Check your app menu for "Karton", it should be hiding under the "System" section
 <img src="https://cdn.kde.org/screenshots/karton/karton_installer.png" width="370"/>
 
 
+## Development
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j"$(nproc)"
+ctest --test-dir build --output-on-failure
+```
+Use `-DKARTON_SANITIZE=ON` for an ASAN/UBSAN build.
+
 ## We hope you find Karton useful!
 
 Feel free to join our matrix at [#karton:kde.org](https://matrix.to/#/#karton:kde.org).

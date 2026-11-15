@@ -69,6 +69,11 @@ cmake --build build -j"$(nproc)"
 ./build/bin/karton
 ```
 
+For an AddressSanitizer/UndefinedBehaviorSanitizer build, configure a
+separate tree with `-DKARTON_SANITIZE=ON` (for example `build-asan`) and run
+the tests with `ASAN_OPTIONS=detect_leaks=0` (Qt and libvirt produce a lot of
+intentional process-lifetime allocations). The `build-*` trees are ignored.
+
 The `build/` directory is git-ignored. If CMake cannot find ECM, either install
 `extra-cmake-modules` or point CMake at a local installation, e.g.
 `-DCMAKE_PREFIX_PATH="$HOME/.local"`.
