@@ -71,7 +71,7 @@ install(FILES
 
 ecm_find_qmlmodule(org.kde.kirigami REQUIRED)
 
-add_subdirectory(src)
+add_subdirectory(core)
 
 if (BUILD_TESTING)
     add_subdirectory(tests)

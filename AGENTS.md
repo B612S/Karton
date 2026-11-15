@@ -29,24 +29,25 @@ development or testing must pass `-c <same URI>` (usually
 
 | Path | Purpose |
 | --- | --- |
-| `src/main.cpp` | Entry point; sets up `KAboutData` and loads the QML module. |
-| `src/karton.{h,cpp}` | `Karton` QML singleton: libvirt connection, domain list, VM lifecycle operations, paths. |
-| `src/domain.{h,cpp}` | QML-exposed `Domain` wrapper around a `virDomainPtr`. |
-| `src/domainconfig.{h,cpp}` | QML-exposed per-domain configuration/state model. |
-| `src/vmlistmodel.{h,cpp}` | `VMModel`, the QML singleton list model shown on the main page. |
-| `src/domainxmlbuilder.{h,cpp}` | Generates and edits libvirt domain XML. |
-| `src/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
-| `src/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
-| `src/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
-| `src/glscanoutrenderer.*`, `src/primarysurfacerenderer.*`, `src/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
-| `src/libvirtmonitor.*`, `src/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
-| `src/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
-| `src/qml/` | Kirigami QML pages and dialogs. |
+| `core/main.cpp` | Entry point; sets up `KAboutData` and loads the QML module. |
+| `core/karton.{h,cpp}` | `Karton` QML singleton: libvirt connection, domain list, VM lifecycle operations, paths. |
+| `core/domain.{h,cpp}` | QML-exposed `Domain` wrapper around a `virDomainPtr`. |
+| `core/domainconfig.{h,cpp}` | QML-exposed per-domain configuration/state model. |
+| `core/vmlistmodel.{h,cpp}` | `VMModel`, the QML singleton list model shown on the main page. |
+| `core/domainxmlbuilder.{h,cpp}` | Generates and edits libvirt domain XML. |
+| `core/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
+| `core/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
+| `core/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
+| `core/glscanoutrenderer.*`, `core/primarysurfacerenderer.*`, `core/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
+| `core/libvirtmonitor.*`, `core/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
+| `core/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
+| `qml/` | Kirigami QML pages and dialogs. |
 | `tests/` | QtTest-based unit tests for the XML parser/builder and command runner. |
+| `src/` | Reserved for makepkg's `$srcdir`; it is not used for source files. |
 
 QML sources are compiled into the binary by `ecm_add_qml_module()` under the URI
 `org.kde.karton`. When adding a QML file, add it to the `ecm_target_qml_sources()`
-list in `src/CMakeLists.txt`, otherwise it will not be bundled.
+list in `core/CMakeLists.txt`, otherwise it will not be bundled.
 
 ## Build
 
@@ -135,7 +136,7 @@ When testing destructive operations, prefer domains whose names start with
   `kde_clang_format`).
 - User-visible strings must be translatable: use `i18n()` / `i18nc()` in C++
   and QML, and add translation contexts as existing code does. Keep
-  `src/Messages.sh` and `src/CMakeLists.txt` in sync when adding files.
+  `core/Messages.sh` and `core/CMakeLists.txt` in sync when adding files.
 - Use the `KARTON_DEBUG` logging category (`qCInfo(KARTON_DEBUG)`,
   `qCWarning(KARTON_DEBUG)`, ...) rather than raw `qDebug()`.
 - Keep changes focused. Do not reformat unrelated code or check in `build/`,

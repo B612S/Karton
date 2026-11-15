@@ -12,7 +12,7 @@ add_executable(karton)
 
 ecm_add_qml_module(karton
     GENERATE_PLUGIN_SOURCE
-    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/src/org/kde/karton
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/core/org/kde/karton
     URI org.kde.karton
 )
 
@@ -42,13 +42,13 @@ target_sources(karton
 
 ecm_target_qml_sources(karton
     SOURCES
-    qml/Main.qml
-    qml/VMListPage.qml
-    qml/VMViewerWindow.qml
-    qml/InstallationDialog.qml
-    qml/VMPage.qml
-    qml/ConfigurationDialog.qml
-    qml/ConnectionSettingsDialog.qml
+    ../qml/Main.qml
+    ../qml/VMListPage.qml
+    ../qml/VMViewerWindow.qml
+    ../qml/InstallationDialog.qml
+    ../qml/VMPage.qml
+    ../qml/ConfigurationDialog.qml
+    ../qml/ConnectionSettingsDialog.qml
 )
 
 ecm_qt_declare_logging_category(

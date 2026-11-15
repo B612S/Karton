@@ -1,13 +1,18 @@
 # Maintainer: Karton contributors
 # SPDX-License-Identifier: CC0-1.0
 
-pkgname=karton-git
-pkgver=r0.0000000
+pkgname=karton
+# The version is taken from the local CMake project; override with
+# KARTON_PKGVER for release builds.
+pkgver="${KARTON_PKGVER:-$(sed -n 's/^project(karton[[:space:]]\+VERSION[[:space:]]\+\([^)]*\)).*/\1/p' "${startdir:-$PWD}/CMakeLists.txt" 2>/dev/null | head -n1)}"
+pkgver="${pkgver:-1.0.0}"
 pkgrel=1
-pkgdesc="Libvirt-based virtual machine manager for KDE (git version)"
+pkgdesc="Libvirt-based virtual machine manager for KDE (local build)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/B612S/Karton"
 license=('GPL-3.0-or-later')
+options=('strip' '!debug')
+
 depends=(
     'qt6-base'
     'qt6-declarative'
@@ -25,26 +30,37 @@ depends=(
     'vulkan-icd-loader'
     'hicolor-icon-theme'
 )
-checkdepends=('appstream')
 makedepends=(
     'cmake'
     'ninja'
     'extra-cmake-modules'
     'vulkan-headers'
-    'git'
 )
-provides=('karton')
-conflicts=('karton')
-source=("git+${url}.git")
-sha256sums=('SKIP')
+checkdepends=('appstream')
+conflicts=('karton-git')
 
-pkgver() {
-    cd "${srcdir}/Karton"
-    printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+# This PKGBUILD packages the working tree, so there is no remote source.
+source=()
+sha256sums=()
+
+prepare() {
+    # Copy the checkout into $srcdir without local build, VCS or packaging data.
+    rm -rf "$srcdir/karton"
+    mkdir -p "$srcdir/karton"
+    tar -C "${startdir:-$PWD}" \
+        --exclude='./.git' \
+        --exclude='./build' \
+        --exclude='./build-*' \
+        --exclude='./pkg' \
+        --exclude='./Karton' \
+        --exclude='./src' \
+        --exclude='*.pkg.tar.*' \
+        -cf - . | tar -C "$srcdir/karton" -xf -
 }
 
 build() {
-    cmake -S "${srcdir}/Karton" -B build -G Ninja \
+    cd "$srcdir/karton"
+    cmake -B build -S . -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DBUILD_TESTING=ON
@@ -52,11 +68,13 @@ build() {
 }
 
 check() {
+    cd "$srcdir/karton"
     ctest --test-dir build --output-on-failure
 }
 
 package() {
-    DESTDIR="${pkgdir}" cmake --install build
-    install -Dm644 "${srcdir}/Karton/LICENSES/GPL-3.0-or-later.txt" \
-        "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    cd "$srcdir/karton"
+    DESTDIR="$pkgdir" cmake --install build
+    install -Dm644 LICENSES/GPL-3.0-or-later.txt \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
