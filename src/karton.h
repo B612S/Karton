@@ -75,6 +75,7 @@ private Q_SLOTS:
 
 private:
     virConnectPtr m_conn;
+    QString m_activeUri;
     QVector<Domain *> m_domains;
     LibvirtMonitor *m_monitor;
     CommandRunner *m_commandRunner;

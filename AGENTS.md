@@ -14,12 +14,16 @@ KF6 application with a Kirigami UI. It lists and manages local libvirt domains,
 defines new domains from OS installation media, and embeds a SPICE display for
 the VM console.
 
-The application connects to **`qemu:///session`** by default (see
-`Karton::init()`). The URI can be changed in the Connection Settings dialog
-(requires a restart) or with the `KARTON_LIBVIRT_URI` environment variable,
-which takes precedence. It is stored in QSettings under `connection/uri`. Any
-`virsh` command used during development or testing must pass `-c <same URI>`
-(usually `-c qemu:///session`).
+Karton auto-detects the libvirt connection in `Karton::init()`: without an
+explicit setting it tries `qemu:///system` first, then `qemu:///session`, and
+selects the first connection that actually has domains. The active URI is shown
+in the empty-state message and can be overridden in the Connection Settings
+dialog (requires a restart) or with the `KARTON_LIBVIRT_URI` environment
+variable, which takes precedence. A stored URI is used first; if it has no
+domains and is one of the two local URIs, the other one is tried. The URI is
+stored in QSettings under `connection/uri`. Any `virsh` command used during
+development or testing must pass `-c <same URI>` (usually
+`-c qemu:///system`).
 
 ## Repository layout
 
@@ -167,8 +171,8 @@ When testing destructive operations, prefer domains whose names start with
   flight; do not close them optimistically after calling `Karton`.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
-  call is ever needed, pass `-c qemu:///session` to match the application's
-  connection.
+  call is ever needed, pass `-c <the same URI>` to match the application's
+  active connection.
 - Karton stores its own data inside domain XML metadata:
   `<karton:data maxDiskStorage="…" screenshotPreviewPath="…"/>`.
   `maxDiskStorage` is stored in MiB. `DomainXmlReader` gets the XML from

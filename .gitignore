@@ -20,6 +20,7 @@
 build
 build-*
 pkg/
+*.pkg.tar.*
 core
 !core/
 tags

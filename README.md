@@ -27,6 +27,7 @@ This project is still in early development and will likely break existing virtua
 - spice-client-glib
 - libosinfo
 - Vulkan with DMA-BUF scanout import (or OpenGL as a fallback)
+- Automatic system/session libvirt connection detection
 
 ## Configuration
 The connection URI can be changed in the Connection Settings dialog (restart

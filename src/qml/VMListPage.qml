@@ -136,7 +136,7 @@ Kirigami.ScrollablePage {
             visible: view.count === 0
 
             text: Karton.connected ? i18nc("@title, greet user to Karton", "Welcome to Karton!") : i18n("Cannot connect to libvirt")
-            explanation: Karton.connected ? i18n("Create a new virtual machine to proceed.") : i18nc("%1 is the libvirt connection URI", "Check that libvirt is running and that the %1 connection is available.", Karton.connectionUri)
+            explanation: Karton.connected ? i18nc("%1 is the libvirt connection URI", "Connected to %1. Create a new virtual machine to proceed.", Karton.connectionUri) : i18nc("%1 is the libvirt connection URI", "Check that libvirt is running and that the %1 connection is available.", Karton.connectionUri)
             icon.name: Karton.connected ? "computer-symbolic" : "dialog-error"
         }
     }

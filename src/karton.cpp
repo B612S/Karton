@@ -50,6 +50,10 @@ Karton::~Karton()
 
 QString Karton::connectionUri() const
 {
+    if (!m_activeUri.isEmpty()) {
+        return m_activeUri;
+    }
+
     const QByteArray environmentUri = qgetenv("KARTON_LIBVIRT_URI");
     if (!environmentUri.isEmpty()) {
         return QString::fromUtf8(environmentUri);
@@ -57,7 +61,7 @@ QString Karton::connectionUri() const
 
     QSettings settings;
     const QString storedUri = settings.value(QStringLiteral("connection/uri")).toString();
-    return storedUri.isEmpty() ? QStringLiteral("qemu:///session") : storedUri;
+    return storedUri.isEmpty() ? QStringLiteral("qemu:///system") : storedUri;
 }
 
 void Karton::saveConnectionUri(const QString &uri)
@@ -93,14 +97,89 @@ bool Karton::init()
     // to the hypervisor.
     LibvirtEventLoop::registerImpl();
 
-    const QString uri = connectionUri();
-    m_conn = virConnectOpen(uri.toUtf8().constData());
-    if (!m_conn) {
+    // Karton may be started by a user who only has domains on the system
+    // connection, or by one who only uses the per-user session connection.
+    // Prefer the explicitly configured URI, but otherwise pick the connection
+    // that actually has domains.
+    QStringList candidates;
+    const QByteArray environmentUri = qgetenv("KARTON_LIBVIRT_URI");
+    if (!environmentUri.isEmpty()) {
+        candidates.append(QString::fromUtf8(environmentUri));
+    } else {
+        QSettings settings;
+        const QString storedUri = settings.value(QStringLiteral("connection/uri")).toString();
+        if (!storedUri.isEmpty()) {
+            candidates.append(storedUri);
+            if (storedUri == QStringLiteral("qemu:///system")) {
+                candidates.append(QStringLiteral("qemu:///session"));
+            } else if (storedUri == QStringLiteral("qemu:///session")) {
+                candidates.append(QStringLiteral("qemu:///system"));
+            }
+        } else {
+            candidates.append(QStringLiteral("qemu:///system"));
+            candidates.append(QStringLiteral("qemu:///session"));
+        }
+    }
+
+    struct Attempt {
+        virConnectPtr conn = nullptr;
+        QString uri;
+        int domainCount = 0;
+    };
+
+    auto tryUri = [](const QString &uri, Attempt &attempt) {
+        attempt.uri = uri;
+        attempt.conn = virConnectOpen(uri.toUtf8().constData());
+        if (!attempt.conn) {
+            qCWarning(KARTON_DEBUG) << "Could not connect to" << uri << virGetLastErrorMessage();
+            return false;
+        }
+
+        virDomainPtr *domains = nullptr;
+        const int count = virConnectListAllDomains(attempt.conn, &domains, VIR_CONNECT_LIST_DOMAINS_ACTIVE | VIR_CONNECT_LIST_DOMAINS_INACTIVE);
+        if (count > 0 && domains) {
+            for (int i = 0; i < count; ++i) {
+                virDomainFree(domains[i]);
+            }
+            free(domains);
+        }
+        attempt.domainCount = count > 0 ? count : 0;
+        return true;
+    };
+
+    Attempt chosen;
+    Attempt fallback;
+    for (const QString &uri : std::as_const(candidates)) {
+        Attempt attempt;
+        if (!tryUri(uri, attempt)) {
+            continue;
+        }
+
+        qCInfo(KARTON_DEBUG) << "Connected to hypervisor:" << uri << "with" << attempt.domainCount << "domains";
+        if (attempt.domainCount > 0) {
+            chosen = attempt;
+            break;
+        }
+        if (!fallback.conn) {
+            fallback = attempt;
+        } else {
+            virConnectClose(attempt.conn);
+        }
+    }
+
+    if (!chosen.conn) {
+        chosen = fallback;
+    } else if (fallback.conn) {
+        virConnectClose(fallback.conn);
+    }
+
+    if (!chosen.conn) {
         qCCritical(KARTON_DEBUG) << "Failed to connect to hypervisor:" << virGetLastErrorMessage();
         return false;
     }
 
-    qCInfo(KARTON_DEBUG) << "Connected to hypervisor:" << uri;
+    m_conn = chosen.conn;
+    m_activeUri = chosen.uri;
 
     m_monitor = new LibvirtMonitor(this, m_conn);
     connect(m_monitor, &LibvirtMonitor::domainStateChanged, this, &Karton::onDomainStateChanged);
