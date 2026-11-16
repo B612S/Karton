@@ -116,13 +116,6 @@ Kirigami.Dialog {
         shmemNameField.text = shmem ? shmem.name : "karton";
         shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
         shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));
-        const filesystem = root.deviceByTag("filesystem");
-        filesystemCheck.checked = filesystem !== null;
-        filesystemSourceField.text = filesystem ? filesystem.source : "";
-        filesystemTargetField.text = filesystem && filesystem.target.length > 0 ? filesystem.target : "share";
-        filesystemAccessCombo.currentIndex = Math.max(0, ["passthrough", "mapped", "squash"].indexOf(filesystem ? filesystem.accessmode : ""));
-        filesystemDriverCombo.currentIndex = Math.max(0, ["9p", "virtiofs"].indexOf(filesystem && filesystem.driver.length > 0 ? filesystem.driver : "9p"));
-        filesystemReadonlyCheck.checked = filesystem ? filesystem.readonly : false;
         root.optionalUpdating = false;
 
         const resolution = Karton.domainDisplayResolution(domain);
@@ -231,21 +224,6 @@ Kirigami.Dialog {
             return "<a href=\"" + escaped + "\">" + escaped + "</a>";
         }
         return root.xmlEscape(value);
-    }
-
-    function filesystemXml() {
-        const source = filesystemSourceField.text.trim();
-        const target = filesystemTargetField.text.trim().length > 0 ? filesystemTargetField.text.trim() : "share";
-        let xml = "<filesystem type='mount' accessmode='" + filesystemAccessCombo.currentText + "'>";
-        xml += "<source dir='" + xmlEscape(source) + "'/>";
-        xml += "<target dir='" + xmlEscape(target) + "'/>";
-        if (filesystemDriverCombo.currentText === "virtiofs") {
-            xml += "<driver type='virtiofs'/>";
-        }
-        if (filesystemReadonlyCheck.checked) {
-            xml += "<readonly/>";
-        }
-        return xml + "</filesystem>";
     }
 
     function pciDeviceLabel(address) {
@@ -1908,92 +1886,78 @@ Kirigami.Dialog {
                     spacing: 16
 
                     Controls.Label {
-                        text: i18n("Share a host directory with this VM using 9p or virtiofs.")
+                        text: i18n("Shared folders are added from Add Hardware. Each share is mounted in the guest under its mount tag.")
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         opacity: 0.65
                         font.pixelSize: 12
                     }
-                    Controls.CheckBox {
-                        id: filesystemCheck
-                        text: i18n("Enable filesystem sharing")
-                        Layout.fillWidth: true
-                        onToggled: root.updateOptionalDevice("filesystem", checked, root.filesystemXml())
+                    Controls.Button {
+                        text: i18n("Add filesystem…")
+                        icon.name: "list-add-symbolic"
+                        Layout.alignment: Qt.AlignLeft
+                        onClicked: addHardwareDialog.openAt(10)
                     }
-                    GridLayout {
-                        columns: 2
-                        columnSpacing: 16
-                        rowSpacing: 16
+                    ListView {
                         Layout.fillWidth: true
-                        Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
-                        Controls.ComboBox {
-                            id: filesystemDriverCombo
-                            Layout.preferredWidth: 260
-                            model: ["9p", "virtiofs"]
-                            onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                        }
-                        Controls.Label { text: i18n("Source path"); Layout.fillWidth: true }
-                        RowLayout {
-                            Layout.preferredWidth: 260
-                            spacing: 8
-                            Controls.TextField {
-                                id: filesystemSourceField
-                                Layout.fillWidth: true
-                                placeholderText: "/home/user/Shared"
-                                onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                        Layout.fillHeight: true
+                        Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 8, contentHeight)
+                        clip: true
+                        model: root.xmlDevices.filter(function(device) {
+                            return device.tag === "filesystem";
+                        })
+                        delegate: Controls.ItemDelegate {
+                            width: ListView.view.width
+                            focusPolicy: Qt.NoFocus
+                            contentItem: RowLayout {
+                                spacing: 8
+                                Kirigami.Icon {
+                                    source: "folder-symbolic"
+                                    implicitWidth: 20
+                                    implicitHeight: 20
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Controls.Label {
+                                        text: (modelData.target.length > 0 ? modelData.target : i18n("Filesystem")) + " · " + modelData.source
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.Label {
+                                        text: (modelData.driver.length > 0 ? modelData.driver : "9p") + (modelData.readonly ? " · " + i18n("read-only") : "")
+                                        opacity: 0.65
+                                        font.pixelSize: 11
+                                    }
+                                }
+                                Controls.Button {
+                                    text: i18n("Detach")
+                                    icon.name: "list-remove-symbolic"
+                                    onClicked: {
+                                        if (Karton.detachXmlDevice(root.domain, modelData.index)) {
+                                            root.refresh();
+                                        }
+                                    }
+                                }
                             }
-                            Controls.Button {
-                                text: i18n("Browse…")
-                                icon.name: "document-open-symbolic"
-                                onClicked: filesystemFolderDialog.open()
-                            }
                         }
-                        Controls.Label { text: i18n("Mount tag"); Layout.fillWidth: true }
-                        Controls.TextField {
-                            id: filesystemTargetField
-                            Layout.preferredWidth: 260
-                            text: "share"
-                            onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                        }
-                        Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
-                        Controls.ComboBox {
-                            id: filesystemAccessCombo
-                            Layout.preferredWidth: 260
-                            model: ["passthrough", "mapped", "squash"]
-                            onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                        }
-                        Controls.Label { text: i18n("Read-only"); Layout.fillWidth: true }
-                        Controls.CheckBox {
-                            id: filesystemReadonlyCheck
-                            Layout.alignment: Qt.AlignRight
-                            onToggled: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                        }
-                        Controls.Label {
-                            text: i18n("The source directory is shared with the guest under the mount tag.")
-                            Layout.fillWidth: true
-                            Layout.columnSpan: 2
-                            wrapMode: Text.WordWrap
-                            opacity: 0.65
-                            font.pixelSize: 12
-                        }
+                    }
+                    Controls.Label {
+                        visible: root.xmlDevices.filter(function(device) { return device.tag === "filesystem"; }).length === 0
+                        text: i18n("No filesystem shares configured.")
+                        opacity: 0.65
+                        Layout.fillWidth: true
                     }
                 }
             }
-            }
 
-        }
     }
 
     }
     }
 
-    FolderDialog {
-        id: filesystemFolderDialog
-        title: i18n("Choose a shared directory")
-        onAccepted: {
-            filesystemSourceField.text = decodeURIComponent(selectedFolder.toString().replace(/^file:\/\//, ""));
-            root.applyOptionalSettings("filesystem", root.filesystemXml());
-        }
+    }
+
     }
 
     AddHardwareDialog {

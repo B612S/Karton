@@ -18,6 +18,7 @@ Kirigami.Dialog {
     property var pciHostDevices: []
     property string message: ""
     property bool messageIsError: false
+    property int initialCategory: 0
 
     signal deviceAdded(int categoryIndex)
 
@@ -39,7 +40,8 @@ Kirigami.Dialog {
         { label: i18n("Channel") },
         { label: i18n("USB Host Device") },
         { label: i18n("PCI Host Device") },
-        { label: i18n("Redirection") }
+        { label: i18n("Redirection") },
+        { label: i18n("Filesystem") }
     ]
 
     background: Rectangle {
@@ -50,13 +52,19 @@ Kirigami.Dialog {
         border.color: "transparent"
     }
 
+    function openAt(category) {
+        initialCategory = category;
+        open();
+    }
+
     onOpened: {
         refresh();
-        categoryList.currentIndex = 0;
-        categoryIndex = 0;
+        categoryList.currentIndex = initialCategory;
+        categoryIndex = initialCategory;
         message = "";
         messageIsError = false;
     }
+    onClosed: initialCategory = 0
 
     function refresh() {
         networks = Karton.networks();
@@ -76,8 +84,34 @@ Kirigami.Dialog {
         case 7: return 8;  // USB
         case 8: return 9;  // PCI
         case 9: return 14; // Redirection -> Other
+        case 10: return 11; // Filesystem
         default: return 0;
         }
+    }
+
+    function xmlEscape(value) {
+        return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+    }
+
+    function addFilesystem() {
+        const source = fsSourceField.text.trim();
+        if (source.length === 0) {
+            message = i18n("Choose a source directory first.");
+            messageIsError = true;
+            return;
+        }
+        const target = fsTargetField.text.trim().length > 0 ? fsTargetField.text.trim() : "share";
+        let xml = "<filesystem type='mount' accessmode='" + fsAccessCombo.currentText + "'>";
+        xml += "<source dir='" + xmlEscape(source) + "'/>";
+        xml += "<target dir='" + xmlEscape(target) + "'/>";
+        if (fsDriverCombo.currentText === "virtiofs") {
+            xml += "<driver type='virtiofs'/>";
+        }
+        if (fsReadonlyCheck.checked) {
+            xml += "<readonly/>";
+        }
+        xml += "</filesystem>";
+        root.addXml(xml);
     }
 
     function added() {
@@ -540,6 +574,71 @@ Kirigami.Dialog {
                                 }
                             }
 
+                            // Filesystem
+                            ColumnLayout {
+                                visible: root.categoryIndex === 10
+                                Layout.fillWidth: true
+                                spacing: 12
+                                Controls.Label {
+                                    text: i18n("Share a host directory with the guest.")
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    opacity: 0.65
+                                    font.pixelSize: 12
+                                }
+                                GridLayout {
+                                    columns: 2
+                                    columnSpacing: 16
+                                    rowSpacing: 12
+                                    Layout.fillWidth: true
+                                    Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: fsDriverCombo
+                                        Layout.preferredWidth: 220
+                                        model: ["9p", "virtiofs"]
+                                    }
+                                    Controls.Label { text: i18n("Source path"); Layout.fillWidth: true }
+                                    RowLayout {
+                                        Layout.preferredWidth: 220
+                                        spacing: 6
+                                        Controls.TextField {
+                                            id: fsSourceField
+                                            Layout.fillWidth: true
+                                            placeholderText: "/home/user/Shared"
+                                        }
+                                        Controls.Button {
+                                            text: i18n("Browse…")
+                                            icon.name: "document-open-symbolic"
+                                            onClicked: fsFolderDialog.open()
+                                        }
+                                    }
+                                    Controls.Label { text: i18n("Name / mount tag"); Layout.fillWidth: true }
+                                    Controls.TextField {
+                                        id: fsTargetField
+                                        Layout.preferredWidth: 220
+                                        placeholderText: "share"
+                                    }
+                                    Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: fsAccessCombo
+                                        Layout.preferredWidth: 220
+                                        model: ["passthrough", "mapped", "squash"]
+                                    }
+                                    Controls.Label { text: i18n("Read-only"); Layout.fillWidth: true }
+                                    Controls.CheckBox {
+                                        id: fsReadonlyCheck
+                                        Layout.alignment: Qt.AlignRight
+                                    }
+                                }
+                                Controls.Button {
+                                    text: i18n("Add filesystem")
+                                    icon.name: "list-add-symbolic"
+                                    Layout.alignment: Qt.AlignLeft
+                                    enabled: fsSourceField.text.trim().length > 0
+                                    onClicked: root.addFilesystem()
+                                }
+                            }
+
                             Controls.Label {
                                 visible: root.message.length > 0
                                 text: root.message
@@ -585,6 +684,14 @@ Kirigami.Dialog {
             if (Karton.attachIso(root.domain, root.localPath(selectedFile))) {
                 root.added();
             }
+        }
+    }
+
+    FolderDialog {
+        id: fsFolderDialog
+        title: i18n("Choose a shared directory")
+        onAccepted: {
+            fsSourceField.text = decodeURIComponent(selectedFolder.toString().replace(/^file:\/\//, ""));
         }
     }
 }

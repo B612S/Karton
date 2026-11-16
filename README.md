@@ -61,6 +61,7 @@ VM pages include:
 - USB
 - PCI
 - TPM
+- Filesystem shares
 - Input devices
 - Controllers
 - Serial & Console
@@ -79,10 +80,11 @@ highlighting and scrolls independently of the page.
 - controllers, serial ports and consoles;
 - VirtIO channels;
 - USB redirection;
-- shared memory (IVSHMEM) and filesystem shares (9p/virtiofs).
+- filesystem shares (9p/virtiofs).
 
-TPM is configured on the VM's TPM Settings page. Watchdog, RNG, panic and
-VSOCK are enabled from the VM's Other devices page.
+TPM is configured on the VM's TPM Settings page. Watchdog, RNG, panic,
+VSOCK and shared memory (IVSHMEM) are enabled from the VM's Other devices page.
+Filesystem shares are added from Add Hardware and listed on the Filesystem page.
 
 Global Application Settings provide:
 

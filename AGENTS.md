@@ -360,7 +360,9 @@ Every settings page must look and behave the same:
   order, video, sound, TPM and description through `editDomainHardware()`.
   The footer button "Add…" opens the grouped `AddHardwareDialog.qml` wizard,
   which is the only place where devices are added: storage, network, input,
-  controller, serial, console, channel, USB/PCI passthrough and redirection. Its forms use the same two-column label/control rows
+  controller, serial, console, channel, USB/PCI passthrough, redirection and
+  filesystem shares. Filesystem entries are called shares in the UI; their
+  target directory is the name/mount tag shown on the Filesystem page. Its forms use the same two-column label/control rows
   as the settings pages, and its content scrolls with the mouse wheel/touchpad. Settings pages list and edit attached devices but do
   not duplicate add controls. Input devices (`<input>`) have their own page,
   and Controllers, Serial & Console and Other devices pages surface the
