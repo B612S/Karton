@@ -1349,6 +1349,60 @@ bool Karton::detachXmlDevice(const Domain *domain, int index)
     return true;
 }
 
+bool Karton::setXmlDevice(const Domain *domain, const QString &tag, const QString &xml)
+{
+    if (!domain || !domain->domainPtr() || !m_conn || tag.isEmpty() || xml.trimmed().isEmpty()) {
+        return false;
+    }
+    char *xmlDesc = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xmlDesc) {
+        xmlDesc = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xmlDesc) {
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xmlDesc))) {
+        free(xmlDesc);
+        return false;
+    }
+    free(xmlDesc);
+
+    QDomDocument deviceDocument;
+    if (!deviceDocument.setContent(xml)) {
+        Q_EMIT errorOccurred(i18n("Invalid device XML."));
+        return false;
+    }
+    QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
+    if (devices.isNull()) {
+        devices = document.createElement(QStringLiteral("devices"));
+        document.documentElement().appendChild(devices);
+    }
+    QDomElement existing;
+    for (QDomElement candidate = devices.firstChildElement(); !candidate.isNull(); candidate = candidate.nextSiblingElement()) {
+        if (candidate.tagName() == tag) {
+            existing = candidate;
+            break;
+        }
+    }
+    const QDomElement replacement = deviceDocument.documentElement();
+    if (existing.isNull()) {
+        devices.appendChild(document.importNode(replacement, true));
+    } else {
+        devices.replaceChild(document.importNode(replacement, true), existing);
+    }
+
+    virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    if (!redefined) {
+        Q_EMIT errorOccurred(
+            i18nc("%1 is the device tag, %2 is the error message", "Failed to update %1: %2", tag, QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    virDomainFree(redefined);
+    refreshDomainList();
+    return true;
+}
+
 QVariantList Karton::domainXmlDevices(const Domain *domain) const
 {
     QVariantList result;
@@ -1508,6 +1562,20 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
         }
         QVariantMap info;
         info.insert(QStringLiteral("tag"), tag);
+        if (tag == QStringLiteral("watchdog")) {
+            info.insert(QStringLiteral("model"), device.attribute(QStringLiteral("model")));
+            info.insert(QStringLiteral("action"), device.attribute(QStringLiteral("action")));
+        } else if (tag == QStringLiteral("rng")) {
+            info.insert(QStringLiteral("model"), device.attribute(QStringLiteral("model")));
+            const QDomElement backend = device.firstChildElement(QStringLiteral("backend"));
+            info.insert(QStringLiteral("backend"), backend.attribute(QStringLiteral("model")));
+        } else if (tag == QStringLiteral("panic")) {
+            info.insert(QStringLiteral("model"), device.attribute(QStringLiteral("model")));
+        } else if (tag == QStringLiteral("vsock")) {
+            const QDomElement cid = device.firstChildElement(QStringLiteral("cid"));
+            info.insert(QStringLiteral("cid"),
+                        cid.attribute(QStringLiteral("auto")) == QStringLiteral("yes") ? QStringLiteral("auto") : cid.attribute(QStringLiteral("id")));
+        }
         info.insert(QStringLiteral("label"), label);
         info.insert(QStringLiteral("icon"), icon);
         info.insert(QStringLiteral("description"), detail.trimmed());

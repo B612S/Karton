@@ -36,6 +36,7 @@ Kirigami.Dialog {
     property var performance: ({})
     property bool xmlDirty: false
     property bool xmlLoading: false
+    property bool optionalUpdating: false
     property string xmlContent: ""
     property string xmlLastValid: ""
     property var xmlDevices: []
@@ -98,6 +99,19 @@ Kirigami.Dialog {
         if (!root.xmlDirty) {
             loadXml(Karton.domainXml(domain));
         }
+        root.optionalUpdating = true;
+        const watchdog = root.deviceByTag("watchdog");
+        watchdogCheck.checked = watchdog !== null;
+        watchdogModelCombo.currentIndex = Math.max(0, ["i6300esb", "ib700"].indexOf(watchdog ? watchdog.model : ""));
+        watchdogActionCombo.currentIndex = Math.max(0, ["reset", "poweroff", "shutdown", "pause", "none"].indexOf(watchdog ? watchdog.action : ""));
+        const rng = root.deviceByTag("rng");
+        rngCheck.checked = rng !== null;
+        rngBackendCombo.currentIndex = Math.max(0, ["random", "egd"].indexOf(rng ? rng.backend : ""));
+        panicCheck.checked = root.hasXmlDevice("panic");
+        panicModelCombo.currentIndex = Math.max(0, ["isa", "pvpanic"].indexOf(panicCheck.checked ? root.deviceByTag("panic").model : ""));
+        vsockCheck.checked = root.hasXmlDevice("vsock");
+        root.optionalUpdating = false;
+
         const resolution = Karton.domainDisplayResolution(domain);
         let resolutionIndex = 0;
         for (let i = 0; i < displayResolutions.length - 1; ++i) {
@@ -136,19 +150,53 @@ Kirigami.Dialog {
         return device.vendor + ":" + device.product;
     }
 
-    function hasXmlDevice(tag) {
+    function deviceByTag(tag) {
         for (let i = 0; i < xmlDevices.length; ++i) {
             if (xmlDevices[i].tag === tag) {
-                return true;
+                return xmlDevices[i];
             }
         }
-        return false;
+        return null;
     }
 
-    function addXmlDevice(xml) {
-        if (Karton.attachXmlDevice(root.domain, xml)) {
+    function hasXmlDevice(tag) {
+        return root.deviceByTag(tag) !== null;
+    }
+
+    function updateOptionalDevice(tag, enabled, xml) {
+        if (root.optionalUpdating) {
+            return;
+        }
+        root.optionalUpdating = true;
+        if (enabled) {
+            Karton.setXmlDevice(root.domain, tag, xml);
+        } else {
+            const device = root.deviceByTag(tag);
+            if (device) {
+                Karton.detachXmlDevice(root.domain, device.index);
+            }
+        }
+        root.optionalUpdating = false;
+        root.refresh();
+    }
+
+    function applyOptionalSettings(tag, xml) {
+        if (!root.optionalUpdating && root.hasXmlDevice(tag)) {
+            Karton.setXmlDevice(root.domain, tag, xml);
             root.refresh();
         }
+    }
+
+    function watchdogXml() {
+        return "<watchdog model='" + watchdogModelCombo.currentText + "' action='" + watchdogActionCombo.currentText + "'/>";
+    }
+
+    function rngXml() {
+        return "<rng model='virtio'><backend model='" + rngBackendCombo.currentText + "'>/dev/urandom</backend></rng>";
+    }
+
+    function panicXml() {
+        return "<panic model='" + panicModelCombo.currentText + "'/>";
     }
 
     function pciDeviceLabel(address) {
@@ -1560,28 +1608,69 @@ Kirigami.Dialog {
                     font.pixelSize: 12
                     text: i18n("Additional devices declared in the domain XML, such as RNG, balloon, watchdog, panic, shared memory, IOMMU, vsock, filesystem and redirection devices.")
                 }
-                RowLayout {
+                Controls.Label {
+                    text: i18n("System devices")
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
                     Layout.fillWidth: true
-                    spacing: 8
-                    Controls.Button {
-                        text: i18n("Add watchdog")
-                        enabled: !root.hasXmlDevice("watchdog")
-                        onClicked: root.addXmlDevice("<watchdog model='i6300esb' action='reset'/>")
+                    Layout.topMargin: 4
+                }
+                GridLayout {
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 8
+                    Layout.fillWidth: true
+                    Controls.Label { text: i18n("Watchdog"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: watchdogCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("watchdog", checked, root.watchdogXml())
                     }
-                    Controls.Button {
-                        text: i18n("Add RNG")
-                        enabled: !root.hasXmlDevice("rng")
-                        onClicked: root.addXmlDevice("<rng model='virtio'><backend model='random'>/dev/urandom</backend></rng>")
+                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
+                    Controls.ComboBox {
+                        id: watchdogModelCombo
+                        Layout.preferredWidth: 220
+                        model: ["i6300esb", "ib700"]
+                        onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
-                    Controls.Button {
-                        text: i18n("Add panic")
-                        enabled: !root.hasXmlDevice("panic")
-                        onClicked: root.addXmlDevice("<panic model='isa'/>")
+                    Controls.Label { text: i18n("Action"); Layout.fillWidth: true }
+                    Controls.ComboBox {
+                        id: watchdogActionCombo
+                        Layout.preferredWidth: 220
+                        model: ["reset", "poweroff", "shutdown", "pause", "none"]
+                        onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
-                    Controls.Button {
-                        text: i18n("Add VSOCK")
-                        enabled: !root.hasXmlDevice("vsock")
-                        onClicked: root.addXmlDevice("<vsock model='virtio'><cid auto='yes'/></vsock>")
+                    Controls.Label { text: i18n("RNG"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: rngCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("rng", checked, root.rngXml())
+                    }
+                    Controls.Label { text: i18n("RNG backend"); Layout.fillWidth: true }
+                    Controls.ComboBox {
+                        id: rngBackendCombo
+                        Layout.preferredWidth: 220
+                        model: ["random", "egd"]
+                        onCurrentIndexChanged: root.applyOptionalSettings("rng", root.rngXml())
+                    }
+                    Controls.Label { text: i18n("Panic notifier"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: panicCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("panic", checked, root.panicXml())
+                    }
+                    Controls.Label { text: i18n("Panic model"); Layout.fillWidth: true }
+                    Controls.ComboBox {
+                        id: panicModelCombo
+                        Layout.preferredWidth: 220
+                        model: ["isa", "pvpanic"]
+                        onCurrentIndexChanged: root.applyOptionalSettings("panic", root.panicXml())
+                    }
+                    Controls.Label { text: i18n("VSOCK"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: vsockCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("vsock", checked, "<vsock model='virtio'><cid auto='yes'/></vsock>")
                     }
                 }
                 ListView {
@@ -1589,7 +1678,7 @@ Kirigami.Dialog {
                     Layout.fillHeight: true
                     clip: true
                     model: root.xmlDevices.filter(function(device) {
-                        return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console", "emulator", "graphics", "audio"].indexOf(device.tag) === -1;
+                        return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console", "emulator", "graphics", "audio", "watchdog", "rng", "panic", "vsock"].indexOf(device.tag) === -1;
                     })
                     delegate: Controls.ItemDelegate {
                         width: ListView.view.width
