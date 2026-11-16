@@ -46,6 +46,9 @@ private:
 
     SpiceSession *m_session = nullptr;
     SpiceMainChannel *m_channel = nullptr;
+    gulong m_grabHandler = 0;
+    gulong m_requestHandler = 0;
+    gulong m_selectionHandler = 0;
     QMetaObject::Connection m_clipboardConnection;
     int m_textMode = 3;
     int m_filesMode = 0;

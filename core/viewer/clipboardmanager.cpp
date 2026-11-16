@@ -43,9 +43,9 @@ void ClipboardManager::attach(SpiceSession *session, SpiceMainChannel *channel)
         return;
     }
     m_channel = channel;
-    g_signal_connect(channel, "main-clipboard-selection-grab", G_CALLBACK(clipboardSelectionGrabCallback), this);
-    g_signal_connect(channel, "main-clipboard-selection-request", G_CALLBACK(clipboardSelectionRequestCallback), this);
-    g_signal_connect(channel, "main-clipboard-selection", G_CALLBACK(clipboardSelectionCallback), this);
+    m_grabHandler = g_signal_connect(channel, "main-clipboard-selection-grab", G_CALLBACK(clipboardSelectionGrabCallback), this);
+    m_requestHandler = g_signal_connect(channel, "main-clipboard-selection-request", G_CALLBACK(clipboardSelectionRequestCallback), this);
+    m_selectionHandler = g_signal_connect(channel, "main-clipboard-selection", G_CALLBACK(clipboardSelectionCallback), this);
     m_clipboardConnection = QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, [this]() {
         hostClipboardChanged();
     });
@@ -55,6 +55,20 @@ void ClipboardManager::detach()
 {
     QObject::disconnect(m_clipboardConnection);
     m_clipboardConnection = {};
+    if (m_channel) {
+        if (m_grabHandler != 0) {
+            g_signal_handler_disconnect(m_channel, m_grabHandler);
+        }
+        if (m_requestHandler != 0) {
+            g_signal_handler_disconnect(m_channel, m_requestHandler);
+        }
+        if (m_selectionHandler != 0) {
+            g_signal_handler_disconnect(m_channel, m_selectionHandler);
+        }
+    }
+    m_grabHandler = 0;
+    m_requestHandler = 0;
+    m_selectionHandler = 0;
     m_session = nullptr;
     m_channel = nullptr;
     m_pendingFileList.clear();
