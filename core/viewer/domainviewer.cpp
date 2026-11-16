@@ -411,12 +411,11 @@ void DomainViewer::hostClipboardChanged()
     }
     const QString text = QGuiApplication::clipboard()->text(QClipboard::Clipboard);
     qCInfo(KARTON_DEBUG) << "clipboard: host changed, mode" << m_clipboardTextMode << "text" << text.size() << "chars";
-    if (!m_lastGuestClipboardText.isEmpty() && text == m_lastGuestClipboardText) {
-        m_lastGuestClipboardText.clear();
+    if (text.isEmpty()) {
         return;
     }
-    if (text.isEmpty()) {
-        spice_main_channel_clipboard_selection_release(m_main_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD);
+    if (!m_lastGuestClipboardText.isEmpty() && text == m_lastGuestClipboardText) {
+        m_lastGuestClipboardText.clear();
         return;
     }
     guint32 types[] = {VD_AGENT_CLIPBOARD_UTF8_TEXT};
