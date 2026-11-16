@@ -309,6 +309,7 @@ Kirigami.Dialog {
             return;
         }
         categoryList.currentIndex = 0;
+        categoryList.positionViewAtBeginning();
         saving = false;
         pendingName = "";
         nameField.text = domain.config.name;
@@ -317,6 +318,11 @@ Kirigami.Dialog {
         cpuSpinBox.value = domain.config.cpus;
         xmlEditSwitch.checked = false;
         refresh();
+    }
+
+    onClosed: {
+        categoryList.currentIndex = 0;
+        categoryList.positionViewAtBeginning();
     }
 
     function save() {

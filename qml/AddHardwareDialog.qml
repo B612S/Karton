@@ -60,11 +60,17 @@ Kirigami.Dialog {
     onOpened: {
         refresh();
         categoryList.currentIndex = initialCategory;
+        categoryList.positionViewAtBeginning();
         categoryIndex = initialCategory;
         message = "";
         messageIsError = false;
     }
-    onClosed: initialCategory = 0
+    onClosed: {
+        initialCategory = 0;
+        categoryList.currentIndex = 0;
+        categoryIndex = 0;
+        categoryList.positionViewAtBeginning();
+    }
 
     function refresh() {
         networks = Karton.networks();
