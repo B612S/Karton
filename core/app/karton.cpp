@@ -28,6 +28,7 @@
 #include <QStandardPaths>
 #include <functional>
 #include <memory>
+#include <thread>
 #include <utility>
 
 #include "domain/domain.h"
@@ -658,6 +659,12 @@ QVariantMap Karton::domainHardwareInfo(const Domain *domain) const
 
     const QDomElement sound = devices.firstChildElement(QStringLiteral("sound"));
     info.insert(QStringLiteral("soundModel"), sound.isNull() ? QStringLiteral("none") : sound.attribute(QStringLiteral("model"), QStringLiteral("ich9")));
+
+    const QDomElement tpm = devices.firstChildElement(QStringLiteral("tpm"));
+    const QDomElement tpmBackend = tpm.firstChildElement(QStringLiteral("backend"));
+    info.insert(QStringLiteral("tpmEnabled"), !tpm.isNull());
+    info.insert(QStringLiteral("tpmModel"), tpm.attribute(QStringLiteral("model"), QStringLiteral("tpm-crb")));
+    info.insert(QStringLiteral("tpmVersion"), tpmBackend.attribute(QStringLiteral("version"), QStringLiteral("2.0")));
     info.insert(QStringLiteral("description"), root.firstChildElement(QStringLiteral("description")).text());
     return info;
 }
@@ -782,6 +789,28 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
         }
     }
 
+    if (settings.contains(QStringLiteral("tpmEnabled"))) {
+        QDomElement tpm = devices.firstChildElement(QStringLiteral("tpm"));
+        if (!settings.value(QStringLiteral("tpmEnabled")).toBool()) {
+            if (!tpm.isNull()) {
+                devices.removeChild(tpm);
+            }
+        } else {
+            if (tpm.isNull()) {
+                tpm = document.createElement(QStringLiteral("tpm"));
+                devices.appendChild(tpm);
+            }
+            tpm.setAttribute(QStringLiteral("model"), settings.value(QStringLiteral("tpmModel"), QStringLiteral("tpm-crb")).toString());
+            QDomElement backend = tpm.firstChildElement(QStringLiteral("backend"));
+            if (backend.isNull()) {
+                backend = document.createElement(QStringLiteral("backend"));
+                tpm.appendChild(backend);
+            }
+            backend.setAttribute(QStringLiteral("type"), QStringLiteral("emulator"));
+            backend.setAttribute(QStringLiteral("version"), settings.value(QStringLiteral("tpmVersion"), QStringLiteral("2.0")).toString());
+        }
+    }
+
     if (settings.contains(QStringLiteral("description"))) {
         QDomElement description = root.firstChildElement(QStringLiteral("description"));
         const QString text = settings.value(QStringLiteral("description")).toString();
@@ -814,21 +843,32 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
     return true;
 }
 
-bool Karton::refreshDomainPreview(const Domain *domain)
+static QImage captureDomainScreenshotImage(const QString &uri, const QString &uuid)
 {
-    if (!domain || !domain->domainPtr() || !m_conn) {
-        return false;
+    virConnectPtr conn = virConnectOpen(uri.toUtf8().constData());
+    if (!conn) {
+        return {};
     }
 
-    virStreamPtr stream = virStreamNew(m_conn, 0);
+    virDomainPtr domain = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
+    if (!domain) {
+        virConnectClose(conn);
+        return {};
+    }
+
+    virStreamPtr stream = virStreamNew(conn, 0);
     if (!stream) {
-        return false;
+        virDomainFree(domain);
+        virConnectClose(conn);
+        return {};
     }
 
-    char *mimeType = virDomainScreenshot(domain->domainPtr(), stream, 0, 0);
+    char *mimeType = virDomainScreenshot(domain, stream, 0, 0);
     if (!mimeType) {
         virStreamFree(stream);
-        return false;
+        virDomainFree(domain);
+        virConnectClose(conn);
+        return {};
     }
     free(mimeType);
 
@@ -846,18 +886,55 @@ bool Karton::refreshDomainPreview(const Domain *domain)
         }
         imageData.append(buffer, bytesRead);
     }
+
     virStreamFree(stream);
+    virDomainFree(domain);
+    virConnectClose(conn);
 
     if (!ok || imageData.isEmpty()) {
+        return {};
+    }
+    return QImage::fromData(imageData);
+}
+
+bool Karton::refreshDomainPreview(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr() || !m_conn || m_previewCapturing) {
         return false;
     }
 
-    const QImage image = QImage::fromData(imageData);
-    if (image.isNull()) {
+    const QString uri = m_activeUri;
+    const QString uuid = Domain::uuidString(domain->domainPtr());
+    if (uri.isEmpty() || uuid.isEmpty()) {
         return false;
     }
 
-    const_cast<Domain *>(domain)->savePreviewFrame(image);
+    m_previewCapturing = true;
+    QPointer<Karton> guard(this);
+    std::thread([guard, uri, uuid]() {
+        const QImage image = captureDomainScreenshotImage(uri, uuid);
+        if (!guard) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, uuid, image]() {
+                if (!guard) {
+                    return;
+                }
+                guard->m_previewCapturing = false;
+                if (image.isNull()) {
+                    return;
+                }
+                for (Domain *candidate : std::as_const(guard->m_domains)) {
+                    if (candidate->config()->uuid() == uuid) {
+                        candidate->savePreviewFrame(image);
+                        break;
+                    }
+                }
+            },
+            Qt::QueuedConnection);
+    }).detach();
     return true;
 }
 

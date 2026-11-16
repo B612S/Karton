@@ -59,7 +59,7 @@ public:
     void componentComplete() override;
 
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
-    bool setupSpiceSession();
+    Q_INVOKABLE bool setupSpiceSession();
     bool connectToSpice();
     Q_INVOKABLE void disconnectFromSpice();
 

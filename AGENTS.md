@@ -271,25 +271,25 @@ When testing destructive operations, prefer domains whose names start with
   acceleration). Keep the content of each step short; the previous single long
   form triggered a `Kirigami.Dialog` binding loop on `y`.
 - `SettingsDialog.qml` is the virt-manager-style hardware settings dialog:
-  Overview, CPUs & Memory, Boot Options, Disks, Network, Display, Sound and
-  USB & PCI pages. Disks, networks and PCI devices are managed inline (lists,
-  add/attach/detach controls) instead of separate dialogs; only USB remains a
-  runtime dialog. It reads `Karton::domainHardwareInfo()` and writes firmware,
-  boot order, video, sound and description through `editDomainHardware()`.
-  "Add Hardware" navigates to the relevant Settings page (or opens the USB
-  dialog). There are no separate Storage/Networks/PCI menu actions.
+  Overview, CPUs & Memory, Boot Options, Disks, Network, Display, Sound,
+  USB & PCI and TPM pages. Disks, networks and PCI devices are managed inline
+  (lists, add/attach/detach controls) instead of separate dialogs; only USB
+  remains a runtime dialog. It reads `Karton::domainHardwareInfo()` and writes
+  firmware, boot order, video, sound, TPM and description through
+  `editDomainHardware()`. "Add Hardware" navigates to the relevant Settings
+  page (or opens the USB dialog). There are no separate Storage/Networks/PCI
+  menu actions.
 - New domains use user-mode networking with a `virtio` (default) or `e1000`
   interface, or no network at all. The model is stored in
   `DomainConfig::networkModel` and read back from the domain XML.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
   `VMPage.qml` polls `Karton::refreshDomainPreview()` every 5 seconds while the
-  VM is running, the page is visible **and the main window is active**. The
-  capture uses the synchronous `virDomainScreenshot()`, which briefly pauses
-  the guest; polling it while the viewer is active made mouse input stall for
-  about a second every few seconds. The preview therefore shows the current
-  guest display only while no viewer is in front, instead of the frame saved
-  when the viewer last closed.
+  VM is running, the page is visible and no viewer is open. The capture runs in
+  a detached worker thread with a temporary libvirt connection, so
+  `virDomainScreenshot()` does not block the GUI or stall mouse input. The
+  image is handed back with a queued callback and written through
+  `Domain::savePreviewFrame()`.
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
   overlay, above the display node; the local cursor is hidden while the remote
   cursor is visible. There is one display node per renderer and one root node
@@ -324,15 +324,17 @@ When testing destructive operations, prefer domains whose names start with
   pointers when Qt passes a null root after deleting the scene graph. Display
   textures use `QSGTexture::Linear` filtering so fonts stay readable when the
   guest resolution does not exactly match the viewer size.
-- `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar has runtime
-  power actions (shut down/force off, reboot/reset, pause/resume), a fullscreen
-  button and a three-dot menu with Actual Size, Fit to Window, Fit Guest to
-  Window, USB Devices, Settings and Snapshots. Opening the menu releases the
-  pointer grab first. There is no explicit grab/release-pointer action: clicking
-  the display grabs the pointer and Esc releases it. A double-click on a VM list
-  row opens that VM's viewer (a stopped VM is started first). UI icons use the
-  monochrome `*-symbolic` variants. PCI and Storage have no separate menu
-  actions; they are managed inline from SettingsDialog.
+- `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar has labeled
+  runtime actions: Start when stopped, Power (menu with Shut Down, Force Off,
+  Pause/Resume, Save State), Reboot (menu with Reboot and Reset), fullscreen
+  and a three-dot menu. A stopped VM opens the viewer without starting it and
+  shows a Start placeholder; it is started only when the user asks. When a
+  running VM stops, the viewer closes automatically. Opening the menu releases
+  the pointer grab first. There is no explicit grab/release-pointer action:
+  clicking the display grabs the pointer and Esc releases it. A double-click on
+  a VM list row opens that VM's viewer, whether it is running or stopped. UI
+  icons use the monochrome `*-symbolic` variants. PCI and Storage have no
+  separate menu actions; they are managed inline from SettingsDialog.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.

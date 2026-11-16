@@ -58,6 +58,9 @@ Kirigami.Dialog {
         accel3dCheck.checked = hardware.accel3d === true;
         soundCombo.currentIndex = Math.max(0, soundModels.indexOf(hardware.soundModel));
         descriptionField.text = hardware.description || "";
+        tpmEnabledCheck.checked = hardware.tpmEnabled === true;
+        tpmModelCombo.currentIndex = Math.max(0, ["tpm-crb", "tpm-tis"].indexOf(hardware.tpmModel));
+        tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
     }
 
     function localPath(url) {
@@ -95,6 +98,9 @@ Kirigami.Dialog {
             videoHeads: videoHeadsSpin.value,
             accel3d: accel3dCheck.checked,
             soundModel: soundModels[soundCombo.currentIndex],
+            tpmEnabled: tpmEnabledCheck.checked,
+            tpmModel: ["tpm-crb", "tpm-tis"][tpmModelCombo.currentIndex],
+            tpmVersion: ["2.0", "1.2"][tpmVersionCombo.currentIndex],
             description: descriptionField.text
         };
 
@@ -191,6 +197,11 @@ Kirigami.Dialog {
             icon.name: "computer-symbolic"
             onTriggered: categoryList.currentIndex = 7
         }
+        Controls.MenuItem {
+            text: i18n("TPM device")
+            icon.name: "security-high-symbolic"
+            onTriggered: categoryList.currentIndex = 8
+        }
     }
 
     RowLayout {
@@ -210,7 +221,8 @@ Kirigami.Dialog {
                 {label: i18n("Network"), icon: "network-wired-symbolic"},
                 {label: i18n("Display"), icon: "video-symbolic"},
                 {label: i18n("Sound"), icon: "audio-volume-high-symbolic"},
-                {label: i18n("USB & PCI"), icon: "drive-removable-media-usb-symbolic"}
+                {label: i18n("USB & PCI"), icon: "drive-removable-media-usb-symbolic"},
+                {label: i18n("TPM"), icon: "security-high-symbolic"}
             ]
 
             delegate: Delegates.RoundedItemDelegate {
@@ -847,6 +859,45 @@ Kirigami.Dialog {
                         text: i18n("Attaching a PCI device detaches it from the host. Devices without an IOMMU group cannot be attached.")
                         opacity: 0.7
                         wrapMode: Text.WordWrap
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+            }
+            // TPM
+            Controls.ScrollView {
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
+                    FormCard.FormCard {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+
+                        FormCard.FormCheckDelegate {
+                            id: tpmEnabledCheck
+                            text: i18n("Enable TPM")
+                            Layout.fillWidth: true
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormComboBoxDelegate {
+                            id: tpmModelCombo
+                            text: i18n("TPM model:")
+                            model: ["CRB", "TIS"]
+                            Layout.fillWidth: true
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormComboBoxDelegate {
+                            id: tpmVersionCombo
+                            text: i18n("TPM version:")
+                            model: ["2.0", "1.2"]
+                            Layout.fillWidth: true
+                        }
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        wrapMode: Text.WordWrap
+                        opacity: 0.7
+                        text: i18n("TPM emulation requires swtpm in the host and is applied to the persistent VM configuration.")
                     }
                     Item { Layout.fillHeight: true }
                 }

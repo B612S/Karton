@@ -137,6 +137,7 @@ private:
     };
     QHash<QString, CpuSample> m_cpuSamples;
     int m_viewerCount = 0;
+    bool m_previewCapturing = false;
 
     bool init();
 };

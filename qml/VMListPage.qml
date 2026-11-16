@@ -11,14 +11,13 @@ Kirigami.ScrollablePage {
     id: root
 
     title: i18nc("noun, Virtual Machines", "Virtual Machines")
-    property var pendingViewerDomain: null
     topPadding: 0
     bottomPadding: 0
     leftPadding: 0
     rightPadding: 0
 
     function openViewer(domain) {
-        if (!domain || !domain.isActive) {
+        if (!domain) {
             return;
         }
         const component = Qt.createComponent("VMViewerWindow.qml");
@@ -35,21 +34,7 @@ Kirigami.ScrollablePage {
     }
 
     function openViewerForDomain(domain) {
-        if (!domain) {
-            return;
-        }
-        if (domain.isActive) {
-            openViewer(domain);
-            return;
-        }
-
-        pendingViewerDomain = domain;
-        if (!Karton.startDomain(domain)) {
-            pendingViewerDomain = null;
-            return;
-        }
-        viewerWaitTimer.attempts = 0;
-        viewerWaitTimer.restart();
+        openViewer(domain);
     }
 
     function openDomain(domain) {
@@ -74,34 +59,6 @@ Kirigami.ScrollablePage {
         target: Karton
         function onErrorOccurred(errorMessage) {
             applicationWindow().showPassiveNotification(errorMessage, "long");
-        }
-        function onDomainRemoved(removedDomain) {
-            if (removedDomain === root.pendingViewerDomain) {
-                root.pendingViewerDomain = null;
-                viewerWaitTimer.stop();
-            }
-        }
-    }
-
-    Timer {
-        id: viewerWaitTimer
-        interval: 1000
-        repeat: true
-        property int attempts: 0
-        onTriggered: {
-            if (!root.pendingViewerDomain) {
-                stop();
-                return;
-            }
-            if (root.pendingViewerDomain.isActive) {
-                const domain = root.pendingViewerDomain;
-                root.pendingViewerDomain = null;
-                stop();
-                root.openViewer(domain);
-            } else if (++attempts >= 15) {
-                root.pendingViewerDomain = null;
-                stop();
-            }
         }
     }
 

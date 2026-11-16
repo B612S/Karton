@@ -17,7 +17,7 @@ This project is still in early development and will likely break existing virtua
   resolution auto-fitting, live VM previews and a categorized viewer menu
   (display, devices and machine actions including Settings)
 - Virt-manager-style Settings dialog with CPU/memory, boot, disk, network,
-  display, sound and USB/PCI pages plus Add Hardware
+  display, sound, USB/PCI and TPM pages plus Add Hardware
 - Double-click a VM in the list to open its viewer directly
 - Managed save: store a running VM's state on disk and restore it on the next start
 - Live CPU and memory usage on the VM page

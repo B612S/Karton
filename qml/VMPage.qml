@@ -62,7 +62,7 @@ Kirigami.ScrollablePage {
         // Do not poll it while the viewer window is active (or any other
         // window has focus), otherwise mouse input visibly stalls every few
         // seconds during a live session.
-        running: root.isRunning && root.visible && applicationWindow().active && Karton.viewerCount === 0
+        running: root.isRunning && root.visible && Karton.viewerCount === 0
         triggeredOnStart: true
         onTriggered: {
             if (root.domain) {
@@ -73,30 +73,9 @@ Kirigami.ScrollablePage {
 
     actions: [
         Kirigami.Action {
+            text: i18n("Power")
             icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
-            text: isRunning ? i18n("Shut Down") : i18nc("verb, start a VM", "Start")
-            onTriggered: {
-                if (isRunning) {
-                    if (Karton.stopDomain(domain)) {
-                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Shutting down VM: %1!", domain.config.name));
-                    }
-                } else {
-                    if (Karton.startDomain(domain)) {
-                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", domain.config.name));
-                    }
-                }
-            }
-
-            Kirigami.Action {
-                text: i18n("Force Off")
-                icon.name: "process-stop-symbolic"
-                visible: isRunning
-                onTriggered: {
-                    if (Karton.forceStopDomain(domain)) {
-                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", domain.config.name));
-                    }
-                }
-            }
+            onTriggered: powerMenu.popup()
         },
         Kirigami.Action {
             text: i18n("Pause")
@@ -122,22 +101,7 @@ Kirigami.ScrollablePage {
             text: i18n("Reboot")
             icon.name: "system-reboot-symbolic"
             visible: isRunning
-            onTriggered: {
-                if (Karton.rebootDomain(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Rebooting VM: %1!", domain.config.name));
-                }
-            }
-
-            Kirigami.Action {
-                text: i18n("Reset")
-                icon.name: "system-reboot-symbolic"
-                visible: isRunning
-                onTriggered: {
-                    if (Karton.resetDomain(domain)) {
-                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Resetting VM: %1!", domain.config.name));
-                    }
-                }
-            }
+            onTriggered: rebootMenu.popup()
         },
         Kirigami.Action {
             text: i18n("Save State")
@@ -183,7 +147,6 @@ Kirigami.ScrollablePage {
             id: viewVMAction
             text: i18nc("verb, open viewer for VM", "View VM")
             icon.name: "computer-laptop-symbolic"
-            visible: isRunning
             onTriggered: {
                 const component = Qt.createComponent("VMViewerWindow.qml");
                 if (component.status !== Component.Ready) {
@@ -206,6 +169,63 @@ Kirigami.ScrollablePage {
             }
         }
     ]
+
+
+    Controls.Menu {
+        id: powerMenu
+
+        Controls.MenuItem {
+            text: isRunning ? i18n("Shut Down") : i18n("Start")
+            icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
+            onTriggered: {
+                if (isRunning) {
+                    Karton.stopDomain(domain);
+                } else {
+                    Karton.startDomain(domain);
+                }
+            }
+        }
+        Controls.MenuItem {
+            text: i18n("Force Off")
+            icon.name: "process-stop-symbolic"
+            visible: isRunning
+            onTriggered: Karton.forceStopDomain(domain)
+        }
+        Controls.MenuItem {
+            text: isPaused ? i18n("Resume") : i18n("Pause")
+            icon.name: isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+            visible: isRunning
+            onTriggered: {
+                if (isPaused) {
+                    Karton.resumeDomain(domain);
+                } else {
+                    Karton.pauseDomain(domain);
+                }
+            }
+        }
+        Controls.MenuSeparator {}
+        Controls.MenuItem {
+            text: i18n("Save State")
+            icon.name: "document-save-symbolic"
+            visible: isRunning
+            onTriggered: Karton.saveDomainState(domain)
+        }
+    }
+
+    Controls.Menu {
+        id: rebootMenu
+
+        Controls.MenuItem {
+            text: i18n("Reboot")
+            icon.name: "system-reboot-symbolic"
+            onTriggered: Karton.rebootDomain(domain)
+        }
+        Controls.MenuItem {
+            text: i18n("Reset")
+            icon.name: "system-reboot-symbolic"
+            onTriggered: Karton.resetDomain(domain)
+        }
+    }
 
     SnapshotsDialog {
         id: snapshotsDialog
@@ -265,14 +285,7 @@ Kirigami.ScrollablePage {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
-                onClicked: {
-                    if (!isRunning) {
-                        // The domain has to be running before SPICE is available.
-                        Karton.startDomain(domain);
-                        return;
-                    }
-                    viewVMAction.trigger();
-                }
+                onClicked: viewVMAction.trigger()
             }
         }
         FormCard.FormCard {
