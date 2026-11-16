@@ -318,10 +318,11 @@ When testing destructive operations, prefer domains whose names start with
   path. Disks expose advanced options (read-only, shareable, serial, cache and
   discard). It reads `Karton::domainHardwareInfo()` and writes firmware, boot
   order, video, sound, TPM and description through `editDomainHardware()`.
-  "Add Hardware" navigates to the relevant Settings page. The XML Devices page
-  lists every child of `<devices>` (disks, interfaces, input, controllers,
-  serial/channel, hostdevs and so on) and is refreshed with the other pages
-  after XML edits or device hotplug. The XML page is read-only by default with
+  "Add Hardware" navigates to the relevant Settings page. Input devices
+  (`<input>`) have their own page with add/edit-remove controls, and
+  Controllers, Serial & Console and Other devices pages surface the remaining
+  device categories from the domain XML. All pages are refreshed after XML
+  edits or device hotplug. The XML page is read-only by default with
   an Edit switch; it uses `XmlHighlighter` for theme-coloured XML syntax
   highlighting, preserves its scroll position when toggling Edit, and saves
   through `saveDomainXml()`.

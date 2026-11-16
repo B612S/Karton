@@ -1056,6 +1056,149 @@ QString Karton::domainXml(const Domain *domain) const
     return result;
 }
 
+QVariantList Karton::domainInputDevices(const Domain *domain) const
+{
+    QVariantList result;
+    if (!domain || !domain->domainPtr()) {
+        return result;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return result;
+    }
+    QDomDocument document;
+    if (document.setContent(QString::fromUtf8(xml))) {
+        const QDomNodeList inputs = document.elementsByTagName(QStringLiteral("input"));
+        for (int i = 0; i < inputs.count(); ++i) {
+            const QDomElement element = inputs.at(i).toElement();
+            QVariantMap info;
+            info.insert(QStringLiteral("type"), element.attribute(QStringLiteral("type")));
+            info.insert(QStringLiteral("bus"), element.attribute(QStringLiteral("bus")));
+            result.append(info);
+        }
+    }
+    free(xml);
+    return result;
+}
+
+bool Karton::attachInputDevice(const Domain *domain, const QString &type, const QString &bus)
+{
+    if (!domain || !domain->domainPtr() || type.isEmpty() || bus.isEmpty()) {
+        return false;
+    }
+    const QString xml = QStringLiteral("<input type='%1' bus='%2'/>").arg(type, bus);
+    unsigned int flags = VIR_DOMAIN_AFFECT_CONFIG;
+    if (domain->isActive()) {
+        flags |= VIR_DOMAIN_AFFECT_LIVE;
+    }
+    int result = virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), flags);
+    if (result < 0 && domain->isActive()) {
+        result = virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG);
+    }
+    if (result < 0) {
+        Q_EMIT errorOccurred(
+            i18nc("%1 is the device type, %2 is the error message", "Failed to add input device %1: %2", type, QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    refreshDomainList();
+    return true;
+}
+
+bool Karton::detachInputDevice(const Domain *domain, const QString &type, const QString &bus)
+{
+    if (!domain || !domain->domainPtr() || type.isEmpty()) {
+        return false;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return false;
+    }
+    free(xml);
+    const QDomNodeList inputs = document.elementsByTagName(QStringLiteral("input"));
+    for (int i = 0; i < inputs.count(); ++i) {
+        const QDomElement element = inputs.at(i).toElement();
+        if (element.attribute(QStringLiteral("type")) != type) {
+            continue;
+        }
+        if (!bus.isEmpty() && element.attribute(QStringLiteral("bus")) != bus) {
+            continue;
+        }
+        QDomDocument deviceDocument;
+        deviceDocument.appendChild(deviceDocument.importNode(element, true));
+        unsigned int flags = VIR_DOMAIN_AFFECT_CONFIG;
+        if (domain->isActive()) {
+            flags |= VIR_DOMAIN_AFFECT_LIVE;
+        }
+        int result = virDomainDetachDeviceFlags(domain->domainPtr(), deviceDocument.toString().toUtf8().constData(), flags);
+        if (result < 0 && domain->isActive()) {
+            result = virDomainDetachDeviceFlags(domain->domainPtr(), deviceDocument.toString().toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG);
+        }
+        if (result < 0) {
+            Q_EMIT errorOccurred(i18nc("%1 is the device type, %2 is the error message",
+                                       "Failed to remove input device %1: %2",
+                                       type,
+                                       QString::fromUtf8(virGetLastErrorMessage())));
+            return false;
+        }
+        refreshDomainList();
+        return true;
+    }
+    return false;
+}
+
+bool Karton::detachXmlDevice(const Domain *domain, int index)
+{
+    if (!domain || !domain->domainPtr() || index < 0) {
+        return false;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return false;
+    }
+    free(xml);
+    const QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
+    QDomElement device;
+    int current = 0;
+    for (QDomElement candidate = devices.firstChildElement(); !candidate.isNull(); candidate = candidate.nextSiblingElement()) {
+        if (current++ == index) {
+            device = candidate;
+            break;
+        }
+    }
+    if (device.isNull()) {
+        return false;
+    }
+    QDomDocument deviceDocument;
+    deviceDocument.appendChild(deviceDocument.importNode(device, true));
+    unsigned int flags = VIR_DOMAIN_AFFECT_CONFIG;
+    if (domain->isActive()) {
+        flags |= VIR_DOMAIN_AFFECT_LIVE;
+    }
+    int result = virDomainDetachDeviceFlags(domain->domainPtr(), deviceDocument.toString().toUtf8().constData(), flags);
+    if (result < 0 && domain->isActive()) {
+        result = virDomainDetachDeviceFlags(domain->domainPtr(), deviceDocument.toString().toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG);
+    }
+    if (result < 0) {
+        Q_EMIT errorOccurred(i18nc("The error message is supplied by libvirt", "Failed to remove device: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    refreshDomainList();
+    return true;
+}
+
 QVariantList Karton::domainXmlDevices(const Domain *domain) const
 {
     QVariantList result;
@@ -1110,6 +1253,7 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
         QVariantMap info;
         info.insert(QStringLiteral("tag"), tag);
         info.insert(QStringLiteral("description"), detail.trimmed());
+        info.insert(QStringLiteral("index"), result.size());
         result.append(info);
     }
     return result;

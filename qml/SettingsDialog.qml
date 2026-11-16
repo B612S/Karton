@@ -38,6 +38,7 @@ Kirigami.Dialog {
     property bool xmlLoading: false
     property string xmlContent: ""
     property var xmlDevices: []
+    property var inputDevices: []
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
@@ -71,6 +72,7 @@ Kirigami.Dialog {
         usbHostDevices = Karton.usbDevices();
         performance = Karton.domainStats(domain);
         xmlDevices = Karton.domainXmlDevices(domain);
+        inputDevices = Karton.domainInputDevices(domain);
 
         firmwareCombo.currentIndex = hardware.firmware === "uefi" ? 1 : 0;
         secureBootCheck.checked = hardware.secureBoot === true;
@@ -331,7 +333,10 @@ Kirigami.Dialog {
                     {label: i18n("TPM")},
                     {label: i18n("OS Information")},
                     {label: i18n("Performance")},
-                    {label: i18n("XML Devices")},
+                    {label: i18n("Input")},
+                    {label: i18n("Controllers")},
+                    {label: i18n("Serial & Console")},
+                    {label: i18n("Other devices")},
                     {label: i18n("XML")}
                 ]
 
@@ -1590,14 +1595,156 @@ Kirigami.Dialog {
                 }
             }
 
-            // XML devices
+            // Input devices
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 spacing: 12
 
                 Controls.Label {
-                    text: i18n("Devices in the domain XML")
+                    text: i18n("Input devices")
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                    Layout.fillWidth: true
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    model: root.inputDevices
+                    spacing: 2
+                    delegate: Controls.ItemDelegate {
+                        width: ListView.view.width
+                        focusPolicy: Qt.NoFocus
+                        contentItem: RowLayout {
+                            Controls.Label {
+                                text: modelData.type + " - " + modelData.bus
+                                Layout.fillWidth: true
+                            }
+                            Controls.Button {
+                                text: i18n("Detach")
+                                icon.name: "list-remove-symbolic"
+                                onClicked: {
+                                    if (Karton.detachInputDevice(root.domain, modelData.type, modelData.bus)) {
+                                        root.refresh();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Controls.ComboBox {
+                        id: newInputType
+                        Layout.fillWidth: true
+                        model: ["tablet", "mouse", "keyboard"]
+                    }
+                    Controls.ComboBox {
+                        id: newInputBus
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+                        model: ["usb", "ps2", "virtio"]
+                    }
+                    Controls.Button {
+                        text: i18n("Add")
+                        icon.name: "list-add-symbolic"
+                        onClicked: {
+                            if (Karton.attachInputDevice(root.domain, newInputType.currentText, newInputBus.currentText)) {
+                                root.refresh();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Controllers
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 12
+                Controls.Label {
+                    text: i18n("Controllers")
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                    Layout.fillWidth: true
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    model: root.xmlDevices.filter(function(device) { return device.tag === "controller"; })
+                    delegate: Controls.ItemDelegate {
+                        width: ListView.view.width
+                        focusPolicy: Qt.NoFocus
+                        contentItem: RowLayout {
+                            Controls.Label {
+                                text: modelData.description
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Controls.Button {
+                                text: i18n("Detach")
+                                icon.name: "list-remove-symbolic"
+                                onClicked: {
+                                    if (Karton.detachXmlDevice(root.domain, modelData.index)) {
+                                        root.refresh();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Serial and console
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 12
+                Controls.Label {
+                    text: i18n("Serial & Console")
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                    Layout.fillWidth: true
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    model: root.xmlDevices.filter(function(device) {
+                        return device.tag === "serial" || device.tag === "channel" || device.tag === "console";
+                    })
+                    delegate: Controls.ItemDelegate {
+                        width: ListView.view.width
+                        focusPolicy: Qt.NoFocus
+                        contentItem: RowLayout {
+                            Controls.Label {
+                                text: modelData.tag + " - " + modelData.description
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Controls.Button {
+                                text: i18n("Detach")
+                                icon.name: "list-remove-symbolic"
+                                onClicked: {
+                                    if (Karton.detachXmlDevice(root.domain, modelData.index)) {
+                                        root.refresh();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Other devices
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 12
+                Controls.Label {
+                    text: i18n("Other devices")
                     font.pixelSize: 15
                     font.weight: Font.Bold
                     Layout.fillWidth: true
@@ -1607,29 +1754,32 @@ Kirigami.Dialog {
                     wrapMode: Text.WordWrap
                     opacity: 0.65
                     font.pixelSize: 12
-                    text: i18n("Everything declared under <devices> is listed here, including input, controllers, serial ports and other devices.")
+                    text: i18n("Additional devices declared in the domain XML, such as RNG, balloon, watchdog, panic, shared memory, IOMMU, vsock, filesystem and redirection devices.")
                 }
                 ListView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    model: root.xmlDevices
-                    spacing: 2
+                    model: root.xmlDevices.filter(function(device) {
+                        return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console"].indexOf(device.tag) === -1;
+                    })
                     delegate: Controls.ItemDelegate {
                         width: ListView.view.width
                         focusPolicy: Qt.NoFocus
                         contentItem: RowLayout {
                             Controls.Label {
-                                text: modelData.tag
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
-                                Layout.preferredWidth: 100
-                            }
-                            Controls.Label {
-                                text: modelData.description
-                                opacity: 0.7
+                                text: modelData.tag + " - " + modelData.description
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                            }
+                            Controls.Button {
+                                text: i18n("Detach")
+                                icon.name: "list-remove-symbolic"
+                                onClicked: {
+                                    if (Karton.detachXmlDevice(root.domain, modelData.index)) {
+                                        root.refresh();
+                                    }
+                                }
                             }
                         }
                     }
