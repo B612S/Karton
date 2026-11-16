@@ -2078,6 +2078,8 @@ Kirigami.Dialog {
                                 Karton.saveClipboardFilesMode(index);
                                 if (index === 1 || index === 3) {
                                     Karton.ensureWebdavChannel(root.domain);
+                                } else {
+                                    Karton.disableWebdavChannel(root.domain);
                                 }
                             }
                         }
