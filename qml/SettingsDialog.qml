@@ -121,6 +121,7 @@ Kirigami.Dialog {
         filesystemTargetField.text = filesystem && filesystem.target.length > 0 ? filesystem.target : "share";
         filesystemAccessCombo.currentIndex = Math.max(0, ["passthrough", "mapped", "squash"].indexOf(filesystem ? filesystem.accessmode : ""));
         filesystemDriverCombo.currentIndex = Math.max(0, ["9p", "virtiofs"].indexOf(filesystem && filesystem.driver.length > 0 ? filesystem.driver : "9p"));
+        filesystemReadonlyCheck.checked = filesystem ? filesystem.readonly : false;
         root.optionalUpdating = false;
 
         const resolution = Karton.domainDisplayResolution(domain);
@@ -228,6 +229,9 @@ Kirigami.Dialog {
         xml += "<target dir='" + xmlEscape(target) + "'/>";
         if (filesystemDriverCombo.currentText === "virtiofs") {
             xml += "<driver type='virtiofs'/>";
+        }
+        if (filesystemReadonlyCheck.checked) {
+            xml += "<readonly/>";
         }
         return xml + "</filesystem>";
     }
@@ -352,6 +356,26 @@ Kirigami.Dialog {
         }
     }
 
+    customFooterActions: [
+        Kirigami.Action {
+            text: i18n("Add…")
+            icon.name: "list-add-symbolic"
+            enabled: root.domain !== null
+            onTriggered: addHardwareDialog.open()
+        },
+        Kirigami.Action {
+            text: i18n("Save")
+            icon.name: "dialog-ok-symbolic"
+            enabled: !root.saving && root.domain !== null
+            onTriggered: root.save()
+        },
+        Kirigami.Action {
+            text: i18n("Close")
+            icon.name: "dialog-cancel-symbolic"
+            onTriggered: root.close()
+        }
+    ]
+
     contentItem: Item {
         implicitWidth: root.cardWidth
         implicitHeight: root.cardHeight
@@ -419,17 +443,19 @@ Kirigami.Dialog {
                     {label: i18n("Network")},
                     {label: i18n("Display")},
                     {label: i18n("Sound")},
+                    {label: i18n("Input")},
                     {label: i18n("USB")},
                     {label: i18n("PCI")},
                     {label: i18n("TPM")},
-                    {label: i18n("OS Information")},
-                    {label: i18n("Performance")},
-                    {label: i18n("Input")},
+                    {label: i18n("Filesystem")},
                     {label: i18n("Controllers")},
                     {label: i18n("Serial & Console")},
                     {label: i18n("Other devices")},
+                    {label: i18n("OS Information")},
+                    {label: i18n("Performance")},
                     {label: i18n("XML")}
                 ]
+                readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 12, 7, 8, 9, 17, 13, 14, 15, 10, 11, 16]
 
                 delegate: Rectangle {
                     id: categoryButton
@@ -516,7 +542,7 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 Layout.margins: 24
                 clip: true
-                currentIndex: categoryList.currentIndex
+                currentIndex: root.categoryPages[categoryList.currentIndex]
 
             // Overview
             ScrollableSettingsView {
@@ -1685,52 +1711,6 @@ Kirigami.Dialog {
                     }
                 }
 
-                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
-
-                Controls.CheckBox {
-                    id: filesystemCheck
-                    text: i18n("Filesystem share")
-                    Layout.fillWidth: true
-                    enabled: filesystemSourceField.text.trim().length > 0 || checked
-                    onToggled: root.updateOptionalDevice("filesystem", checked, root.filesystemXml())
-                }
-                GridLayout {
-                    visible: filesystemCheck.checked || filesystemSourceField.text.length > 0
-                    columns: 2
-                    columnSpacing: 16
-                    rowSpacing: 16
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Controls.Label { text: i18n("Source directory"); Layout.fillWidth: true }
-                    Controls.TextField {
-                        id: filesystemSourceField
-                        Layout.preferredWidth: 260
-                        placeholderText: "/home/user/Shared"
-                        onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                    }
-                    Controls.Label { text: i18n("Mount tag"); Layout.fillWidth: true }
-                    Controls.TextField {
-                        id: filesystemTargetField
-                        Layout.preferredWidth: 260
-                        text: "share"
-                        onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                    }
-                    Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
-                    Controls.ComboBox {
-                        id: filesystemAccessCombo
-                        Layout.preferredWidth: 260
-                        model: ["passthrough", "mapped", "squash"]
-                        onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                    }
-                    Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
-                    Controls.ComboBox {
-                        id: filesystemDriverCombo
-                        Layout.preferredWidth: 260
-                        model: ["9p", "virtiofs"]
-                        onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
-                    }
-                }
-
                 Controls.Label {
                     text: i18n("Additional XML devices")
                     font.pixelSize: 15
@@ -1888,33 +1868,94 @@ Kirigami.Dialog {
                     }
                 }
             }
+            // Filesystem
+            ScrollableSettingsView {
+                Layout.fillHeight: true
+                implicitHeight: 0
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 16
+
+                    Controls.CheckBox {
+                        id: filesystemCheck
+                        text: i18n("Enable filesystem sharing")
+                        Layout.fillWidth: true
+                        enabled: filesystemSourceField.text.trim().length > 0 || checked
+                        onToggled: root.updateOptionalDevice("filesystem", checked, root.filesystemXml())
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+                        Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
+                        Controls.ComboBox {
+                            id: filesystemDriverCombo
+                            Layout.preferredWidth: 260
+                            model: ["9p", "virtiofs"]
+                            onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                        }
+                        Controls.Label { text: i18n("Source path"); Layout.fillWidth: true }
+                        RowLayout {
+                            Layout.preferredWidth: 260
+                            spacing: 8
+                            Controls.TextField {
+                                id: filesystemSourceField
+                                Layout.fillWidth: true
+                                placeholderText: "/home/user/Shared"
+                                onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                            }
+                            Controls.Button {
+                                text: i18n("Browse…")
+                                icon.name: "document-open-symbolic"
+                                onClicked: filesystemFolderDialog.open()
+                            }
+                        }
+                        Controls.Label { text: i18n("Mount tag"); Layout.fillWidth: true }
+                        Controls.TextField {
+                            id: filesystemTargetField
+                            Layout.preferredWidth: 260
+                            text: "share"
+                            onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                        }
+                        Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
+                        Controls.ComboBox {
+                            id: filesystemAccessCombo
+                            Layout.preferredWidth: 260
+                            model: ["passthrough", "mapped", "squash"]
+                            onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                        }
+                        Controls.Label { text: i18n("Read-only"); Layout.fillWidth: true }
+                        Controls.CheckBox {
+                            id: filesystemReadonlyCheck
+                            Layout.alignment: Qt.AlignRight
+                            onToggled: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                        }
+                        Controls.Label {
+                            text: i18n("The source directory is shared with the guest under the mount tag.")
+                            Layout.fillWidth: true
+                            Layout.columnSpan: 2
+                            wrapMode: Text.WordWrap
+                            opacity: 0.65
+                            font.pixelSize: 12
+                        }
+                    }
+                }
+            }
+
         }
     }
 
-    Controls.ToolBar {
-        Layout.fillWidth: true
-        contentItem: RowLayout {
-            Item { Layout.fillWidth: true }
-            Controls.Button {
-                text: i18n("Add…")
-                icon.name: "list-add-symbolic"
-                enabled: root.domain !== null
-                onClicked: addHardwareDialog.open()
-            }
-            Controls.Button {
-                text: i18n("Save")
-                icon.name: "dialog-ok-symbolic"
-                enabled: !root.saving && root.domain !== null
-                onClicked: root.save()
-            }
-            Controls.Button {
-                text: i18n("Close")
-                icon.name: "dialog-cancel-symbolic"
-                onClicked: root.close()
-            }
+    }
+    }
+
+    FolderDialog {
+        id: filesystemFolderDialog
+        title: i18n("Choose a shared directory")
+        onAccepted: {
+            filesystemSourceField.text = decodeURIComponent(selectedFolder.toString().replace(/^file:\/\//, ""));
+            root.applyOptionalSettings("filesystem", root.filesystemXml());
         }
-    }
-    }
     }
 
     AddHardwareDialog {

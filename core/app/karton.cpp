@@ -1575,6 +1575,20 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
             const QDomElement cid = device.firstChildElement(QStringLiteral("cid"));
             info.insert(QStringLiteral("cid"),
                         cid.attribute(QStringLiteral("auto")) == QStringLiteral("yes") ? QStringLiteral("auto") : cid.attribute(QStringLiteral("id")));
+        } else if (tag == QStringLiteral("shmem")) {
+            info.insert(QStringLiteral("name"), device.attribute(QStringLiteral("name")));
+            info.insert(QStringLiteral("size"), device.attribute(QStringLiteral("size")));
+            const QDomElement model = device.firstChildElement(QStringLiteral("model"));
+            info.insert(QStringLiteral("model"), model.attribute(QStringLiteral("type")));
+        } else if (tag == QStringLiteral("filesystem")) {
+            const QDomElement source = device.firstChildElement(QStringLiteral("source"));
+            const QDomElement target = device.firstChildElement(QStringLiteral("target"));
+            const QDomElement driver = device.firstChildElement(QStringLiteral("driver"));
+            info.insert(QStringLiteral("source"), source.attribute(QStringLiteral("dir")));
+            info.insert(QStringLiteral("target"), target.attribute(QStringLiteral("dir")));
+            info.insert(QStringLiteral("accessmode"), device.attribute(QStringLiteral("accessmode")));
+            info.insert(QStringLiteral("driver"), driver.attribute(QStringLiteral("type")));
+            info.insert(QStringLiteral("readonly"), !device.firstChildElement(QStringLiteral("readonly")).isNull());
         }
         info.insert(QStringLiteral("label"), label);
         info.insert(QStringLiteral("icon"), icon);

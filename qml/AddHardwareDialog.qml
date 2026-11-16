@@ -68,14 +68,14 @@ Kirigami.Dialog {
         switch (category) {
         case 0: return 3;  // Storage -> Disks
         case 1: return 4;  // Network
-        case 2: return 12; // Input
-        case 3: return 13; // Controllers
-        case 4: return 14; // Serial
-        case 5: return 14; // Console
-        case 6: return 14; // Channel
-        case 7: return 7;  // USB
-        case 8: return 8;  // PCI
-        case 9: return 15; // Redirection -> Other
+        case 2: return 7;  // Input
+        case 3: return 12; // Controllers
+        case 4: return 13; // Serial
+        case 5: return 13; // Console
+        case 6: return 13; // Channel
+        case 7: return 8;  // USB
+        case 8: return 9;  // PCI
+        case 9: return 14; // Redirection -> Other
         default: return 0;
         }
     }
