@@ -130,18 +130,18 @@ Kirigami.Dialog {
         }
         root.optionalUpdating = true;
         const watchdog = root.deviceByTag("watchdog");
-        watchdogCheck.checked = Karton.domainHasDevice(domain, "watchdog");
+        watchdogCheck.checked = root.domainContainsDevice("watchdog");
         watchdogModelCombo.currentIndex = Math.max(0, ["i6300esb", "ib700"].indexOf(watchdog ? watchdog.model : ""));
         watchdogActionCombo.currentIndex = Math.max(0, ["reset", "poweroff", "shutdown", "pause", "none"].indexOf(watchdog ? watchdog.action : ""));
         const rng = root.deviceByTag("rng");
-        rngCheck.checked = Karton.domainHasDevice(domain, "rng");
+        rngCheck.checked = root.domainContainsDevice("rng");
         rngBackendCombo.currentIndex = Math.max(0, ["random", "egd"].indexOf(rng ? rng.backend : ""));
-        panicCheck.checked = Karton.domainHasDevice(domain, "panic");
+        panicCheck.checked = root.domainContainsDevice("panic");
         panicModelCombo.currentIndex = Math.max(0, ["isa", "pvpanic"].indexOf(panicCheck.checked ? root.deviceByTag("panic").model : ""));
-        vsockCheck.checked = Karton.domainHasDevice(domain, "vsock");
+        vsockCheck.checked = root.domainContainsDevice("vsock");
         memoryBackingCheck.checked = root.hardware.sharedMemoryBacking === true;
         const shmem = root.deviceByTag("shmem");
-        shmemCheck.checked = Karton.domainHasDevice(domain, "shmem");
+        shmemCheck.checked = root.domainContainsDevice("shmem");
         shmemNameField.text = shmem ? shmem.name : "karton";
         shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
         shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));
@@ -194,6 +194,14 @@ Kirigami.Dialog {
         if (!root.categoryModel[categoryList.currentIndex].visible) {
             categoryList.currentIndex = 0;
         }
+    }
+
+    function domainContainsDevice(tag) {
+        if (!root.domain) {
+            return false;
+        }
+        const xml = Karton.domainXml(root.domain);
+        return new RegExp("<" + tag + "(\\s|>)").test(xml);
     }
 
     function deviceByTag(tag) {
