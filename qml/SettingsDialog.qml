@@ -1639,7 +1639,9 @@ Kirigami.Dialog {
                             color: Kirigami.Theme.textColor
                             background: null
                             onTextChanged: {
-                                if (!root.xmlLoading) {
+                                // Do not mark the initial empty text or a
+                                // refresh-triggered update as a user edit.
+                                if (!root.xmlLoading && xmlEditSwitch.checked) {
                                     root.xmlDirty = true;
                                 }
                             }
