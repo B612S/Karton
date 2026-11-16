@@ -7,7 +7,6 @@
 #include <spice-client.h>
 
 #include <QAudioFormat>
-#include <QAudioSink>
 #include <QAudioSource>
 #include <QElapsedTimer>
 #include <QIODevice>
@@ -26,6 +25,7 @@ class QSGSimpleTextureNode;
 class ClipboardManager;
 
 #include "domain/domain.h"
+#include "viewer/pipewireaudio.h"
 #include "viewer/spicedisplayrenderer.h"
 
 class DomainViewer : public QQuickItem
@@ -201,9 +201,7 @@ private:
     QPointF m_virtualPointerPosition;
     bool m_hasVirtualPointerPosition = false;
 
-    QAudioSink *m_audioSink = nullptr;
-    QIODevice *m_audioDevice = nullptr;
-    QAudioFormat m_audioFormat;
+    PipeWireAudioSink *m_audioPipeWire = nullptr;
     SpiceRecordChannel *m_recordChannel = nullptr;
     QAudioSource *m_audioSource = nullptr;
     QIODevice *m_recordDevice = nullptr;

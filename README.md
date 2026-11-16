@@ -135,6 +135,8 @@ Global Application Settings provide:
 - libosinfo
 - GLib
 - spice-client-glib
+- phodav
+- PipeWire
 - Vulkan with external-memory/DMA-BUF support, or OpenGL as a fallback
 - Extra CMake Modules
 
@@ -153,7 +155,7 @@ Development packages:
 sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules \
     qt6-base qt6-declarative qt6-multimedia qt6-tools \
     kirigami kirigami-addons kcoreaddons ki18n kiconthemes qqc2-desktop-style \
-    libvirt libosinfo spice-gtk mesa vulkan-headers vulkan-icd-loader
+    libvirt libosinfo spice-gtk phodav pipewire mesa vulkan-headers vulkan-icd-loader
 ```
 
 ## Build from source

@@ -43,9 +43,7 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     , m_session(nullptr)
     , m_inputs_channel(nullptr)
     , m_current_button_mask(0)
-    , m_audioSink(nullptr)
-    , m_audioDevice(nullptr)
-    , m_audioFormat()
+    , m_audioPipeWire(nullptr)
 {
     setFlag(ItemHasContents, true);
     m_clipboard = new ClipboardManager(this);
@@ -758,23 +756,14 @@ void DomainViewer::playback_start_callback(SpicePlaybackChannel *channel, gint f
         return;
     }
 
-    item->m_audioFormat.setSampleRate(rate);
-    item->m_audioFormat.setChannelCount(channels);
-    item->m_audioFormat.setSampleFormat(QAudioFormat::Int16);
-
-    item->m_audioSink = new QAudioSink(item->m_audioFormat, item);
-    // A small output buffer absorbs the initial SPICE packet jitter. Without
-    // it the first packets can underrun and produce a short crackle.
-    const int bufferBytes = item->m_audioFormat.bytesForDuration(200000);
-    item->m_audioSink->setBufferSize(qMax(bufferBytes, item->m_audioFormat.bytesForDuration(50000)));
-    item->m_audioDevice = item->m_audioSink->start();
-    if (!item->m_audioDevice) {
-        qCWarning(KARTON_DEBUG) << "Failed to start audio output:" << item->m_audioSink->error();
+    item->m_audioPipeWire = new PipeWireAudioSink(item);
+    if (!item->m_audioPipeWire->start(rate, channels)) {
+        qCWarning(KARTON_DEBUG) << "Failed to start PipeWire audio output";
         item->stopAudio();
         return;
     }
 
-    qCInfo(KARTON_DEBUG) << "Audio output started successfully, buffer:" << item->m_audioSink->bufferSize();
+    qCInfo(KARTON_DEBUG) << "Audio output started through PipeWire";
 }
 
 void DomainViewer::playback_data_callback(SpicePlaybackChannel *channel, gpointer data, gint size, gpointer user_data)
@@ -782,8 +771,8 @@ void DomainViewer::playback_data_callback(SpicePlaybackChannel *channel, gpointe
     Q_UNUSED(channel);
 
     DomainViewer *item = static_cast<DomainViewer *>(user_data);
-    if (item->m_audioDevice) {
-        item->m_audioDevice->write(static_cast<const char *>(data), size);
+    if (item->m_audioPipeWire) {
+        item->m_audioPipeWire->write(static_cast<const char *>(data), size);
     }
 }
 
@@ -798,13 +787,11 @@ void DomainViewer::playback_stop_callback(SpicePlaybackChannel *channel, gpointe
 
 void DomainViewer::stopAudio()
 {
-    if (m_audioSink) {
-        m_audioSink->stop();
-        delete m_audioSink;
-        m_audioSink = nullptr;
+    if (m_audioPipeWire) {
+        m_audioPipeWire->stop();
+        delete m_audioPipeWire;
+        m_audioPipeWire = nullptr;
     }
-
-    m_audioDevice = nullptr;
 }
 
 void DomainViewer::setAudioPlaybackEnabled(bool enabled)

@@ -73,6 +73,7 @@ find_package(Glib REQUIRED)
 find_package(Spiceglib REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PHODAV REQUIRED IMPORTED_TARGET libphodav-3.0)
+pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
 find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
 find_package(Vulkan REQUIRED)
 
@@ -138,6 +139,7 @@ target_sources(karton
     core/libvirt/libvirteventloop.cpp
     core/viewer/domainviewer.cpp
     core/viewer/clipboardmanager.cpp
+    core/viewer/pipewireaudio.cpp
     core/viewer/spicedisplayrenderer.h
     core/viewer/glscanoutrenderer.cpp
     core/viewer/primarysurfacerenderer.cpp
@@ -206,6 +208,7 @@ target_link_libraries(karton
     Libvirt::Libvirt
     Spiceglib::Spiceglib
     PkgConfig::PHODAV
+    PkgConfig::PIPEWIRE
     Libosinfo::Libosinfo
     Glib::Glib
     OpenGL::EGL

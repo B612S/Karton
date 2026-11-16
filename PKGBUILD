@@ -26,6 +26,8 @@ depends=(
     'libvirt'
     'libosinfo'
     'spice-gtk'
+    'phodav'
+    'pipewire'
     'mesa'
     'vulkan-icd-loader'
     'hicolor-icon-theme'

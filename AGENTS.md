@@ -74,7 +74,7 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 
 Required: CMake >= 3.20, a C++23 compiler, Qt 6, KF6 (Kirigami, I18n,
 CoreAddons, QQC2DesktopStyle, IconThemes), Kirigami Addons >= 1.11, libvirt,
-libosinfo, GLib, spice-client-glib, Vulkan (default scene graph and SPICE
+libosinfo, GLib, spice-client-glib, phodav, PipeWire, Vulkan (default scene graph and SPICE
 scanout import), OpenGL/EGL (fallback renderer), and Extra CMake Modules (ECM)
 >= 6.0.
 
@@ -84,7 +84,7 @@ On Arch Linux, the relevant packages are roughly:
 sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules \
     qt6-base qt6-declarative qt6-multimedia qt6-tools \
     kirigami kirigami-addons kcoreaddons ki18n kiconthemes qqc2-desktop-style \
-    libvirt libosinfo spice-gtk mesa vulkan-headers vulkan-icd-loader
+    libvirt libosinfo spice-gtk phodav pipewire mesa vulkan-headers vulkan-icd-loader
 ```
 
 Configure and build out-of-tree:
