@@ -404,10 +404,11 @@ Kirigami.Dialog {
                 currentIndex: categoryList.currentIndex
 
             // Overview
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -516,10 +517,11 @@ Kirigami.Dialog {
             }
 
             // CPUs and memory
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -580,10 +582,11 @@ Kirigami.Dialog {
             }
 
             // Boot options
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -655,10 +658,11 @@ Kirigami.Dialog {
             }
 
             // Disks
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -827,10 +831,11 @@ Kirigami.Dialog {
             }
 
             // Network
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -910,10 +915,11 @@ Kirigami.Dialog {
             }
 
             // Display
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1023,10 +1029,11 @@ Kirigami.Dialog {
             }
 
             // Sound
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1100,10 +1107,11 @@ Kirigami.Dialog {
             }
 
             // USB
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
 
@@ -1153,10 +1161,11 @@ Kirigami.Dialog {
             }
 
             // PCI
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
 
@@ -1206,10 +1215,11 @@ Kirigami.Dialog {
             }
 
             // TPM
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1278,10 +1288,11 @@ Kirigami.Dialog {
             }
 
             // OS information
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1331,10 +1342,11 @@ Kirigami.Dialog {
             }
 
             // Performance
-            Controls.ScrollView {
+            ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
+                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1620,7 +1632,7 @@ Kirigami.Dialog {
                         border.width: 1
                         border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
-                        Controls.ScrollView {
+                        ScrollableSettingsView {
                             id: xmlScroll
                             anchors.fill: parent
                             anchors.margins: 8

@@ -213,10 +213,11 @@ Kirigami.Dialog {
                         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                     }
 
-                    Controls.ScrollView {
+                    ScrollableSettingsView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         contentWidth: availableWidth
+                        contentHeight: contentItem ? contentItem.implicitHeight : 0
                         clip: true
 
                         ColumnLayout {

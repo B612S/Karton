@@ -131,7 +131,7 @@ Kirigami.Dialog {
                     }
                 }
 
-                Controls.ScrollView {
+                ScrollableSettingsView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.margins: 24

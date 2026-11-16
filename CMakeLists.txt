@@ -136,6 +136,7 @@ ecm_target_qml_sources(karton
     qml/VMPage.qml
     qml/AddHardwareDialog.qml
     qml/ApplicationSettingsDialog.qml
+    qml/ScrollableSettingsView.qml
     qml/UsbDevicesDialog.qml
     qml/SettingsDialog.qml
     qml/SnapshotsDialog.qml
