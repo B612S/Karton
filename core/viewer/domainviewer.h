@@ -162,7 +162,6 @@ private:
     static gboolean clipboardSelectionRequestCallback(SpiceMainChannel *channel, guint selection, guint32 type, gpointer userData);
     static void clipboardSelectionCallback(SpiceMainChannel *channel, guint selection, guint32 type, gconstpointer data, guint size, gpointer userData);
     void hostClipboardChanged();
-    void scheduleHostClipboardSync();
     static void cursorHideCallback(SpiceCursorChannel *channel, gpointer userData);
     static void cursorResetCallback(SpiceCursorChannel *channel, gpointer userData);
     void clearCursor();
