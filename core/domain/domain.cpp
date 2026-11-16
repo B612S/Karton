@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QPainter>
 #include <QSaveFile>
 #include <QString>
 
@@ -120,6 +121,17 @@ void Domain::savePreviewFrame(QImage frame)
     if (!previewDir.exists() && !previewDir.mkpath(QStringLiteral("."))) {
         qCWarning(KARTON_DEBUG) << "Failed to create preview directory:" << previewDir.absolutePath();
         return;
+    }
+
+    // QQuickItemGrabResult can be premultiplied/have alpha; compositing it
+    // onto black first keeps its colours identical to the old virsh preview.
+    if (frame.format() != QImage::Format_RGB32) {
+        QImage opaque(frame.size(), QImage::Format_RGB32);
+        opaque.fill(Qt::black);
+        QPainter painter(&opaque);
+        painter.drawImage(0, 0, frame);
+        painter.end();
+        frame = opaque;
     }
 
     if (frame.width() > 640) {

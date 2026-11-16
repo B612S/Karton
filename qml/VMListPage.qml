@@ -20,6 +20,13 @@ Kirigami.ScrollablePage {
         if (!domain) {
             return;
         }
+        const existing = Karton.viewerForDomain(domain);
+        if (existing) {
+            existing.show();
+            existing.raise();
+            existing.requestActivate();
+            return;
+        }
         const component = Qt.createComponent("VMViewerWindow.qml");
         if (component.status !== Component.Ready) {
             console.error("Failed to create VM viewer:", component.errorString());

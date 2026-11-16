@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QJSEngine>
 #include <QObject>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QVariantList>
 #include <QVariantMap>
@@ -84,6 +85,9 @@ public Q_SLOTS:
     Q_INVOKABLE bool refreshDomainPreview(const Domain *domain);
     Q_INVOKABLE void viewerOpened();
     Q_INVOKABLE void viewerClosed();
+    Q_INVOKABLE QObject *viewerForDomain(Domain *domain) const;
+    Q_INVOKABLE void registerViewer(Domain *domain, QObject *window);
+    Q_INVOKABLE void unregisterViewer(QObject *window);
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
@@ -141,6 +145,7 @@ private:
     };
     QHash<QString, CpuSample> m_cpuSamples;
     int m_viewerCount = 0;
+    QHash<QString, QPointer<QObject>> m_viewers;
     bool m_previewCapturing = false;
 
     bool init();

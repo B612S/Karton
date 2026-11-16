@@ -32,6 +32,7 @@ class DomainViewer : public QQuickItem
     Q_PROPERTY(Domain *domain READ domain WRITE setDomain NOTIFY domainChanged REQUIRED)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(bool pointerGrabbed READ pointerGrabbed NOTIFY pointerGrabbedChanged)
+    Q_PROPERTY(bool agentConnected READ agentConnected NOTIFY agentConnectedChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -52,6 +53,10 @@ public:
     bool pointerGrabbed() const
     {
         return m_pointerGrabbed;
+    }
+    bool agentConnected() const
+    {
+        return m_agentConnected;
     }
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
@@ -79,6 +84,7 @@ public:
     void focusOutEvent(QFocusEvent *event) override;
 
     Q_INVOKABLE void saveFrameToDomain();
+    Q_INVOKABLE void updateDomainPreview();
     Q_INVOKABLE void updateDisplayResolution();
     Q_INVOKABLE void fitGuestToWindow();
 
@@ -86,6 +92,7 @@ Q_SIGNALS:
     void domainChanged();
     void errorMessageChanged();
     void pointerGrabbedChanged();
+    void agentConnectedChanged();
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
@@ -132,6 +139,7 @@ private:
 
     int m_current_button_mask = 0;
     bool m_pointerGrabbed = false;
+    bool m_agentConnected = false;
     QPointF m_lastPointerPosition;
     bool m_hasLastPointerPosition = false;
     QPointF m_localPointerPosition;
@@ -156,6 +164,7 @@ private:
 
     QSGNode *m_displayNode = nullptr;
     QSGSimpleTextureNode *m_cursorNode = nullptr;
+    bool m_previewGrabPending = false;
 
     static constexpr quint32 x11_wayland_evdev_offset = 8;
     // difference of 8 between x11 wayland.

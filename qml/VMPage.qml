@@ -146,6 +146,13 @@ Kirigami.ScrollablePage {
             text: i18nc("verb, open viewer for VM", "View VM")
             icon.name: "computer-laptop-symbolic"
             onTriggered: {
+                const existing = domain ? Karton.viewerForDomain(domain) : null;
+                if (existing) {
+                    existing.show();
+                    existing.raise();
+                    existing.requestActivate();
+                    return;
+                }
                 const component = Qt.createComponent("VMViewerWindow.qml");
                 if (component.status !== Component.Ready) {
                     console.error("Failed to create VM viewer:", component.errorString());

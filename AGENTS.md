@@ -321,9 +321,12 @@ When testing destructive operations, prefer domains whose names start with
   `xcb` and `wayland`; subtracting it only on Wayland made keys map to unrelated
   PC XT scancodes under XWayland.
 - `DomainViewer::updateDisplayResolution()` calls
-  `spice_main_channel_update_display()` with the **page/content size** in device
-  pixels on page resize and when the SPICE agent connects; it enables display 0
-  and sends the monitor configuration immediately when the agent is present.
+  `spice_main_channel_update_display()` with a monitor rectangle fitted to the
+  current guest aspect ratio, in device pixels, on page resize and when the
+  SPICE agent connects; it enables display 0 and sends the monitor
+  configuration immediately when the agent is present. The request is capped
+  to fit the available viewer area instead of stretching the page, which some
+  agents rejected.
   It deliberately does not use the aspect-fitted `DomainViewer` item size: the
   item changes size when the guest resolution changes, which caused a resize
   feedback loop while Windows was booting. The guest adapts its resolution
@@ -343,8 +346,9 @@ When testing destructive operations, prefer domains whose names start with
   pointers when Qt passes a null root after deleting the scene graph. Display
   textures use `QSGTexture::Linear` filtering so fonts stay readable when the
   guest resolution does not exactly match the viewer size.
-- `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar has labeled
-  runtime actions: Start when stopped, Power (menu with Shut Down and Force
+- `VMViewerWindow.qml` registers itself with `Karton::registerViewer()`.
+  Opening the same VM again focuses/raises the existing window instead of
+  creating a duplicate. Its toolbar has labeled runtime actions: Start when stopped, Power (menu with Shut Down and Force
   Off), Reboot (menu with Reboot and Reset), fullscreen and a three-dot menu
   containing Actual Size, Fit Guest to Window, USB Devices, Settings and
   Snapshots. "Fit to Window" was deliberately removed. A stopped VM opens the

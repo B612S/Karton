@@ -5,6 +5,7 @@
 
 #include <spice-client.h>
 
+#include <QImage>
 #include <QObject>
 #include <QRectF>
 #include <QSGNode>
@@ -28,6 +29,13 @@ public:
     virtual QSGNode *updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds) = 0;
 
     virtual QSize frameSize() const = 0;
+
+    // CPU copy of the latest frame when the backend has one. GPU scanout
+    // renderers return a null image and the caller falls back to a grab.
+    virtual QImage currentFrame() const
+    {
+        return {};
+    }
 
 Q_SIGNALS:
     void frameSizeChanged();

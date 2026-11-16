@@ -16,6 +16,7 @@
 #include <QDomElement>
 #include <QGuiApplication>
 #include <QMutexLocker>
+#include <QQuickItemGrabResult>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QSGSimpleTextureNode>
@@ -219,6 +220,10 @@ bool DomainViewer::connectToSpice()
         g_object_unref(m_session);
         m_session = nullptr;
         m_connected = false;
+        if (m_agentConnected) {
+            m_agentConnected = false;
+            Q_EMIT agentConnectedChanged();
+        }
         return false;
     }
     qCInfo(KARTON_DEBUG) << "Established connection! connected to " << domain()->config()->name();
@@ -450,8 +455,23 @@ void DomainViewer::updateDisplayResolution()
     const qreal logicalWidth = container ? container->width() : width();
     const qreal logicalHeight = container ? container->height() : height();
     const qreal dpr = window() ? window()->devicePixelRatio() : 1.0;
-    int targetWidth = qMax(640, qRound(logicalWidth * dpr));
-    int targetHeight = qMax(480, qRound(logicalHeight * dpr));
+    const qreal availableWidth = logicalWidth * dpr;
+    const qreal availableHeight = logicalHeight * dpr;
+
+    // Fit the monitor rectangle to the current guest aspect ratio instead of
+    // stretching it to the page size. A request that is wider than the guest's
+    // supported mode (for example 2160x1178 on a 1920x1200 guest) is rejected
+    // by spice-vdagent and looked like auto-resize did nothing.
+    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
+    const qreal aspect = (frameSize.isValid() && frameSize.height() > 0) ? qreal(frameSize.width()) / frameSize.height() : 16.0 / 9.0;
+    qreal targetLogicalWidth = availableWidth;
+    qreal targetLogicalHeight = targetLogicalWidth / aspect;
+    if (targetLogicalHeight > availableHeight) {
+        targetLogicalHeight = availableHeight;
+        targetLogicalWidth = targetLogicalHeight * aspect;
+    }
+    int targetWidth = qMax(640, qRound(targetLogicalWidth));
+    int targetHeight = qMax(480, qRound(targetLogicalHeight));
     targetWidth &= ~1;
     targetHeight &= ~1;
 
@@ -470,7 +490,11 @@ void DomainViewer::updateDisplayResolution()
     if (agentConnected) {
         spice_main_channel_send_monitor_config(m_main_channel);
     }
-    qCInfo(KARTON_DEBUG) << "Requested guest display resolution:" << target;
+    if (m_agentConnected != agentConnected) {
+        m_agentConnected = agentConnected;
+        Q_EMIT agentConnectedChanged();
+    }
+    qCInfo(KARTON_DEBUG) << "Requested guest display resolution:" << target << "agent:" << agentConnected;
 }
 
 void DomainViewer::fitGuestToWindow()
@@ -580,6 +604,47 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     m_cursorNode->setFiltering(QSGTexture::Linear);
 
     return root;
+}
+
+void DomainViewer::updateDomainPreview()
+{
+    if (!m_domain || !window() || !isVisible() || width() <= 0 || height() <= 0) {
+        return;
+    }
+
+    // Primary-surface mode already keeps an owned CPU image. Use it directly:
+    // no GPU readback, no blocking and no colour conversion.
+    if (m_renderer) {
+        const QImage frame = m_renderer->currentFrame();
+        if (!frame.isNull()) {
+            m_domain->savePreviewFrame(frame);
+            return;
+        }
+    }
+
+    if (m_previewGrabPending) {
+        return;
+    }
+
+    // GPU scanout fallback. Asynchronous item grab only reads the display
+    // item, not the whole window, and does not block the GUI.
+    const int targetWidth = 480;
+    const QSize targetSize(targetWidth, qMax(1, qRound(targetWidth * height() / width())));
+    const QSharedPointer<QQuickItemGrabResult> result = grabToImage(targetSize);
+    if (!result) {
+        return;
+    }
+    m_previewGrabPending = true;
+    connect(result.data(), &QQuickItemGrabResult::ready, this, [this, result]() {
+        m_previewGrabPending = false;
+        const QImage image = result->image();
+        if (m_domain && !image.isNull()) {
+            qCInfo(KARTON_DEBUG) << "preview grab:" << image.size() << image.format() << "item:" << size()
+                                 << "frame:" << (m_renderer ? m_renderer->frameSize() : QSize());
+            image.save(QStringLiteral("/tmp/karton-grab.png"));
+            m_domain->savePreviewFrame(image);
+        }
+    });
 }
 
 void DomainViewer::saveFrameToDomain()

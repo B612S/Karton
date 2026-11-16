@@ -612,6 +612,37 @@ void Karton::viewerClosed()
     Q_EMIT viewerCountChanged();
 }
 
+QObject *Karton::viewerForDomain(Domain *domain) const
+{
+    if (!domain) {
+        return nullptr;
+    }
+    const auto it = m_viewers.constFind(domain->config()->uuid());
+    if (it == m_viewers.constEnd() || it.value().isNull()) {
+        return nullptr;
+    }
+    return it.value();
+}
+
+void Karton::registerViewer(Domain *domain, QObject *window)
+{
+    if (!domain || !window) {
+        return;
+    }
+    m_viewers.insert(domain->config()->uuid(), window);
+}
+
+void Karton::unregisterViewer(QObject *window)
+{
+    for (auto it = m_viewers.begin(); it != m_viewers.end();) {
+        if (it.value().isNull() || it.value() == window) {
+            it = m_viewers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 QVariantMap Karton::domainHardwareInfo(const Domain *domain) const
 {
     QVariantMap info;

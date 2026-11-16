@@ -125,6 +125,12 @@ void PrimarySurfaceRenderer::display_primary_destroy_callback(SpiceDisplayChanne
     self->m_frameUpdated = false;
 }
 
+QImage PrimarySurfaceRenderer::currentFrame() const
+{
+    QMutexLocker locker(&m_frameLock);
+    return m_frame.copy();
+}
+
 QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds)
 {
     QMutexLocker locker(&m_frameLock);

@@ -26,6 +26,8 @@ public:
         return QSize(m_imageWidth, m_imageHeight);
     }
 
+    QImage currentFrame() const override;
+
 private:
     static void
     display_primary_create_callback(SpiceChannel *channel, gint format, gint width, gint height, gint stride, gint shmid, gpointer imgdata, gpointer user_data);
@@ -42,6 +44,6 @@ private:
     const uchar *m_frameSource = nullptr;
     int m_frameStride = 0;
     QImage m_frame;
-    QMutex m_frameLock;
+    mutable QMutex m_frameLock;
     bool m_frameUpdated = false;
 };

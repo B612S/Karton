@@ -27,6 +27,7 @@ Kirigami.ApplicationWindow {
         if (!viewerRegistered) {
             viewerRegistered = true;
             Karton.viewerOpened();
+            Karton.registerViewer(viewerWindow.domain, viewerWindow);
         }
     }
 
@@ -41,6 +42,7 @@ Kirigami.ApplicationWindow {
     Component.onDestruction: {
         if (viewerRegistered) {
             viewerRegistered = false;
+            Karton.unregisterViewer(viewerWindow);
             Karton.viewerClosed();
         }
     }
@@ -56,6 +58,7 @@ Kirigami.ApplicationWindow {
     onClosing: (close) => {
         if (viewerRegistered) {
             viewerRegistered = false;
+            Karton.unregisterViewer(viewerWindow);
             Karton.viewerClosed();
         }
         if (viewerWindow.isRunning) {
@@ -97,6 +100,17 @@ Kirigami.ApplicationWindow {
 
         onWidthChanged: if (domainViewer) domainViewer.updateDisplayResolution()
         onHeightChanged: if (domainViewer) domainViewer.updateDisplayResolution()
+
+        // Keep the main page preview in sync with what is currently on screen
+        // without taking a QEMU screenshot (which would pause the guest).
+        Timer {
+            id: viewerPreviewTimer
+            interval: 1000
+            repeat: true
+            running: viewerWindow.visible && viewerWindow.isRunning
+            triggeredOnStart: true
+            onTriggered: domainViewer.updateDomainPreview()
+        }
 
         actions: [
             Kirigami.Action {
@@ -236,6 +250,16 @@ Kirigami.ApplicationWindow {
             visible: viewerWindow.isRunning && domainViewer.errorMessage.length > 0
             text: domainViewer.errorMessage
             type: Kirigami.MessageType.Error
+        }
+
+        Kirigami.InlineMessage {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: Kirigami.Units.largeSpacing
+            width: Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 40)
+            visible: viewerWindow.isRunning && !domainViewer.agentConnected && domainViewer.errorMessage.length === 0
+            text: i18n("Guest agent is not connected. Automatic resize requires spice-vdagent in the guest.")
+            type: Kirigami.MessageType.Warning
         }
 
         Kirigami.Icon {
