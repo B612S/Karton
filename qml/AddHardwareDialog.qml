@@ -634,7 +634,6 @@ Kirigami.Dialog {
                                     text: i18n("Add filesystem")
                                     icon.name: "list-add-symbolic"
                                     Layout.alignment: Qt.AlignLeft
-                                    enabled: fsSourceField.text.trim().length > 0
                                     onClicked: root.addFilesystem()
                                 }
                             }
