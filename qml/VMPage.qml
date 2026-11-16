@@ -56,7 +56,7 @@ Kirigami.ScrollablePage {
 
     actions: [
         Kirigami.Action {
-            icon.name: isRunning ? "system-shutdown" : "media-playback-start"
+            icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
             text: isRunning ? i18nc("verb, stop a VM", "Stop") : i18nc("verb, start a VM", "Start")
             onTriggered: {
                 if (isRunning) {
@@ -72,7 +72,7 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             text: i18n("Pause")
-            icon.name: "media-playback-pause"
+            icon.name: "media-playback-pause-symbolic"
             visible: isRunning && !isPaused
             onTriggered: {
                 if (Karton.pauseDomain(domain)) {
@@ -82,7 +82,7 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             text: i18n("Resume")
-            icon.name: "media-playback-start"
+            icon.name: "media-playback-start-symbolic"
             visible: isPaused
             onTriggered: {
                 if (Karton.resumeDomain(domain)) {
@@ -92,7 +92,7 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             text: i18n("Reboot")
-            icon.name: "system-reboot"
+            icon.name: "system-reboot-symbolic"
             visible: isRunning
             onTriggered: {
                 if (Karton.rebootDomain(domain)) {
@@ -102,7 +102,7 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             text: i18n("Save State")
-            icon.name: "document-save"
+            icon.name: "document-save-symbolic"
             visible: isRunning
             onTriggered: {
                 if (Karton.saveDomainState(domain)) {
@@ -112,7 +112,7 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             text: i18n("Delete Saved State")
-            icon.name: "edit-delete"
+            icon.name: "edit-delete-symbolic"
             visible: !isRunning && hasSavedState
             onTriggered: {
                 if (Karton.deleteSavedState(domain)) {
@@ -122,7 +122,7 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             text: i18nc("verb, stop a VM immediately", "Force Stop")
-            icon.name: "process-stop"
+            icon.name: "process-stop-symbolic"
             visible: isRunning
             onTriggered: {
                 if (Karton.forceStopDomain(domain)) {
@@ -132,40 +132,34 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             text: i18n("Networks")
-            icon.name: "network-wired"
+            icon.name: "network-wired-symbolic"
             shortcut: "Ctrl+Shift+N"
             onTriggered: networksDialog.open()
         },
         Kirigami.Action {
-            text: i18n("USB Devices")
-            icon.name: "drive-removable-media-usb"
-            shortcut: "Ctrl+Shift+U"
-            onTriggered: usbDialog.open()
-        },
-        Kirigami.Action {
             text: i18n("Snapshots")
-            icon.name: "document-save"
+            icon.name: "camera-photo-symbolic"
             shortcut: "Ctrl+Shift+S"
             onTriggered: snapshotsDialog.open()
         },
         Kirigami.Action {
             text: i18n("PCI Devices")
-            icon.name: "computer"
+            icon.name: "computer-symbolic"
             onTriggered: pciDialog.open()
         },
         Kirigami.Action {
             text: i18n("Clone")
-            icon.name: "edit-copy"
+            icon.name: "edit-copy-symbolic"
             onTriggered: cloneDialog.open()
         },
         Kirigami.Action {
             text: i18n("Storage")
-            icon.name: "drive-harddisk"
+            icon.name: "drive-harddisk-symbolic"
             onTriggered: storageDialog.open()
         },
         Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
-            icon.name: "delete"
+            icon.name: "delete-symbolic"
             visible: !isRunning
             onTriggered: {
                 deleteConfirmationDialog.domain = domain;
@@ -192,7 +186,7 @@ Kirigami.ScrollablePage {
             }
         },
         Kirigami.Action {
-            icon.name: "settings-configure"
+            icon.name: "settings-configure-symbolic"
             enabled: !isRunning
             onTriggered: {
                 configurationDialog.open();
@@ -202,11 +196,6 @@ Kirigami.ScrollablePage {
 
     NetworksDialog {
         id: networksDialog
-        domain: root.domain
-    }
-
-    UsbDevicesDialog {
-        id: usbDialog
         domain: root.domain
     }
 
@@ -355,7 +344,7 @@ Kirigami.ScrollablePage {
                 description: domain ? domain.config.isoDiskPath : ""
                 trailing: Controls.Button {
                     text: "Eject"
-                    icon.name: "media-eject"
+                    icon.name: "media-eject-symbolic"
                     onClicked: {
                         if (Karton.ejectDisk(domain)) {
                             applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "ISO Disk ejected for VM: %1", domain.config.name));
@@ -398,7 +387,7 @@ This action cannot be undone.`,
         customFooterActions: [
             Kirigami.Action {
                 text: i18nc("verb, close confirmation dialog", "Cancel")
-                icon.name: "dialog-cancel"
+                icon.name: "dialog-cancel-symbolic"
                 onTriggered: {
                     deleteConfirmationDialog.domain = null;
                     deleteConfirmationDialog.close();
@@ -406,7 +395,7 @@ This action cannot be undone.`,
             },
             Kirigami.Action {
                 text: i18nc("action, delete VM but keep disk image", "Keep File")
-                icon.name: "edit-delete-remove"
+                icon.name: "edit-delete-remove-symbolic"
 
                 onTriggered: {
                     const domainToDelete = deleteConfirmationDialog.domain;
@@ -424,7 +413,7 @@ This action cannot be undone.`,
             },
             Kirigami.Action {
                 text: i18nc("action, delete VM and disk image", "Delete Disk")
-                icon.name: "delete"
+                icon.name: "delete-symbolic"
 
                 onTriggered: {
                     const domainToDelete = deleteConfirmationDialog.domain;

@@ -108,6 +108,8 @@ private:
     static void playback_stop_callback(SpicePlaybackChannel *channel, gpointer user_data);
 
     void updatePointer(const QPointF &position, int buttonMask);
+    void updateCursorPaintPosition();
+    QPointF guestPositionForLocal(const QPointF &position) const;
     int mouseMode() const;
 
     Domain *m_domain;
@@ -126,6 +128,10 @@ private:
     bool m_pointerGrabbed = false;
     QPointF m_lastPointerPosition;
     bool m_hasLastPointerPosition = false;
+    QPointF m_localPointerPosition;
+    bool m_hasLocalPointerPosition = false;
+    QPointF m_virtualPointerPosition;
+    bool m_hasVirtualPointerPosition = false;
 
     QAudioSink *m_audioSink = nullptr;
     QIODevice *m_audioDevice = nullptr;
@@ -137,6 +143,8 @@ private:
     QPoint m_cursorHotspot;
     bool m_cursorVisible = false;
     bool m_cursorTextureDirty = true;
+    QPointF m_cursorPaintPosition;
+    bool m_hasCursorPaintPosition = false;
 
     QSGNode *m_displayNode = nullptr;
     QSGSimpleTextureNode *m_cursorNode = nullptr;

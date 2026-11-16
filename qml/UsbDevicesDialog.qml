@@ -104,7 +104,7 @@ Kirigami.Dialog {
 
                     Controls.Button {
                         text: i18n("Attach")
-                        icon.name: "list-add"
+                        icon.name: "list-add-symbolic"
                         enabled: root.domain !== null && !modelData.hub
                         onClicked: {
                             if (Karton.attachUsbDevice(root.domain,
@@ -170,7 +170,7 @@ Kirigami.Dialog {
 
                     Controls.Button {
                         text: i18n("Detach")
-                        icon.name: "list-remove"
+                        icon.name: "list-remove-symbolic"
                         onClicked: {
                             if (Karton.detachUsbDevice(root.domain,
                                                        modelData.vendor,

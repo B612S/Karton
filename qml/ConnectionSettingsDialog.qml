@@ -25,12 +25,12 @@ Kirigami.Dialog {
     customFooterActions: [
         Kirigami.Action {
             text: i18nc("verb, discard connection settings changes", "Cancel")
-            icon.name: "dialog-cancel"
+            icon.name: "dialog-cancel-symbolic"
             onTriggered: connectionDialog.close()
         },
         Kirigami.Action {
             text: i18nc("verb, save connection settings", "Save")
-            icon.name: "dialog-ok"
+            icon.name: "dialog-ok-symbolic"
             onTriggered: {
                 const uri = uriField.text.trim();
                 if (uri === "") {

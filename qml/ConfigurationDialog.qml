@@ -40,7 +40,7 @@ Kirigami.Dialog {
     customFooterActions: [
         Kirigami.Action {
             text: i18nc("verb, save VM configuration changes", "Save")
-            icon.name: "dialog-ok"
+            icon.name: "dialog-ok-symbolic"
             enabled: !configurationDialog.saving
             onTriggered: {
                 if (!configurationDialog.domain || nameField.text.trim() === "") {
@@ -89,8 +89,8 @@ Kirigami.Dialog {
             currentIndex: 0
 
             model: [
-                {label: i18nc("@title:group configuration category", "General"), icon: "settings-configure"},
-                {label: i18nc("@title:group configuration category", "Hardware"), icon: "cpu"},
+                {label: i18nc("@title:group configuration category", "General"), icon: "settings-configure-symbolic"},
+                {label: i18nc("@title:group configuration category", "Hardware"), icon: "computer-symbolic"},
                 {label: i18nc("@title:group configuration category", "Storage"), icon: "drive-harddisk-symbolic"}
             ]
 

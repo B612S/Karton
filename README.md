@@ -13,6 +13,8 @@ This project is still in early development and will likely break existing virtua
 ## Features
 - Displays list of existing VMs
 - VM lifecycle: start, stop, pause/resume, reboot, force stop and open the console
+- SPICE viewer with pointer/keyboard capture, a large initial window and USB
+  passthrough in the viewer menu
 - Managed save: store a running VM's state on disk and restore it on the next start
 - Live CPU and memory usage on the VM page
 - Installing and deleting VMs
@@ -31,7 +33,7 @@ This project is still in early development and will likely break existing virtua
 - Vulkan with DMA-BUF scanout import (or OpenGL as a fallback)
 - Automatic system/session libvirt connection detection
 - Libvirt network management: list, start/stop, autostart, NAT creation and VM NIC attach/detach
-- Runtime USB passthrough from host to running VMs
+- Runtime USB passthrough from host to running VMs, managed from the viewer window
 - VM snapshots: internal snapshots (with optional memory) and external disk-only
   snapshots for running VMs, with revert and delete
 - Runtime PCI passthrough with IOMMU group information and warnings

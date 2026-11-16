@@ -112,7 +112,7 @@ Kirigami.Dialog {
 
                         Controls.Button {
                             text: modelData.active ? i18n("Stop") : i18n("Start")
-                            icon.name: modelData.active ? "media-playback-stop" : "media-playback-start"
+                            icon.name: modelData.active ? "media-playback-stop-symbolic" : "media-playback-start-symbolic"
                             onClicked: {
                                 if (modelData.active) {
                                     Karton.stopNetwork(modelData.name);
@@ -148,7 +148,7 @@ Kirigami.Dialog {
                 }
                 Controls.Button {
                     text: i18n("Create NAT")
-                    icon.name: "list-add"
+                    icon.name: "list-add-symbolic"
                     enabled: newNetworkField.text.trim().length > 0
                     onClicked: {
                         if (Karton.createNatNetwork(newNetworkField.text)) {
@@ -208,7 +208,7 @@ Kirigami.Dialog {
 
                         Controls.Button {
                             text: i18n("Detach")
-                            icon.name: "list-remove"
+                            icon.name: "list-remove-symbolic"
                             enabled: modelData.mac.length > 0
                             onClicked: {
                                 if (Karton.detachNetwork(root.domain, modelData.mac)) {
@@ -238,7 +238,7 @@ Kirigami.Dialog {
                 }
                 Controls.Button {
                     text: i18n("Attach")
-                    icon.name: "list-add"
+                    icon.name: "list-add-symbolic"
                     enabled: attachNetworkCombo.count > 0
                     onClicked: {
                         if (Karton.attachNetwork(root.domain, attachNetworkCombo.currentText, attachModelCombo.currentText)) {

@@ -107,7 +107,7 @@ Kirigami.Dialog {
 
                     Controls.Button {
                         text: i18n("Revert")
-                        icon.name: "edit-undo"
+                        icon.name: "edit-undo-symbolic"
                         onClicked: {
                             if (Karton.revertSnapshot(root.domain, modelData.name)) {
                                 root.refresh();
@@ -116,7 +116,7 @@ Kirigami.Dialog {
                     }
                     Controls.Button {
                         text: i18n("Delete")
-                        icon.name: "edit-delete"
+                        icon.name: "edit-delete-symbolic"
                         onClicked: {
                             if (Karton.deleteSnapshot(root.domain, modelData.name)) {
                                 root.refresh();
@@ -172,7 +172,7 @@ Kirigami.Dialog {
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.bottomMargin: Kirigami.Units.largeSpacing
             text: i18n("Create snapshot")
-            icon.name: "document-save"
+            icon.name: "camera-photo-symbolic"
             enabled: nameField.text.trim().length > 0 && root.domain !== null
             onClicked: {
                 if (Karton.createSnapshot(root.domain, nameField.text, descriptionField.text, includeMemoryCheck.checked)) {

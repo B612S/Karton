@@ -12,8 +12,26 @@ Kirigami.ApplicationWindow {
 
     title: domain ? i18nc("%1 is the name of the virtual machine", "VM Viewer - %1", domain.config.name) : i18n("VM Viewer")
 
-    width: Kirigami.Units.gridUnit * 53
-    height: Kirigami.Units.gridUnit * 36
+    readonly property var screenInfo: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
+
+    // Open large enough for a modern guest resolution instead of a small
+    // fixed window; Actual Size/Fit to Window remain available in the menu.
+    width: screenInfo ? Math.min(screenInfo.width, Math.max(Kirigami.Units.gridUnit * 60, Math.min(screenInfo.width * 0.85, Kirigami.Units.gridUnit * 120))) : Kirigami.Units.gridUnit * 70
+    height: screenInfo ? Math.min(screenInfo.height, Math.max(Kirigami.Units.gridUnit * 40, Math.min(screenInfo.height * 0.85, Kirigami.Units.gridUnit * 72))) : Kirigami.Units.gridUnit * 45
+
+    Component.onCompleted: {
+        Qt.callLater(function() {
+            domainViewer.forceActiveFocus();
+        });
+    }
+
+    onActiveChanged: {
+        if (active) {
+            Qt.callLater(function() {
+                domainViewer.forceActiveFocus();
+            });
+        }
+    }
 
     onClosing: (close) => {
         domainViewer.saveFrameToDomain();
@@ -42,7 +60,7 @@ Kirigami.ApplicationWindow {
         actions: [
             Kirigami.Action {
                 text: i18n("Actual Size")
-                icon.name: "zoom-original"
+                icon.name: "zoom-original-symbolic"
                 onTriggered: {
                     viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
                     viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
@@ -50,17 +68,26 @@ Kirigami.ApplicationWindow {
             },
             Kirigami.Action {
                 text: i18n("Fit to Window")
-                icon.name: "zoom-fit-best"
+                icon.name: "zoom-fit-best-symbolic"
                 onTriggered: viewerWindow.showMaximized()
             },
             Kirigami.Action {
+                text: i18n("USB Devices")
+                icon.name: "drive-removable-media-usb-symbolic"
+                shortcut: "Ctrl+Shift+U"
+                onTriggered: {
+                    domainViewer.releasePointerGrab();
+                    usbDialog.open();
+                }
+            },
+            Kirigami.Action {
                 text: i18n("Release Pointer")
-                icon.name: "transform-browse"
+                icon.name: "transform-browse-symbolic"
                 visible: domainViewer.pointerGrabbed
                 onTriggered: domainViewer.releasePointerGrab()
             },
             Kirigami.Action {
-                icon.name: "view-fullscreen"
+                icon.name: "view-fullscreen-symbolic"
                 onTriggered: {
                     if (viewerWindow.visibility === Window.FullScreen) {
                         viewerWindow.showNormal();
@@ -113,6 +140,11 @@ Kirigami.ApplicationWindow {
             visible: domainViewer.errorMessage.length > 0
             text: domainViewer.errorMessage
             type: Kirigami.MessageType.Error
+        }
+
+        UsbDevicesDialog {
+            id: usbDialog
+            domain: viewerWindow.domain
         }
     }
 }

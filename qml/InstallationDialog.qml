@@ -77,14 +77,14 @@ Kirigami.Dialog {
     customFooterActions: [
         Kirigami.Action {
             text: i18nc("verb, return to the previous wizard step", "Back")
-            icon.name: "go-previous"
+            icon.name: "go-previous-symbolic"
             visible: addDomainDialog.step > 0
             enabled: !addDomainDialog.creating
             onTriggered: addDomainDialog.step = Math.max(0, addDomainDialog.step - 1)
         },
         Kirigami.Action {
             text: i18nc("verb, continue to the next wizard step", "Next")
-            icon.name: "go-next"
+            icon.name: "go-next-symbolic"
             visible: addDomainDialog.step < addDomainDialog.lastStep
             enabled: !addDomainDialog.creating
             onTriggered: {
@@ -96,7 +96,7 @@ Kirigami.Dialog {
         },
         Kirigami.Action {
             text: i18nc("verb, creation button for a new VM", "Create")
-            icon.name: "dialog-ok"
+            icon.name: "dialog-ok-symbolic"
             visible: addDomainDialog.step === addDomainDialog.lastStep
             enabled: !addDomainDialog.creating
             onTriggered: addDomainDialog.createVm()

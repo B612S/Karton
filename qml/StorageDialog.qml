@@ -102,7 +102,7 @@ Kirigami.Dialog {
 
                     Controls.Button {
                         text: i18n("Detach")
-                        icon.name: "list-remove"
+                        icon.name: "list-remove-symbolic"
                         onClicked: {
                             if (Karton.detachDisk(root.domain, modelData.target, deleteFilesCheck.checked)) {
                                 root.refresh();
@@ -155,7 +155,7 @@ Kirigami.Dialog {
             }
             Controls.Button {
                 text: i18n("Add disk")
-                icon.name: "list-add"
+                icon.name: "list-add-symbolic"
                 onClicked: {
                     if (Karton.addDisk(root.domain, sizeSpinBox.value, diskFormatCombo.currentText)) {
                         root.refresh();

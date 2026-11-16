@@ -111,7 +111,7 @@ Kirigami.Dialog {
 
                     Controls.Button {
                         text: i18n("Attach")
-                        icon.name: "list-add"
+                        icon.name: "list-add-symbolic"
                         enabled: root.domain !== null && modelData.iommuGroup.length > 0
                         onClicked: {
                             if (Karton.attachPciDevice(root.domain,
@@ -166,7 +166,7 @@ Kirigami.Dialog {
 
                     Controls.Button {
                         text: i18n("Detach")
-                        icon.name: "list-remove"
+                        icon.name: "list-remove-symbolic"
                         onClicked: {
                             if (Karton.detachPciDevice(root.domain,
                                                        modelData.pciDomain,

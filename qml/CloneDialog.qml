@@ -104,7 +104,7 @@ Kirigami.Dialog {
 
             Controls.Button {
                 text: i18n("Clone")
-                icon.name: "edit-copy"
+                icon.name: "edit-copy-symbolic"
                 enabled: !root.cloning && nameField.text.trim().length > 0 && root.domain !== null
                 onClicked: {
                     root.errorText = "";

@@ -388,6 +388,7 @@ void DomainViewer::clearCursor()
         m_cursorImage = QImage();
         m_cursorVisible = false;
         m_cursorTextureDirty = true;
+        m_hasCursorPaintPosition = false;
     }
     if (!m_pointerGrabbed) {
         unsetCursor();
@@ -436,6 +437,8 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     QPoint hotspot;
     bool cursorVisible = false;
     bool textureDirty = false;
+    QPointF cursorPaintPosition;
+    bool hasCursorPaintPosition = false;
     {
         QMutexLocker locker(&m_cursorMutex);
         cursorImage = m_cursorImage;
@@ -444,6 +447,8 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         cursorVisible = m_cursorVisible;
         textureDirty = m_cursorTextureDirty;
         m_cursorTextureDirty = false;
+        cursorPaintPosition = m_cursorPaintPosition;
+        hasCursorPaintPosition = m_hasCursorPaintPosition;
     }
 
     if (!cursorVisible || cursorImage.isNull()) {
@@ -479,6 +484,16 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
     const qreal scaleX = (frameSize.width() > 0 && width() > 0) ? width() / frameSize.width() : 1.0;
     const qreal scaleY = (frameSize.height() > 0 && height() > 0) ? height() / frameSize.height() : 1.0;
+
+    // SPICE only sends cursor-move in server mouse mode. In client mode there
+    // is no cursor-move at all, so fall back to the local pointer position (or
+    // the center of the frame) instead of leaving the cursor in the top-left
+    // corner.
+    if (hasCursorPaintPosition) {
+        cursorPosition = cursorPaintPosition.toPoint();
+    } else if (cursorPosition.isNull() && frameSize.isValid()) {
+        cursorPosition = QPoint(frameSize.width() / 2, frameSize.height() / 2);
+    }
 
     const qreal x = (cursorPosition.x() - hotspot.x()) * scaleX;
     const qreal y = (cursorPosition.y() - hotspot.y()) * scaleY;
@@ -608,9 +623,23 @@ void DomainViewer::grabPointer()
         return;
     }
 
-    window()->setKeyboardGrabEnabled(true);
+    if (!window()->setKeyboardGrabEnabled(true)) {
+        qCWarning(KARTON_DEBUG) << "The windowing system does not support keyboard grab";
+    }
     qCInfo(KARTON_DEBUG) << "Pointer grabbed; SPICE mouse mode:" << mouseMode();
     m_hasLastPointerPosition = false;
+
+    if (!m_hasVirtualPointerPosition) {
+        if (m_hasLocalPointerPosition) {
+            m_virtualPointerPosition = guestPositionForLocal(m_localPointerPosition);
+        } else if (m_renderer && m_renderer->frameSize().isValid()) {
+            const QSize frameSize = m_renderer->frameSize();
+            m_virtualPointerPosition = QPointF(frameSize.width() / 2.0, frameSize.height() / 2.0);
+        }
+        m_hasVirtualPointerPosition = true;
+    }
+    updateCursorPaintPosition();
+
     setCursor(Qt::BlankCursor);
     forceActiveFocus();
     Q_EMIT pointerGrabbedChanged();
@@ -644,6 +673,29 @@ int DomainViewer::mouseMode() const
     return mode;
 }
 
+QPointF DomainViewer::guestPositionForLocal(const QPointF &position) const
+{
+    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
+    if (frameSize.isEmpty() || width() <= 0 || height() <= 0) {
+        return position;
+    }
+    return QPointF(position.x() * frameSize.width() / width(), position.y() * frameSize.height() / height());
+}
+
+void DomainViewer::updateCursorPaintPosition()
+{
+    QMutexLocker locker(&m_cursorMutex);
+    if (m_hasVirtualPointerPosition) {
+        m_cursorPaintPosition = m_virtualPointerPosition;
+        m_hasCursorPaintPosition = true;
+    } else if (m_hasLocalPointerPosition) {
+        m_cursorPaintPosition = guestPositionForLocal(m_localPointerPosition);
+        m_hasCursorPaintPosition = true;
+    } else {
+        m_hasCursorPaintPosition = false;
+    }
+}
+
 void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
 {
     if (!m_inputs_channel || !m_connected || width() <= 0 || height() <= 0) {
@@ -661,6 +713,31 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
 
     const QPointF delta = position - m_lastPointerPosition;
     m_lastPointerPosition = position;
+    m_localPointerPosition = position;
+    m_hasLocalPointerPosition = true;
+
+    QPointF guestPosition = guestPositionForLocal(position);
+    if (frameSize.isValid()) {
+        guestPosition.setX(qBound<qreal>(0, guestPosition.x(), frameSize.width()));
+        guestPosition.setY(qBound<qreal>(0, guestPosition.y(), frameSize.height()));
+    }
+
+    if (m_pointerGrabbed) {
+        if (!m_hasVirtualPointerPosition) {
+            m_virtualPointerPosition = guestPosition;
+            m_hasVirtualPointerPosition = true;
+        } else {
+            m_virtualPointerPosition += QPointF(delta.x() * scaleX, delta.y() * scaleY);
+            if (frameSize.isValid()) {
+                m_virtualPointerPosition.setX(qBound<qreal>(0, m_virtualPointerPosition.x(), frameSize.width()));
+                m_virtualPointerPosition.setY(qBound<qreal>(0, m_virtualPointerPosition.y(), frameSize.height()));
+            }
+        }
+    } else {
+        m_virtualPointerPosition = guestPosition;
+        m_hasVirtualPointerPosition = true;
+    }
+    updateCursorPaintPosition();
 
     if (mouseMode() == SPICE_MOUSE_MODE_SERVER) {
         // PS/2-style guests only understand relative motion. This also works
@@ -671,9 +748,22 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
         return;
     }
 
-    const qreal x = qBound<qreal>(0, position.x(), width());
-    const qreal y = qBound<qreal>(0, position.y(), height());
-    spice_inputs_channel_position(m_inputs_channel, qRound(x * scaleX), qRound(y * scaleY), 0, buttonMask);
+    const QPointF absolute = m_pointerGrabbed ? m_virtualPointerPosition : guestPosition;
+    spice_inputs_channel_position(m_inputs_channel, qRound(absolute.x()), qRound(absolute.y()), 0, buttonMask);
+}
+
+static quint32 evdevScancodeForEvent(const QKeyEvent *event)
+{
+    // X11/XWayland report X keycodes and Wayland reports xkb keycodes; both
+    // are evdev scancodes shifted by 8. The old code only adjusted Wayland,
+    // which made keyboard input off by eight keys under XWayland (and mapped
+    // many keys to unrelated scancodes).
+    quint32 scancode = event->nativeScanCode();
+    const QString platform = QGuiApplication::platformName();
+    if ((platform == QStringLiteral("xcb") || platform == QStringLiteral("wayland")) && scancode >= 8) {
+        scancode -= 8;
+    }
+    return scancode;
 }
 
 void DomainViewer::keyPressEvent(QKeyEvent *event)
@@ -685,12 +775,7 @@ void DomainViewer::keyPressEvent(QKeyEvent *event)
     }
 
     event->accept();
-    quint32 evdev_scancode;
-    if (QGuiApplication::platformName() == QStringLiteral("xcb")) { // check if X11
-        evdev_scancode = event->nativeScanCode();
-    } else { // wayland probably
-        evdev_scancode = event->nativeScanCode() - x11_wayland_evdev_offset;
-    }
+    const quint32 evdev_scancode = evdevScancodeForEvent(event);
 
     uint8_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode); // SPICE accepts PC XT: see inputs channel docs
     qCDebug(KARTON_DEBUG) << "key press: " << event->text() << evdev_scancode << pcxt_scancode;
@@ -704,13 +789,7 @@ void DomainViewer::keyReleaseEvent(QKeyEvent *event)
 {
     event->accept();
 
-    quint32 evdev_scancode;
-    if (QGuiApplication::platformName() == QStringLiteral("xcb")) {
-        evdev_scancode = event->nativeScanCode();
-    } else {
-        evdev_scancode = event->nativeScanCode() - x11_wayland_evdev_offset;
-    }
-
+    const quint32 evdev_scancode = evdevScancodeForEvent(event);
     uint8_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode);
 
     if (m_inputs_channel && m_connected && pcxt_scancode != 0) {
@@ -770,15 +849,16 @@ void DomainViewer::hoverMoveEvent(QHoverEvent *event)
 void DomainViewer::mousePressEvent(QMouseEvent *event)
 {
     qCDebug(KARTON_DEBUG) << "Mouse click at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
+    m_localPointerPosition = event->position();
+    m_hasLocalPointerPosition = true;
+    m_lastPointerPosition = event->position();
+    m_hasLastPointerPosition = true;
     grabPointer();
-    setFocus(true);
+    forceActiveFocus();
 
     if (!m_inputs_channel || !m_connected) {
         return;
     }
-
-    m_lastPointerPosition = event->position();
-    m_hasLastPointerPosition = true;
 
     switch (event->button()) {
     case Qt::LeftButton:

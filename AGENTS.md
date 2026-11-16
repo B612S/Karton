@@ -153,6 +153,9 @@ When testing destructive operations, prefer domains whose names start with
   `core/Messages.sh` and the root `CMakeLists.txt` in sync when adding files.
 - Use the `KARTON_DEBUG` logging category (`qCInfo(KARTON_DEBUG)`,
   `qCWarning(KARTON_DEBUG)`, ...) rather than raw `qDebug()`.
+- Use monochrome `*-symbolic` icon names in QML actions and buttons so the UI
+  follows the theme; avoid colored icon names and duplicate icons for different
+  actions.
 - Keep changes focused. Do not reformat unrelated code or check in `build/`,
   editor files, or generated artifacts.
 
@@ -275,7 +278,17 @@ When testing destructive operations, prefer domains whose names start with
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
   overlay, above the display node; the local cursor is hidden while the remote
   cursor is visible. There is one display node per renderer and one root node
-  that owns both.
+  that owns both. Client mouse mode sends no SPICE `cursor-move` events, so the
+  overlay follows the local pointer (and a grabbed virtual pointer) instead of
+  the initial `(0, 0)` cursor position.
+- The viewer's `DomainViewer` must receive keyboard focus after the window
+  opens (`forceActiveFocus` in `VMViewerWindow.qml` and on click). Scancodes are
+  normalized to evdev by subtracting the X11/xkb keycode offset of 8 on both
+  `xcb` and `wayland`; subtracting it only on Wayland made keys map to unrelated
+  PC XT scancodes under XWayland.
+- `VMViewerWindow.qml` starts at 85% of the screen and has the USB passthrough
+  action (and its dialog) in the viewer itself; the VM page no longer has a USB
+  action. UI icons use the monochrome `*-symbolic` variants.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.
