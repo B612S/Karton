@@ -37,6 +37,7 @@ Kirigami.Dialog {
     property bool xmlDirty: false
     property bool xmlLoading: false
     property string xmlContent: ""
+    property var xmlDevices: []
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
@@ -69,6 +70,7 @@ Kirigami.Dialog {
         pciHostDevices = Karton.pciDevices();
         usbHostDevices = Karton.usbDevices();
         performance = Karton.domainStats(domain);
+        xmlDevices = Karton.domainXmlDevices(domain);
 
         firmwareCombo.currentIndex = hardware.firmware === "uefi" ? 1 : 0;
         secureBootCheck.checked = hardware.secureBoot === true;
@@ -329,6 +331,7 @@ Kirigami.Dialog {
                     {label: i18n("TPM")},
                     {label: i18n("OS Information")},
                     {label: i18n("Performance")},
+                    {label: i18n("XML Devices")},
                     {label: i18n("XML")}
                 ]
 
@@ -1587,6 +1590,52 @@ Kirigami.Dialog {
                 }
             }
 
+            // XML devices
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 12
+
+                Controls.Label {
+                    text: i18n("Devices in the domain XML")
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                    Layout.fillWidth: true
+                }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.65
+                    font.pixelSize: 12
+                    text: i18n("Everything declared under <devices> is listed here, including input, controllers, serial ports and other devices.")
+                }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    model: root.xmlDevices
+                    spacing: 2
+                    delegate: Controls.ItemDelegate {
+                        width: ListView.view.width
+                        focusPolicy: Qt.NoFocus
+                        contentItem: RowLayout {
+                            Controls.Label {
+                                text: modelData.tag
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                Layout.preferredWidth: 100
+                            }
+                            Controls.Label {
+                                text: modelData.description
+                                opacity: 0.7
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+            }
+
             // XML
             ColumnLayout {
                 Layout.fillWidth: true
@@ -1607,6 +1656,16 @@ Kirigami.Dialog {
                         }
                         Controls.Switch {
                             id: xmlEditSwitch
+                            onCheckedChanged: {
+                                const savedX = xmlScroll.contentX;
+                                const savedY = xmlScroll.contentY;
+                                Qt.callLater(function() {
+                                    if (xmlScroll.contentItem) {
+                                        xmlScroll.contentItem.contentX = savedX;
+                                        xmlScroll.contentItem.contentY = savedY;
+                                    }
+                                });
+                            }
                         }
                     }
                     Controls.Label {

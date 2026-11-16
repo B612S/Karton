@@ -1056,6 +1056,65 @@ QString Karton::domainXml(const Domain *domain) const
     return result;
 }
 
+QVariantList Karton::domainXmlDevices(const Domain *domain) const
+{
+    QVariantList result;
+    if (!domain || !domain->domainPtr()) {
+        return result;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return result;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return result;
+    }
+    free(xml);
+
+    const QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
+    for (QDomElement device = devices.firstChildElement(); !device.isNull(); device = device.nextSiblingElement()) {
+        const QString tag = device.tagName();
+        QString detail = device.attribute(QStringLiteral("type"));
+        const auto childText = [&device](const QString &name, const QString &attribute) {
+            const QDomElement child = device.firstChildElement(name);
+            return child.isNull() ? QString() : child.attribute(attribute);
+        };
+        if (tag == QStringLiteral("disk")) {
+            detail = QStringLiteral("%1 %2").arg(childText(QStringLiteral("target"), QStringLiteral("dev")),
+                                                 childText(QStringLiteral("source"), QStringLiteral("file")));
+        } else if (tag == QStringLiteral("interface")) {
+            detail = QStringLiteral("%1 %2").arg(childText(QStringLiteral("mac"), QStringLiteral("address")),
+                                                 childText(QStringLiteral("model"), QStringLiteral("type")));
+        } else if (tag == QStringLiteral("input")) {
+            detail = QStringLiteral("%1 %2").arg(device.attribute(QStringLiteral("type")), device.attribute(QStringLiteral("bus")));
+        } else if (tag == QStringLiteral("hostdev")) {
+            const QString vendor = childText(QStringLiteral("vendor"), QStringLiteral("id"));
+            const QString product = childText(QStringLiteral("product"), QStringLiteral("id"));
+            detail = vendor.isEmpty() ? device.attribute(QStringLiteral("type")) : QStringLiteral("%1:%2").arg(vendor, product);
+        } else if (tag == QStringLiteral("video")) {
+            detail = childText(QStringLiteral("model"), QStringLiteral("type"));
+        } else if (tag == QStringLiteral("sound") || tag == QStringLiteral("tpm")) {
+            detail = device.attribute(QStringLiteral("model"));
+        } else if (tag == QStringLiteral("controller")) {
+            detail = QStringLiteral("%1 %2").arg(device.attribute(QStringLiteral("type")), device.attribute(QStringLiteral("index")));
+        } else if (tag == QStringLiteral("serial") || tag == QStringLiteral("channel") || tag == QStringLiteral("console")) {
+            detail = childText(QStringLiteral("target"), QStringLiteral("name"));
+        } else if (tag == QStringLiteral("graphics")) {
+            detail = device.attribute(QStringLiteral("type"));
+        }
+        QVariantMap info;
+        info.insert(QStringLiteral("tag"), tag);
+        info.insert(QStringLiteral("description"), detail.trimmed());
+        result.append(info);
+    }
+    return result;
+}
+
 bool Karton::saveDomainXml(const Domain *domain, const QString &xml)
 {
     if (!domain || !m_conn || xml.trimmed().isEmpty()) {

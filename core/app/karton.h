@@ -100,6 +100,7 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantMap domainDisplayResolution(const Domain *domain) const;
     Q_INVOKABLE void saveDomainDisplayResolution(const Domain *domain, int width, int height);
     Q_INVOKABLE QString domainXml(const Domain *domain) const;
+    Q_INVOKABLE QVariantList domainXmlDevices(const Domain *domain) const;
     Q_INVOKABLE bool saveDomainXml(const Domain *domain, const QString &xml);
     Q_INVOKABLE QVariantMap domainHardwareInfo(const Domain *domain) const;
     Q_INVOKABLE bool editDomainHardware(const Domain *domain, const QVariantMap &settings);
