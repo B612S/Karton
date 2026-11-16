@@ -23,6 +23,8 @@ Kirigami.ApplicationWindow {
     readonly property bool isRunning: domain ? domain.isActive : false
     property bool wasRunning: false
     property bool sizeRestored: false
+    property int fixedContentWidth: 0
+    property int fixedContentHeight: 0
 
     function registerViewer() {
         if (!viewerRegistered) {
@@ -33,7 +35,7 @@ Kirigami.ApplicationWindow {
     }
 
     function fitWindowToGuest() {
-        if (domainViewer.agentConnected || domainViewer.implicitWidth <= 0 || domainViewer.implicitHeight <= 0 || !viewerWindow.visible) {
+        if (fixedContentWidth > 0 || domainViewer.agentConnected || domainViewer.implicitWidth <= 0 || domainViewer.implicitHeight <= 0 || !viewerWindow.visible) {
             return;
         }
         const aspect = domainViewer.implicitWidth / domainViewer.implicitHeight;
@@ -49,14 +51,41 @@ Kirigami.ApplicationWindow {
         viewerWindow.height = Math.round(contentHeight + chrome);
     }
 
+    function applyFixedWindowSize() {
+        if (fixedContentWidth <= 0 || fixedContentHeight <= 0) {
+            return;
+        }
+        const scale = Math.min(1.0, Screen.width * 0.9 / fixedContentWidth, Screen.height * 0.85 / fixedContentHeight);
+        const contentWidth = Math.round(fixedContentWidth * scale);
+        const contentHeight = Math.round(fixedContentHeight * scale);
+        const chromeHeight = Math.max(48, viewerWindow.height - domainViewer.height);
+        const windowWidth = Math.max(320, contentWidth);
+        const windowHeight = Math.max(240, contentHeight + chromeHeight);
+        viewerWindow.minimumWidth = windowWidth;
+        viewerWindow.maximumWidth = windowWidth;
+        viewerWindow.minimumHeight = windowHeight;
+        viewerWindow.maximumHeight = windowHeight;
+        viewerWindow.width = windowWidth;
+        viewerWindow.height = windowHeight;
+    }
+
     Component.onCompleted: {
         registerViewer();
+        const resolution = Karton.domainDisplayResolution(domain);
+        if (resolution.width > 0 && resolution.height > 0) {
+            fixedContentWidth = resolution.width;
+            fixedContentHeight = resolution.height;
+            domainViewer.setFixedDisplayResolution(resolution.width, resolution.height);
+        }
         const savedSize = Karton.viewerWindowSize(domain);
         if (savedSize.width > 0 && savedSize.height > 0) {
             width = Math.max(320, Math.min(savedSize.width, Screen.width * 0.95));
             height = Math.max(240, Math.min(savedSize.height, Screen.height * 0.95));
         }
         sizeRestored = true;
+        if (fixedContentWidth > 0) {
+            Qt.callLater(applyFixedWindowSize);
+        }
         wasRunning = isRunning;
         Qt.callLater(function() {
             domainViewer.forceActiveFocus();

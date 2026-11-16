@@ -85,6 +85,7 @@ public:
 
     Q_INVOKABLE void saveFrameToDomain();
     Q_INVOKABLE void updateDomainPreview();
+    Q_INVOKABLE void setFixedDisplayResolution(int width, int height);
     Q_INVOKABLE void updateDisplayResolution();
     Q_INVOKABLE void fitGuestToWindow();
 
@@ -161,6 +162,8 @@ private:
     bool m_hasCursorPaintPosition = false;
     bool m_pointerInside = false;
     QSize m_lastDisplayResolution;
+    int m_fixedDisplayWidth = 0;
+    int m_fixedDisplayHeight = 0;
 
     QSGNode *m_displayNode = nullptr;
     QSGSimpleTextureNode *m_cursorNode = nullptr;

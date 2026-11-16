@@ -438,6 +438,14 @@ void DomainViewer::handleRendererFrameSizeChanged()
     setImplicitHeight(size.height());
 }
 
+void DomainViewer::setFixedDisplayResolution(int width, int height)
+{
+    m_fixedDisplayWidth = width;
+    m_fixedDisplayHeight = height;
+    m_lastDisplayResolution = QSize();
+    updateDisplayResolution();
+}
+
 void DomainViewer::updateDisplayResolution()
 {
     if (!m_main_channel || !m_connected || width() < 320 || height() < 240) {
@@ -467,6 +475,10 @@ void DomainViewer::updateDisplayResolution()
     // leaving black bars on the sides even after the agent applies the resize.
     int targetWidth = qMax(640, qRound(availableWidth));
     int targetHeight = qMax(480, qRound(availableHeight));
+    if (m_fixedDisplayWidth >= 320 && m_fixedDisplayHeight >= 240) {
+        targetWidth = m_fixedDisplayWidth;
+        targetHeight = m_fixedDisplayHeight;
+    }
     targetWidth &= ~1;
     targetHeight &= ~1;
 

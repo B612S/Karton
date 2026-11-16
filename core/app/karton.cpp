@@ -1006,6 +1006,39 @@ void Karton::saveViewerWindowSize(const Domain *domain, int width, int height)
     settings.setValue(prefix + QStringLiteral("height"), height);
 }
 
+QVariantMap Karton::domainDisplayResolution(const Domain *domain) const
+{
+    QVariantMap resolution;
+    if (!domain) {
+        return resolution;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString prefix = QStringLiteral("display/%1/").arg(domain->config()->uuid());
+    const int width = settings.value(prefix + QStringLiteral("width"), 0).toInt();
+    const int height = settings.value(prefix + QStringLiteral("height"), 0).toInt();
+    if (width > 0 && height > 0) {
+        resolution.insert(QStringLiteral("width"), width);
+        resolution.insert(QStringLiteral("height"), height);
+    }
+    return resolution;
+}
+
+void Karton::saveDomainDisplayResolution(const Domain *domain, int width, int height)
+{
+    if (!domain) {
+        return;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString prefix = QStringLiteral("display/%1/").arg(domain->config()->uuid());
+    if (width <= 0 || height <= 0) {
+        settings.remove(prefix + QStringLiteral("width"));
+        settings.remove(prefix + QStringLiteral("height"));
+    } else {
+        settings.setValue(prefix + QStringLiteral("width"), width);
+        settings.setValue(prefix + QStringLiteral("height"), height);
+    }
+}
+
 QString Karton::domainOsName(const Domain *domain) const
 {
     if (!domain) {

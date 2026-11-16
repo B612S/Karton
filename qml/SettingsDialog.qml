@@ -39,6 +39,14 @@ Kirigami.ApplicationWindow {
     readonly property var videoLabels: ["QXL", "VirtIO", "VGA"]
     readonly property var soundModels: ["ich9", "ac97", "none"]
     readonly property var soundLabels: ["ich9", "AC97", i18n("None")]
+    readonly property var displayResolutions: [
+        { label: i18n("Auto (fit window)"), width: 0, height: 0 },
+        { label: "1280 × 720", width: 1280, height: 720 },
+        { label: "1600 × 900", width: 1600, height: 900 },
+        { label: "1920 × 1080", width: 1920, height: 1080 },
+        { label: "2560 × 1440", width: 2560, height: 1440 },
+        { label: "3840 × 2160", width: 3840, height: 2160 }
+    ]
 
     title: domain ? i18n("Settings — %1", domain.config.name) : i18n("Settings")
 
@@ -84,6 +92,16 @@ Kirigami.ApplicationWindow {
         tpmEnabledCheck.checked = hardware.tpmEnabled === true;
         tpmModelCombo.currentIndex = Math.max(0, ["tpm-crb", "tpm-tis"].indexOf(hardware.tpmModel));
         tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
+        const resolution = Karton.domainDisplayResolution(domain);
+        let resolutionIndex = 0;
+        for (let i = 0; i < displayResolutions.length; ++i) {
+            if (displayResolutions[i].width === (resolution.width || 0)
+                && displayResolutions[i].height === (resolution.height || 0)) {
+                resolutionIndex = i;
+                break;
+            }
+        }
+        displayResolutionCombo.currentIndex = resolutionIndex;
     }
 
     function localPath(url) {
@@ -143,6 +161,9 @@ Kirigami.ApplicationWindow {
             saving = false;
             return;
         }
+
+        const resolution = displayResolutions[displayResolutionCombo.currentIndex];
+        Karton.saveDomainDisplayResolution(domain, resolution.width, resolution.height);
 
         const name = nameField.text.trim();
         const changed = name !== domain.config.name
@@ -1112,6 +1133,19 @@ Kirigami.ApplicationWindow {
                             id: videoHeadsSpin
                             from: 1
                             to: 4
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("Resolution")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: displayResolutionCombo
+                            model: root.displayResolutions
+                            textRole: "label"
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                         }
