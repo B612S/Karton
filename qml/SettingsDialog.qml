@@ -1614,10 +1614,13 @@ Kirigami.Dialog {
             }
 
             // Other devices
-            ColumnLayout {
+            ScrollableSettingsView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 16
+                implicitHeight: 0
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 16
 
                 Controls.Label {
                     text: i18n("System devices")
@@ -1642,18 +1645,18 @@ Kirigami.Dialog {
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("watchdog", checked, root.watchdogXml())
                     }
-                    Controls.Label { text: i18n("Model"); visible: watchdogCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Model"); enabled: watchdogCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogModelCombo
-                        visible: watchdogCheck.checked
+                        enabled: watchdogCheck.checked
                         Layout.preferredWidth: 260
                         model: ["i6300esb", "ib700"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
-                    Controls.Label { text: i18n("Action"); visible: watchdogCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Action"); enabled: watchdogCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogActionCombo
-                        visible: watchdogCheck.checked
+                        enabled: watchdogCheck.checked
                         Layout.preferredWidth: 260
                         model: ["reset", "poweroff", "shutdown", "pause", "none"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
@@ -1672,10 +1675,10 @@ Kirigami.Dialog {
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("rng", checked, root.rngXml())
                     }
-                    Controls.Label { text: i18n("Backend"); visible: rngCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Backend"); enabled: rngCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: rngBackendCombo
-                        visible: rngCheck.checked
+                        enabled: rngCheck.checked
                         Layout.preferredWidth: 260
                         model: ["random", "egd"]
                         onCurrentIndexChanged: root.applyOptionalSettings("rng", root.rngXml())
@@ -1694,10 +1697,10 @@ Kirigami.Dialog {
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("panic", checked, root.panicXml())
                     }
-                    Controls.Label { text: i18n("Model"); visible: panicCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Model"); enabled: panicCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: panicModelCombo
-                        visible: panicCheck.checked
+                        enabled: panicCheck.checked
                         Layout.preferredWidth: 260
                         model: ["isa", "pvpanic"]
                         onCurrentIndexChanged: root.applyOptionalSettings("panic", root.panicXml())
@@ -1730,28 +1733,28 @@ Kirigami.Dialog {
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("shmem", checked, root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Name"); visible: shmemCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Name"); enabled: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.TextField {
                         id: shmemNameField
-                        visible: shmemCheck.checked
+                        enabled: shmemCheck.checked
                         Layout.preferredWidth: 260
                         text: "karton"
                         onEditingFinished: root.applyOptionalSettings("shmem", root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Size (MiB)"); visible: shmemCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Size (MiB)"); enabled: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.SpinBox {
                         id: shmemSizeSpin
-                        visible: shmemCheck.checked
+                        enabled: shmemCheck.checked
                         from: 1
                         to: 4096
                         value: 64
                         Layout.preferredWidth: 260
                         onValueChanged: root.applyOptionalSettings("shmem", root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Model"); visible: shmemCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Model"); enabled: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: shmemModelCombo
-                        visible: shmemCheck.checked
+                        enabled: shmemCheck.checked
                         Layout.preferredWidth: 260
                         model: ["ivshmem-plain", "ivshmem-doorbell"]
                         onCurrentIndexChanged: root.applyOptionalSettings("shmem", root.shmemXml())
@@ -1797,7 +1800,7 @@ Kirigami.Dialog {
                 }
                 ListView {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 8, contentHeight)
                     clip: true
                     model: root.xmlDevices.filter(function(device) {
                         return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console", "emulator", "graphics", "audio", "watchdog", "rng", "panic", "vsock", "shmem", "filesystem"].indexOf(device.tag) === -1;
@@ -1830,6 +1833,7 @@ Kirigami.Dialog {
                         }
                     }
                 }
+            }
             }
 
             // Clipboard
