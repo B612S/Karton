@@ -87,7 +87,8 @@ TPM is configured on the VM's TPM Settings page. Watchdog, RNG, panic,
 VSOCK and shared memory (IVSHMEM) are enabled from the VM's Other devices page.
 Filesystem shares are added from Add Hardware and listed on the Filesystem page.
 Clipboard text and file synchronization modes are configured on the Clipboard
-page; text sync needs spice-vdagent in the guest.
+page; text sync needs spice-vdagent in the guest. File clipboard from host to
+guest additionally needs the `org.spice-space.webdav.0` SPICE channel.
 
 ### Mounting filesystem shares
 

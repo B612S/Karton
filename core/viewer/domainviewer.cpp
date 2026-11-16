@@ -298,7 +298,7 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         spice_channel_connect(channel);
         item->m_main_channel = SPICE_MAIN_CHANNEL(channel);
         g_signal_connect(channel, "main-agent-update", G_CALLBACK(mainAgentUpdateCallback), item);
-        item->m_clipboard->attach(SPICE_MAIN_CHANNEL(channel));
+        item->m_clipboard->attach(item->m_session, SPICE_MAIN_CHANNEL(channel));
         QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";

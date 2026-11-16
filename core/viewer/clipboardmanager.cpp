@@ -3,11 +3,17 @@
 
 #include "viewer/clipboardmanager.h"
 
+#include <libphodav/phodav.h>
 #include <spice/vd_agent.h>
 
 #include <QClipboard>
+#include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
+#include <QMimeData>
 #include <QTimer>
+#include <QUrl>
+#include <QUuid>
 
 #include "karton_debug.h"
 
@@ -16,12 +22,13 @@ ClipboardManager::ClipboardManager(QObject *parent)
 {
 }
 
-void ClipboardManager::attach(SpiceMainChannel *channel)
+void ClipboardManager::attach(SpiceSession *session, SpiceMainChannel *channel)
 {
     detach();
     if (!channel) {
         return;
     }
+    m_session = session;
     m_channel = channel;
     g_signal_connect(channel, "main-clipboard-selection-grab", G_CALLBACK(clipboardSelectionGrabCallback), this);
     g_signal_connect(channel, "main-clipboard-selection-request", G_CALLBACK(clipboardSelectionRequestCallback), this);
@@ -35,7 +42,9 @@ void ClipboardManager::detach()
 {
     QObject::disconnect(m_clipboardConnection);
     m_clipboardConnection = {};
+    m_session = nullptr;
     m_channel = nullptr;
+    m_pendingFileList.clear();
     m_lastGuestClipboardText.clear();
     m_lastSentHostClipboard.clear();
     m_settingClipboard = false;
@@ -57,6 +66,60 @@ void ClipboardManager::syncHostClipboard()
     if (m_channel) {
         hostClipboardChanged();
     }
+}
+
+QByteArray ClipboardManager::buildFileList(const QList<QUrl> &urls)
+{
+    if (!m_session || urls.isEmpty()) {
+        return {};
+    }
+    if (!spice_session_has_channel_type(m_session, SPICE_CHANNEL_WEBDAV)) {
+        qCInfo(KARTON_DEBUG) << "clipboard: file clipboard requires a SPICE WebDAV channel";
+        return {};
+    }
+    PhodavServer *server = nullptr;
+    g_object_get(m_session, "webdav-server", &server, NULL);
+    if (!server) {
+        return {};
+    }
+    PhodavVirtualDir *root = nullptr;
+    g_object_get(server, "root-file", &root, NULL);
+    g_object_unref(server);
+    if (!root) {
+        return {};
+    }
+    if (!PHODAV_IS_VIRTUAL_DIR(root)) {
+        qCInfo(KARTON_DEBUG) << "clipboard: WebDAV server does not expose a virtual filesystem";
+        g_object_unref(root);
+        return {};
+    }
+
+    QByteArray data("copy");
+    data.append('\0');
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile()) {
+            continue;
+        }
+        const QString localPath = url.toLocalFile();
+        const QString dirPath = QStringLiteral("/.spice-clipboard/%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        GError *error = nullptr;
+        PhodavVirtualDir *dir = phodav_virtual_dir_new_dir(root, dirPath.toUtf8().constData(), &error);
+        if (!dir) {
+            if (error) {
+                g_error_free(error);
+            }
+            continue;
+        }
+        GFile *file = g_file_new_for_path(localPath.toUtf8().constData());
+        phodav_virtual_dir_attach_real_child(dir, file);
+        g_object_unref(file);
+        g_object_unref(dir);
+        const QString sharePath = dirPath + QLatin1Char('/') + QFileInfo(localPath).fileName();
+        data.append(sharePath.toUtf8());
+        data.append('\0');
+    }
+    g_object_unref(root);
+    return data.size() > 6 ? data : QByteArray();
 }
 
 gboolean ClipboardManager::clipboardSelectionGrabCallback(SpiceMainChannel *channel, guint selection, guint32 *types, guint ntypes, gpointer userData)
@@ -82,6 +145,24 @@ gboolean ClipboardManager::clipboardSelectionRequestCallback(SpiceMainChannel *c
     auto *manager = static_cast<ClipboardManager *>(userData);
     if (manager->m_textMode != 1 && manager->m_textMode != 3) {
         return FALSE;
+    }
+    if (type == VD_AGENT_CLIPBOARD_FILE_LIST) {
+        if (manager->m_pendingFileList.isEmpty()) {
+            return FALSE;
+        }
+        const QByteArray files = manager->m_pendingFileList;
+        manager->m_pendingFileList.clear();
+        manager->m_pendingHostGrab = false;
+        g_object_ref(channel);
+        QTimer::singleShot(0, qApp, [channel, selection, files]() {
+            spice_main_channel_clipboard_selection_notify(channel,
+                                                          selection,
+                                                          VD_AGENT_CLIPBOARD_FILE_LIST,
+                                                          reinterpret_cast<const guchar *>(files.constData()),
+                                                          static_cast<size_t>(files.size()));
+            g_object_unref(channel);
+        });
+        return TRUE;
     }
     if (type != VD_AGENT_CLIPBOARD_UTF8_TEXT) {
         return FALSE;
@@ -130,6 +211,19 @@ void ClipboardManager::hostClipboardChanged()
     }
     if (m_textMode != 1 && m_textMode != 3) {
         return;
+    }
+    if (m_filesMode == 1 || m_filesMode == 3) {
+        const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData(QClipboard::Clipboard);
+        if (mimeData && mimeData->hasUrls()) {
+            const QByteArray files = buildFileList(mimeData->urls());
+            if (!files.isEmpty()) {
+                m_pendingFileList = files;
+                m_pendingHostGrab = true;
+                guint32 types[] = {VD_AGENT_CLIPBOARD_FILE_LIST};
+                spice_main_channel_clipboard_selection_grab(m_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD, types, 1);
+                return;
+            }
+        }
     }
     const QString text = QGuiApplication::clipboard()->text(QClipboard::Clipboard);
     qCInfo(KARTON_DEBUG) << "clipboard: host changed, mode" << m_textMode << "text" << text.size() << "chars";

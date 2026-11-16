@@ -44,6 +44,8 @@ find_package(Libvirt REQUIRED)
 find_package(Libosinfo REQUIRED)
 find_package(Glib REQUIRED)
 find_package(Spiceglib REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PHODAV REQUIRED IMPORTED_TARGET libphodav-3.0)
 find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
 find_package(Vulkan REQUIRED)
 
@@ -176,6 +178,7 @@ target_link_libraries(karton
     KirigamiApp
     Libvirt::Libvirt
     Spiceglib::Spiceglib
+    PkgConfig::PHODAV
     Libosinfo::Libosinfo
     Glib::Glib
     OpenGL::EGL

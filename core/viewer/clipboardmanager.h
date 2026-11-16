@@ -19,7 +19,7 @@ class ClipboardManager : public QObject
 public:
     explicit ClipboardManager(QObject *parent = nullptr);
 
-    void attach(SpiceMainChannel *channel);
+    void attach(SpiceSession *session, SpiceMainChannel *channel);
     void detach();
 
     void setTextMode(int mode);
@@ -41,7 +41,9 @@ private:
     static void clipboardSelectionCallback(SpiceMainChannel *channel, guint selection, guint32 type, gconstpointer data, guint size, gpointer userData);
 
     void hostClipboardChanged();
+    QByteArray buildFileList(const QList<QUrl> &urls);
 
+    SpiceSession *m_session = nullptr;
     SpiceMainChannel *m_channel = nullptr;
     QMetaObject::Connection m_clipboardConnection;
     int m_textMode = 3;
@@ -50,4 +52,5 @@ private:
     QString m_lastSentHostClipboard;
     bool m_settingClipboard = false;
     bool m_pendingHostGrab = false;
+    QByteArray m_pendingFileList;
 };
