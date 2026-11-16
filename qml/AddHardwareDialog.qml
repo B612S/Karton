@@ -23,8 +23,8 @@ Kirigami.Dialog {
 
     modal: true
     padding: 0
-    readonly property real cardWidth: applicationWindow() ? Math.min(1000, applicationWindow().width - 48) : 1000
-    readonly property real cardHeight: applicationWindow() ? Math.min(680, applicationWindow().height - 48) : 680
+    readonly property real cardWidth: applicationWindow() ? Math.min(680, applicationWindow().width - 48) : 680
+    readonly property real cardHeight: applicationWindow() ? Math.min(560, applicationWindow().height - 48) : 560
     width: cardWidth
     height: cardHeight
     header: Item {}
@@ -48,7 +48,7 @@ Kirigami.Dialog {
     background: Rectangle {
         color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
                        Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.95)
+                       Kirigami.Theme.backgroundColor.b, 0.98)
         radius: 8
         border.color: "transparent"
     }
@@ -130,7 +130,7 @@ Kirigami.Dialog {
                 spacing: 0
 
                 Rectangle {
-                    Layout.preferredWidth: root.width < 700 ? 160 : 200
+                    Layout.preferredWidth: 180
                     Layout.fillHeight: true
                     radius: 8
                     color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
@@ -198,8 +198,8 @@ Kirigami.Dialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.margins: 24
-                    spacing: 16
+                    Layout.margins: 20
+                    spacing: 14
 
                     Controls.Label {
                         text: root.categories[root.categoryIndex].label
@@ -237,19 +237,19 @@ Kirigami.Dialog {
                                     Controls.Button {
                                         text: i18n("Choose…")
                                         icon.name: "document-open-symbolic"
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         onClicked: diskFileDialog.open()
                                     }
                                     Controls.Label { text: i18n("ISO image"); Layout.fillWidth: true }
                                     Controls.Button {
                                         text: i18n("Choose…")
                                         icon.name: "media-optical-symbolic"
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         onClicked: isoFileDialog.open()
                                     }
                                     Controls.Label { text: i18n("New disk"); Layout.fillWidth: true }
                                     RowLayout {
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         spacing: 6
                                         Controls.SpinBox {
                                             id: addDiskSize
@@ -289,13 +289,13 @@ Kirigami.Dialog {
                                     Controls.Label { text: i18n("Network"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: networkCombo
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         model: root.networks.map(function(network) { return network.name; })
                                     }
                                     Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: networkModelCombo
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         model: ["virtio", "e1000"]
                                     }
                                 }
@@ -325,20 +325,20 @@ Kirigami.Dialog {
                                     Controls.Label { text: i18n("Device"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: inputTypeCombo
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         model: ["tablet", "mouse", "keyboard"]
                                     }
                                     Controls.Label { text: i18n("Bus"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: inputBusCombo
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         model: ["usb", "ps2", "virtio"]
                                     }
                                 }
                                 Controls.Button {
                                     text: i18n("Add input device")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: {
                                         if (Karton.attachInputDevice(root.domain, inputTypeCombo.currentText, inputBusCombo.currentText)) {
                                             root.added();
@@ -360,14 +360,14 @@ Kirigami.Dialog {
                                     Controls.Label { text: i18n("Type"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: controllerTypeCombo
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         model: ["usb", "pci", "sata", "virtio-serial"]
                                     }
                                 }
                                 Controls.Button {
                                     text: i18n("Add controller")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: {
                                         if (Karton.addController(root.domain, controllerTypeCombo.currentText)) {
                                             root.added();
@@ -385,7 +385,7 @@ Kirigami.Dialog {
                                 Controls.Button {
                                     text: i18n("Add serial port")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: {
                                         if (Karton.addSerialPort(root.domain)) {
                                             root.added();
@@ -403,7 +403,7 @@ Kirigami.Dialog {
                                 Controls.Button {
                                     text: i18n("Add text console")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: {
                                         if (Karton.addTextConsole(root.domain)) {
                                             root.added();
@@ -425,7 +425,7 @@ Kirigami.Dialog {
                                     Controls.Label { text: i18n("Channel"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: channelCombo
-                                        Layout.preferredWidth: 260
+                                        Layout.preferredWidth: 220
                                         model: [
                                             { label: i18n("QEMU Guest Agent"), name: "org.qemu.guest_agent.0" },
                                             { label: i18n("SPICE Agent"), name: "com.redhat.spice.0" },
@@ -437,7 +437,7 @@ Kirigami.Dialog {
                                 Controls.Button {
                                     text: i18n("Add channel")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: {
                                         if (Karton.addChannel(root.domain, channelCombo.model[channelCombo.currentIndex].name)) {
                                             root.added();
@@ -522,7 +522,7 @@ Kirigami.Dialog {
                                 Controls.Button {
                                     text: i18n("Add redirection device")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: root.addXml("<redirdev bus='usb' type='spicevmc'/>")
                                 }
                             }
@@ -536,7 +536,7 @@ Kirigami.Dialog {
                                 Controls.Button {
                                     text: i18n("Add watchdog")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: root.addXml("<watchdog model='i6300esb' action='reset'/>")
                                 }
                             }
@@ -550,7 +550,7 @@ Kirigami.Dialog {
                                 Controls.Button {
                                     text: i18n("Add RNG")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignRight
+                                    Layout.alignment: Qt.AlignLeft
                                     onClicked: root.addXml("<rng model='virtio'><backend model='random'>/dev/urandom</backend></rng>")
                                 }
                             }
