@@ -7,10 +7,12 @@
 #include <spice/vd_agent.h>
 
 #include <QClipboard>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QMimeData>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -30,6 +32,11 @@ void ClipboardManager::attach(SpiceSession *session, SpiceMainChannel *channel)
     }
     m_session = session;
     m_channel = channel;
+    if (m_session) {
+        const QString sharedDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/webdav");
+        QDir().mkpath(sharedDir);
+        g_object_set(m_session, "shared-dir", sharedDir.toUtf8().constData(), "share-dir-ro", FALSE, NULL);
+    }
     g_signal_connect(channel, "main-clipboard-selection-grab", G_CALLBACK(clipboardSelectionGrabCallback), this);
     g_signal_connect(channel, "main-clipboard-selection-request", G_CALLBACK(clipboardSelectionRequestCallback), this);
     g_signal_connect(channel, "main-clipboard-selection", G_CALLBACK(clipboardSelectionCallback), this);
