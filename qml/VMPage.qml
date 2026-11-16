@@ -147,6 +147,15 @@ Kirigami.ScrollablePage {
         }
     ]
 
+    Connections {
+        target: Karton
+        function onClosePopupsRequested() {
+            powerMenu.close();
+            rebootMenu.close();
+            moreMenu.close();
+        }
+    }
+
     Controls.Menu {
         id: powerMenu
         closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape

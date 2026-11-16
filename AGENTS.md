@@ -353,7 +353,8 @@ When testing destructive operations, prefer domains whose names start with
   Shut Down/Start with a separate arrow for Power Off, Pause (no extra menu),
   Reboot with a separate arrow for Reset, fullscreen and a More menu containing
   Actual Size, Fit Guest to Window, USB Devices, Hibernate, Settings and
-  Snapshots. "Fit to Window" was deliberately removed. A stopped VM opens the
+  Snapshots. Custom menus also close when the window frame is clicked or the
+  application loses focus. "Fit to Window" was deliberately removed. A stopped VM opens the
   viewer without starting it and shows only a large clickable start triangle;
   it is started only when the user asks. When a running VM stops, the viewer
   closes automatically. Opening the menu releases the pointer grab first. There

@@ -45,7 +45,18 @@ Karton::Karton(QObject *parent)
     , m_monitor(nullptr)
     , m_commandRunner(new CommandRunner(this))
 {
+    if (QCoreApplication::instance()) {
+        QCoreApplication::instance()->installEventFilter(this);
+    }
     init();
+}
+
+bool Karton::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::NonClientAreaMouseButtonPress || event->type() == QEvent::ApplicationDeactivate) {
+        Q_EMIT closePopupsRequested();
+    }
+    return QObject::eventFilter(watched, event);
 }
 
 Karton::~Karton()

@@ -213,6 +213,15 @@ Kirigami.ApplicationWindow {
             }
         ]
 
+        Connections {
+            target: Karton
+            function onClosePopupsRequested() {
+                powerMenu.close();
+                rebootMenu.close();
+                viewerMenu.close();
+            }
+        }
+
         Controls.Menu {
             id: powerMenu
         closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape

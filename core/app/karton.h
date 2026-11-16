@@ -65,7 +65,11 @@ public:
     QString getXmlConfigPath(const QString &domainName);
     int diskSizeGB(const QString &path);
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 Q_SIGNALS:
+    void closePopupsRequested();
     void domainsChanged(const virDomainPtr domainPtr, int event, int detail);
     void errorOccurred(const QString &errorMessage);
     void domainAdded(Domain *domain);
