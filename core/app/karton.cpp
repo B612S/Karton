@@ -668,6 +668,16 @@ void Karton::registerViewer(Domain *domain, QObject *window)
     m_viewers.insert(domain->config()->uuid(), window);
 }
 
+void Karton::closeAllViewers()
+{
+    const auto viewers = m_viewers.values();
+    for (const QPointer<QObject> &viewer : viewers) {
+        if (viewer) {
+            QMetaObject::invokeMethod(viewer, "close", Qt::DirectConnection);
+        }
+    }
+}
+
 void Karton::unregisterViewer(QObject *window)
 {
     for (auto it = m_viewers.begin(); it != m_viewers.end();) {

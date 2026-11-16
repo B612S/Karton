@@ -34,7 +34,11 @@ Kirigami.ApplicationWindow {
 
     onWidthChanged: if (sizeRestored) mainSizeTimer.restart()
     onHeightChanged: if (sizeRestored) mainSizeTimer.restart()
-    onClosing: Karton.saveMainWindowSize(width, height)
+    onClosing: {
+        Karton.saveMainWindowSize(width, height);
+        Karton.closeAllViewers();
+        Qt.quit();
+    }
 
     Timer {
         id: mainSizeTimer
