@@ -116,6 +116,7 @@ public Q_SLOTS:
     Q_INVOKABLE QString domainXml(const Domain *domain) const;
     Q_INVOKABLE QVariantList domainXmlDevices(const Domain *domain) const;
     Q_INVOKABLE bool domainHasDevice(const Domain *domain, const QString &tag) const;
+    Q_INVOKABLE bool ensureWebdavChannel(const Domain *domain);
     Q_INVOKABLE QVariantList domainInputDevices(const Domain *domain) const;
     Q_INVOKABLE bool attachInputDevice(const Domain *domain, const QString &type, const QString &bus);
     Q_INVOKABLE bool detachInputDevice(const Domain *domain, const QString &type, const QString &bus);

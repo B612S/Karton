@@ -1602,6 +1602,26 @@ bool Karton::domainHasDevice(const Domain *domain, const QString &tag) const
     return false;
 }
 
+bool Karton::ensureWebdavChannel(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return false;
+    }
+    const QByteArray current(xml);
+    free(xml);
+    if (current.contains("org.spice-space.webdav.0")) {
+        return true;
+    }
+    return attachXmlDevice(domain, QStringLiteral("<channel type='spiceport'><target type='virtio' name='org.spice-space.webdav.0'/></channel>"));
+}
+
 QVariantList Karton::domainXmlDevices(const Domain *domain) const
 {
     QVariantList result;

@@ -2074,7 +2074,12 @@ Kirigami.Dialog {
                                 i18n("Bidirectional")
                             ]
                             currentIndex: Karton.clipboardFilesMode()
-                            onActivated: Karton.saveClipboardFilesMode(index)
+                            onActivated: {
+                                Karton.saveClipboardFilesMode(index);
+                                if (index === 1 || index === 3) {
+                                    Karton.ensureWebdavChannel(root.domain);
+                                }
+                            }
                         }
                     }
                     Controls.Label {
