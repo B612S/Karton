@@ -1352,6 +1352,37 @@ QVariantList Karton::domainInterfaces(const Domain *domain) const
         return result;
     }
 
+    QHash<QString, QStringList> addresses;
+    virDomainInterfacePtr *interfaceAddresses = nullptr;
+    int addressCount = 0;
+    if (domain->isActive()) {
+        addressCount = virDomainInterfaceAddresses(domain->domainPtr(), &interfaceAddresses, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_AGENT, 0);
+        if (addressCount <= 0) {
+            addressCount = virDomainInterfaceAddresses(domain->domainPtr(), &interfaceAddresses, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_LEASE, 0);
+        }
+        if (addressCount <= 0) {
+            addressCount = virDomainInterfaceAddresses(domain->domainPtr(), &interfaceAddresses, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_ARP, 0);
+        }
+    }
+    for (int i = 0; i < addressCount; ++i) {
+        const virDomainInterface *interface = interfaceAddresses[i];
+        QStringList ips;
+        for (unsigned int j = 0; j < interface->naddrs; ++j) {
+            const QString address = QString::fromUtf8(interface->addrs[j].addr);
+            if (!address.isEmpty()) {
+                ips.append(address);
+            }
+        }
+        if (!interface->hwaddr || ips.isEmpty()) {
+            continue;
+        }
+        addresses.insert(QString::fromUtf8(interface->hwaddr).toLower(), ips);
+    }
+    for (int i = 0; i < addressCount; ++i) {
+        virDomainInterfaceFree(interfaceAddresses[i]);
+    }
+    free(interfaceAddresses);
+
     char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
     if (!xml) {
         return result;
@@ -1382,6 +1413,7 @@ QVariantList Karton::domainInterfaces(const Domain *domain) const
             interfaceInfo.insert(QStringLiteral("mac"), macElement.attribute(QStringLiteral("address")));
             interfaceInfo.insert(QStringLiteral("source"), source);
             interfaceInfo.insert(QStringLiteral("model"), modelElement.attribute(QStringLiteral("type")));
+            interfaceInfo.insert(QStringLiteral("ip"), addresses.value(macElement.attribute(QStringLiteral("address")).toLower()).join(QStringLiteral(", ")));
             result.append(interfaceInfo);
         }
     }
@@ -1512,6 +1544,61 @@ bool Karton::detachNetwork(const Domain *domain, const QString &mac)
         refreshDomain(domain->domainPtr());
     }
     return success;
+}
+
+bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, const QString &newMac, const QString &model)
+{
+    if (!domain || !domain->domainPtr() || mac.isEmpty() || newMac.isEmpty() || !m_conn) {
+        return false;
+    }
+
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain", "Failed to read configuration for domain: %1", domain->config()->name()));
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        Q_EMIT errorOccurred(i18n("Failed to parse the virtual machine configuration."));
+        return false;
+    }
+    free(xml);
+
+    const QDomNodeList interfaces = document.elementsByTagName(QStringLiteral("interface"));
+    for (int i = 0; i < interfaces.count(); ++i) {
+        QDomElement interface = interfaces.at(i).toElement();
+        QDomElement macElement = interface.firstChildElement(QStringLiteral("mac"));
+        if (macElement.attribute(QStringLiteral("address")).compare(mac, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        if (macElement.isNull()) {
+            macElement = document.createElement(QStringLiteral("mac"));
+            interface.insertBefore(macElement, interface.firstChild());
+        }
+        macElement.setAttribute(QStringLiteral("address"), newMac);
+        QDomElement modelElement = interface.firstChildElement(QStringLiteral("model"));
+        if (modelElement.isNull()) {
+            modelElement = document.createElement(QStringLiteral("model"));
+            interface.appendChild(modelElement);
+        }
+        modelElement.setAttribute(QStringLiteral("type"), model);
+
+        virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
+        if (!redefined) {
+            Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to update interface for domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage())));
+            return false;
+        }
+        virDomainFree(redefined);
+        refreshDomainList();
+        return true;
+    }
+
+    Q_EMIT errorOccurred(i18nc("%1 is a MAC address", "No interface with MAC address %1 was found.", mac));
+    return false;
 }
 
 static QString usbHostdevXml(const QString &vendor, const QString &product, const QString &bus, const QString &device)

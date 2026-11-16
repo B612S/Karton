@@ -10,14 +10,16 @@ import org.kde.kirigamiaddons.delegates as Delegates
 import org.kde.kirigamiaddons.formcard 1.0 as FormCard
 import org.kde.karton
 
-Kirigami.ApplicationWindow {
+Kirigami.Dialog {
     id: root
 
-    visible: false
-    transientParent: parentWindow
-    modality: Qt.WindowModal
-    flags: Qt.Dialog | Qt.FramelessWindowHint
-    color: "transparent"
+    modal: true
+    padding: 0
+    readonly property real cardWidth: applicationWindow() ? Math.min(1000, applicationWindow().width - 48) : 1000
+    readonly property real cardHeight: applicationWindow() ? Math.min(680, applicationWindow().height - 48) : 680
+    width: cardWidth
+    height: cardHeight
+    header: Item {}
 
     property Domain domain: null
     property var parentWindow: null
@@ -50,16 +52,6 @@ Kirigami.ApplicationWindow {
     ]
 
     title: domain ? i18n("Settings — %1", domain.config.name) : i18n("Settings")
-
-    readonly property var screenInfo: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
-    readonly property real adaptiveWidth: screenInfo ? Math.min(1000, screenInfo.width * 0.72) : 1000
-    readonly property real adaptiveHeight: screenInfo ? Math.min(680, screenInfo.height * 0.72) : 680
-    width: adaptiveWidth
-    height: adaptiveHeight
-    minimumWidth: Math.min(720, width)
-    minimumHeight: Math.min(480, height)
-    x: parentWindow ? Math.round(parentWindow.x + (parentWindow.width - width) / 2) : (screenInfo ? Math.round((screenInfo.width - width) / 2) : 0)
-    y: parentWindow ? Math.round(parentWindow.y + (parentWindow.height - height) / 2) : (screenInfo ? Math.round((screenInfo.height - height) / 2) : 0)
 
     function refresh() {
         if (!domain) {
@@ -130,8 +122,8 @@ Kirigami.ApplicationWindow {
         diskDiscardCombo.currentIndex = Math.max(0, ["", "unmap", "ignore"].indexOf(advanced.discard || ""));
     }
 
-    onVisibleChanged: {
-        if (!visible || !domain) {
+    onOpened: {
+        if (!domain) {
             return;
         }
         categoryList.currentIndex = 0;
@@ -254,6 +246,10 @@ Kirigami.ApplicationWindow {
             onTriggered: categoryList.currentIndex = 9
         }
     }
+
+    contentItem: Item {
+        implicitWidth: root.cardWidth
+        implicitHeight: root.cardHeight
 
     Rectangle {
         anchors.fill: parent
@@ -950,21 +946,29 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
+                    spacing: 16
 
                     Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("Libvirt networks")
-                        font.bold: true
+                        text: i18n("VM interfaces")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                     }
                     ListView {
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 9
                         clip: true
-                        model: root.networks
-                        spacing: Kirigami.Units.smallSpacing
+                        model: root.interfaces
+                        spacing: 4
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
+                            focusPolicy: Qt.NoFocus
+                            activeFocusOnTab: false
                             contentItem: RowLayout {
                                 spacing: Kirigami.Units.largeSpacing
                                 ColumnLayout {
@@ -972,91 +976,26 @@ Kirigami.ApplicationWindow {
                                     spacing: 0
                                     Controls.Label {
                                         Layout.fillWidth: true
-                                        text: modelData.name
+                                        text: modelData.source.length > 0 ? modelData.source : modelData.type
                                         elide: Text.ElideRight
                                     }
                                     Controls.Label {
                                         Layout.fillWidth: true
-                                        text: (modelData.active ? i18n("active") : i18n("inactive"))
-                                              + " · " + modelData.forward
-                                              + (modelData.bridge.length > 0 ? " · " + modelData.bridge : "")
+                                        text: modelData.mac
+                                              + (modelData.model.length > 0 ? " - " + modelData.model : "")
+                                              + ((modelData.ip || "").length > 0 ? " - " + modelData.ip : "")
                                         opacity: 0.7
                                         elide: Text.ElideRight
                                     }
                                 }
                                 Controls.Button {
-                                    text: modelData.active ? i18n("Stop") : i18n("Start")
-                                    icon.name: modelData.active ? "media-playback-stop-symbolic" : "media-playback-start-symbolic"
+                                    text: i18n("Edit")
+                                    icon.name: "document-edit-symbolic"
+                                    enabled: modelData.mac.length > 0
                                     onClicked: {
-                                        if (modelData.active) {
-                                            Karton.stopNetwork(modelData.name);
-                                        } else {
-                                            Karton.startNetwork(modelData.name);
-                                        }
-                                        root.refresh();
-                                    }
-                                }
-                                Controls.CheckBox {
-                                    text: i18n("Autostart")
-                                    checked: modelData.autostart
-                                    onToggled: {
-                                        Karton.setNetworkAutostart(modelData.name, checked);
-                                        root.refresh();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        Controls.TextField {
-                            id: newNetworkField
-                            Layout.fillWidth: true
-                            placeholderText: i18n("New NAT network name")
-                        }
-                        Controls.Button {
-                            text: i18n("Create NAT")
-                            icon.name: "list-add-symbolic"
-                            enabled: newNetworkField.text.trim().length > 0
-                            onClicked: {
-                                if (Karton.createNatNetwork(newNetworkField.text.trim())) {
-                                    newNetworkField.text = "";
-                                    root.refresh();
-                                }
-                            }
-                        }
-                    }
-
-                    Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("VM interfaces")
-                        font.bold: true
-                    }
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 8
-                        clip: true
-                        model: root.interfaces
-                        spacing: Kirigami.Units.smallSpacing
-                        delegate: Controls.ItemDelegate {
-                            width: ListView.view.width
-                            contentItem: RowLayout {
-                                spacing: Kirigami.Units.largeSpacing
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        text: (modelData.source.length > 0 ? modelData.source : modelData.type)
-                                        elide: Text.ElideRight
-                                    }
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        text: modelData.mac + (modelData.model.length > 0 ? " · " + modelData.model : "")
-                                        opacity: 0.7
-                                        elide: Text.ElideRight
+                                        editInterfaceDialog.originalMac = modelData.mac;
+                                        editInterfaceDialog.model = modelData.model || "virtio";
+                                        editInterfaceDialog.open();
                                     }
                                 }
                                 Controls.Button {
@@ -1074,7 +1013,7 @@ Kirigami.ApplicationWindow {
                     }
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
+                        spacing: 8
                         Controls.ComboBox {
                             id: attachNetworkCombo
                             Layout.fillWidth: true
@@ -1095,6 +1034,13 @@ Kirigami.ApplicationWindow {
                                 }
                             }
                         }
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        opacity: 0.65
+                        font.pixelSize: 12
+                        text: i18n("MAC and model changes are applied to the persistent configuration; restart the VM to use them.")
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -1654,6 +1600,75 @@ Kirigami.ApplicationWindow {
                 icon.name: "dialog-cancel-symbolic"
                 onClicked: root.close()
             }
+        }
+    }
+    }
+
+    Kirigami.Dialog {
+        id: editInterfaceDialog
+        title: i18n("Edit Network Interface")
+        padding: Kirigami.Units.largeSpacing
+        preferredWidth: Kirigami.Units.gridUnit * 28
+        property string originalMac: ""
+        property string model: "virtio"
+
+        background: Rectangle {
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                           Kirigami.Theme.backgroundColor.g,
+                           Kirigami.Theme.backgroundColor.b, 0.95)
+            radius: 8
+            border.color: "transparent"
+        }
+
+        onOpened: {
+            macField.text = originalMac;
+            modelCombo.currentIndex = Math.max(0, modelCombo.model.indexOf(model));
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 16
+
+            Controls.Label { text: i18n("MAC address"); font.pixelSize: 14 }
+            Controls.TextField {
+                id: macField
+                Layout.fillWidth: true
+            }
+            Controls.Label { text: i18n("Model"); font.pixelSize: 14; Layout.topMargin: 8 }
+            Controls.ComboBox {
+                id: modelCombo
+                model: ["virtio", "e1000"]
+                Layout.fillWidth: true
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: editInterfaceDialog.close()
+            },
+            Kirigami.Action {
+                text: i18n("Save")
+                icon.name: "dialog-ok-symbolic"
+                enabled: macField.text.trim().length > 0
+                onTriggered: {
+                    if (Karton.editNetworkInterface(root.domain, editInterfaceDialog.originalMac,
+                                                    macField.text.trim(), modelCombo.currentText)) {
+                        editInterfaceDialog.close();
+                        root.refresh();
+                    }
+                }
+            }
+        ]
+    }
+
+    Connections {
+        target: Karton
+        function onClosePopupsRequested() {
+            // ComboBox popups are separate Qt Quick popups; moving focus back
+            // to the settings card dismisses them when the frame/app is clicked.
+            root.contentItem.forceActiveFocus();
         }
     }
     }

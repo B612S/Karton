@@ -202,10 +202,13 @@ When testing destructive operations, prefer domains whose names start with
   flight; do not close them optimistically after calling `Karton`.
 - Libvirt network management lives on `Karton` (`networks()`, `startNetwork()`,
   `stopNetwork()`, `createNatNetwork()`, `attachNetwork()`, `detachNetwork()`)
-  and is exposed inline by the Network page of `qml/SettingsDialog.qml`. NIC
-  attach uses separate LIVE and CONFIG libvirt calls so a running VM keeps the
-  interface after shutdown; NIC detach removes the CONFIG device even if the
-  guest cannot hot-unplug the live device.
+  and is exposed inline by the Network page of `qml/SettingsDialog.qml`. The
+  per-VM page only manages VM interfaces (attach/edit/detach); host libvirt
+  network management is not duplicated there. NIC attach uses separate LIVE and
+  CONFIG libvirt calls so a running VM keeps the interface after shutdown; NIC
+  detach removes the CONFIG device even if the guest cannot hot-unplug the live
+  device. Interface rows show IP addresses obtained from the guest agent/lease
+  and provide an Edit dialog for MAC/model changes.
 - Runtime USB passthrough is available through `Karton::usbDevices()`,
   `domainUsbDevices()`, `attachUsbDevice()` and `detachUsbDevice()`, with the
   UI in `qml/UsbDevicesDialog.qml`. Host devices come from libvirt node devices
@@ -294,10 +297,10 @@ When testing destructive operations, prefer domains whose names start with
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
   macOS and DOS), installed into hicolor. The VM page uses Luma-style
   transparent details rows and a rounded preview frame.
-- `SettingsDialog.qml` is a standalone, screen-adaptive hardware settings
-  window (1000×680 maximum, 72% of the screen, minimum 720×480) with a shared
-  page header, a fixed navigation column, one scrollable content page and a
-  fixed footer. Pages: Overview, CPUs & Memory, Boot Options, Disks, Network,
+- `SettingsDialog.qml` is a window-modal overlay dialog attached to the
+  owning window. It is capped at 1000×680, has a shared page header, a fixed
+  navigation column, one scrollable content page and a fixed footer, and never
+  opens as an independent top-level window. Pages: Overview, CPUs & Memory, Boot Options, Disks, Network,
   Display, Sound, USB, PCI, TPM, OS Information and Performance. Each page uses
   Luma-style transparent rounded window, 200/160 px category sidebar with a
   translucent highlight and accent bar, 24 px content margins and two-column
