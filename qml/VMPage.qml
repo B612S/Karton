@@ -165,7 +165,7 @@ Kirigami.ScrollablePage {
             icon.name: "settings-configure-symbolic"
             enabled: !isRunning
             onTriggered: {
-                settingsDialog.open();
+                settingsDialog.show();
             }
         }
     ]

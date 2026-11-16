@@ -183,7 +183,7 @@ Kirigami.ApplicationWindow {
             Controls.MenuItem {
                 text: i18n("Settings")
                 icon.name: "settings-configure-symbolic"
-                onTriggered: settingsDialog.open()
+                onTriggered: settingsDialog.show()
             }
             Controls.MenuItem {
                 text: i18n("Snapshots")

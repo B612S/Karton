@@ -10,8 +10,12 @@ import org.kde.kirigamiaddons.delegates as Delegates
 import org.kde.kirigamiaddons.formcard 1.0 as FormCard
 import org.kde.karton
 
-Kirigami.Dialog {
+Kirigami.ApplicationWindow {
     id: root
+
+    visible: false
+    modality: Qt.ApplicationModal
+    flags: Qt.Dialog
 
     property Domain domain: null
     property bool saving: false
@@ -34,12 +38,16 @@ Kirigami.Dialog {
     readonly property var soundLabels: ["ich9", "AC97", i18n("None")]
 
     title: domain ? i18n("Settings — %1", domain.config.name) : i18n("Settings")
-    padding: 0
-    modal: true
 
     readonly property var screenInfo: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
-    preferredWidth: screenInfo ? Math.min(Kirigami.Units.gridUnit * 46, screenInfo.width * 0.78) : Kirigami.Units.gridUnit * 46
-    preferredHeight: screenInfo ? Math.min(Kirigami.Units.gridUnit * 26, screenInfo.height * 0.78) : Kirigami.Units.gridUnit * 26
+    readonly property real adaptiveWidth: screenInfo ? Math.min(1000, screenInfo.width * 0.72) : 1000
+    readonly property real adaptiveHeight: screenInfo ? Math.min(680, screenInfo.height * 0.72) : 680
+    width: adaptiveWidth
+    height: adaptiveHeight
+    minimumWidth: Math.min(720, width)
+    minimumHeight: Math.min(480, height)
+    x: screenInfo ? Math.round((screenInfo.width - width) / 2) : 0
+    y: screenInfo ? Math.round((screenInfo.height - height) / 2) : 0
 
     function refresh() {
         if (!domain) {
@@ -95,8 +103,8 @@ Kirigami.Dialog {
         diskDiscardCombo.currentIndex = Math.max(0, ["", "unmap", "ignore"].indexOf(advanced.discard || ""));
     }
 
-    onOpened: {
-        if (!domain) {
+    onVisibleChanged: {
+        if (!visible || !domain) {
             return;
         }
         categoryList.currentIndex = 0;
@@ -158,26 +166,6 @@ Kirigami.Dialog {
         }
     }
 
-    customFooterActions: [
-        Kirigami.Action {
-            text: i18n("Add Hardware")
-            icon.name: "list-add-symbolic"
-            enabled: root.domain !== null
-            onTriggered: addHardwareMenu.popup()
-        },
-        Kirigami.Action {
-            text: i18n("Save")
-            icon.name: "dialog-ok-symbolic"
-            enabled: !root.saving && root.domain !== null
-            onTriggered: root.save()
-        },
-        Kirigami.Action {
-            text: i18n("Close")
-            icon.name: "dialog-cancel-symbolic"
-            onTriggered: root.close()
-        }
-    ]
-
     Connections {
         target: Karton
         function onDomainEdited(success, name) {
@@ -228,7 +216,14 @@ Kirigami.Dialog {
         }
     }
 
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 0
+
     RowLayout {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        clip: true
         spacing: 0
 
         ListView {
@@ -265,13 +260,34 @@ Kirigami.Dialog {
             Layout.fillHeight: true
         }
 
-        StackLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: categoryList.currentIndex
+            spacing: 0
+
+            Kirigami.Heading {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.largeSpacing
+                text: categoryList.currentIndex >= 0 && categoryList.currentIndex < categoryList.model.length
+                    ? categoryList.model[categoryList.currentIndex].label
+                    : ""
+                level: 3
+            }
+            Kirigami.Separator {
+                Layout.fillWidth: true
+                opacity: 0.5
+            }
+
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                currentIndex: categoryList.currentIndex
 
             // Overview
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -320,6 +336,8 @@ Kirigami.Dialog {
 
             // CPUs and memory
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -355,6 +373,8 @@ Kirigami.Dialog {
 
             // Boot options
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -395,6 +415,8 @@ Kirigami.Dialog {
 
             // Disks
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -408,7 +430,7 @@ Kirigami.Dialog {
                     ListView {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 10
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 6
                         clip: true
                         model: root.disks
                         spacing: Kirigami.Units.smallSpacing
@@ -444,6 +466,11 @@ Kirigami.Dialog {
                         }
                     }
 
+                    Controls.Label {
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        text: i18n("Create a new disk")
+                        font.bold: true
+                    }
                     FormCard.FormCard {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
@@ -476,66 +503,29 @@ Kirigami.Dialog {
                         }
                     }
 
+                    Controls.Label {
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        text: i18n("Attach existing media")
+                        font.bold: true
+                    }
                     FormCard.FormCard {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
 
-                        FormCard.FormTextFieldDelegate {
-                            id: imagePathField
-                            label: i18n("Disk image path:")
+                        Controls.Button {
                             Layout.fillWidth: true
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: Kirigami.Units.largeSpacing
-                            Layout.rightMargin: Kirigami.Units.largeSpacing
-                            Controls.Button {
-                                Layout.fillWidth: true
-                                text: i18n("Browse…")
-                                icon.name: "document-open-symbolic"
-                                onClicked: imageFileDialog.open()
-                            }
-                            Controls.Button {
-                                Layout.fillWidth: true
-                                text: i18n("Attach image")
-                                icon.name: "list-add-symbolic"
-                                enabled: imagePathField.text.trim().length > 0
-                                onClicked: {
-                                    if (Karton.attachDiskImage(root.domain, imagePathField.text.trim(), "qcow2")) {
-                                        imagePathField.text = "";
-                                        root.refresh();
-                                    }
-                                }
-                            }
+                            Layout.margins: Kirigami.Units.largeSpacing
+                            text: i18n("Attach disk image…")
+                            icon.name: "document-open-symbolic"
+                            onClicked: imageFileDialog.open()
                         }
                         FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextFieldDelegate {
-                            id: isoPathField
-                            label: i18n("ISO image path:")
+                        Controls.Button {
                             Layout.fillWidth: true
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: Kirigami.Units.largeSpacing
-                            Layout.rightMargin: Kirigami.Units.largeSpacing
-                            Controls.Button {
-                                Layout.fillWidth: true
-                                text: i18n("Browse…")
-                                icon.name: "document-open-symbolic"
-                                onClicked: isoFileDialog.open()
-                            }
-                            Controls.Button {
-                                Layout.fillWidth: true
-                                text: i18n("Attach ISO")
-                                icon.name: "media-optical-symbolic"
-                                enabled: isoPathField.text.trim().length > 0
-                                onClicked: {
-                                    if (Karton.attachIso(root.domain, isoPathField.text.trim())) {
-                                        isoPathField.text = "";
-                                        root.refresh();
-                                    }
-                                }
-                            }
+                            Layout.margins: Kirigami.Units.largeSpacing
+                            text: i18n("Attach ISO image…")
+                            icon.name: "media-optical-symbolic"
+                            onClicked: isoFileDialog.open()
                         }
                     }
 
@@ -613,6 +603,8 @@ Kirigami.Dialog {
 
             // Network
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -768,6 +760,8 @@ Kirigami.Dialog {
 
             // Display
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -801,6 +795,8 @@ Kirigami.Dialog {
 
             // Sound
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -820,6 +816,8 @@ Kirigami.Dialog {
 
             // USB
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -915,6 +913,8 @@ Kirigami.Dialog {
 
             // PCI
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -1011,6 +1011,8 @@ Kirigami.Dialog {
 
             // TPM
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -1051,6 +1053,8 @@ Kirigami.Dialog {
 
             // OS information
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -1088,6 +1092,8 @@ Kirigami.Dialog {
 
             // Performance
             Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
@@ -1114,21 +1120,55 @@ Kirigami.Dialog {
                     Item { Layout.fillHeight: true }
                 }
             }
+            }
         }
+    }
+
+    Controls.ToolBar {
+        Layout.fillWidth: true
+        contentItem: RowLayout {
+            Item { Layout.fillWidth: true }
+            Controls.Button {
+                text: i18n("Add Hardware")
+                icon.name: "list-add-symbolic"
+                enabled: root.domain !== null
+                onClicked: addHardwareMenu.popup()
+            }
+            Controls.Button {
+                text: i18n("Save")
+                icon.name: "dialog-ok-symbolic"
+                enabled: !root.saving && root.domain !== null
+                onClicked: root.save()
+            }
+            Controls.Button {
+                text: i18n("Close")
+                icon.name: "dialog-cancel-symbolic"
+                onClicked: root.close()
+            }
+        }
+    }
     }
 
     FileDialog {
         id: imageFileDialog
         title: i18n("Select a disk image")
         nameFilters: [i18n("Disk images (*.qcow2 *.img *.raw *.vmdk)"), i18n("All files (*)")]
-        onAccepted: imagePathField.text = root.localPath(selectedFile)
+        onAccepted: {
+            if (Karton.attachDiskImage(root.domain, root.localPath(selectedFile), "qcow2")) {
+                root.refresh();
+            }
+        }
     }
 
     FileDialog {
         id: isoFileDialog
         title: i18n("Select an ISO image")
         nameFilters: [i18n("ISO images (*.iso)"), i18n("All files (*)")]
-        onAccepted: isoPathField.text = root.localPath(selectedFile)
+        onAccepted: {
+            if (Karton.attachIso(root.domain, root.localPath(selectedFile))) {
+                root.refresh();
+            }
+        }
     }
 
 }
