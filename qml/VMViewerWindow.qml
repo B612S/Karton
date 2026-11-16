@@ -196,17 +196,6 @@ Kirigami.ApplicationWindow {
             }
         }
 
-        // Keep the main page preview in sync with what is currently on screen
-        // without taking a QEMU screenshot (which would pause the guest).
-        Timer {
-            id: viewerPreviewTimer
-            interval: 1000
-            repeat: true
-            running: viewerWindow.visible && viewerWindow.isRunning
-            triggeredOnStart: true
-            onTriggered: domainViewer.updateDomainPreview()
-        }
-
         actions: [
             Kirigami.Action {
                 text: viewerWindow.isRunning ? i18n("Shut Down") : i18n("Start")
