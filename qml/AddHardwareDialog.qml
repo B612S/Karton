@@ -17,13 +17,16 @@ Kirigami.Dialog {
     property var usbHostDevices: []
     property var pciHostDevices: []
     property string message: ""
+    property bool messageIsError: false
 
     signal deviceAdded()
 
     modal: true
     padding: 0
-    width: applicationWindow() ? Math.min(760, applicationWindow().width - 48) : 760
-    height: applicationWindow() ? Math.min(600, applicationWindow().height - 48) : 600
+    readonly property real cardWidth: applicationWindow() ? Math.min(1000, applicationWindow().width - 48) : 1000
+    readonly property real cardHeight: applicationWindow() ? Math.min(680, applicationWindow().height - 48) : 680
+    width: cardWidth
+    height: cardHeight
     header: Item {}
 
     readonly property var categories: [
@@ -54,6 +57,7 @@ Kirigami.Dialog {
         refresh();
         categoryIndex = 0;
         message = "";
+        messageIsError = false;
     }
 
     function refresh() {
@@ -65,6 +69,7 @@ Kirigami.Dialog {
     function added() {
         refresh();
         message = i18n("Device added");
+        messageIsError = false;
         deviceAdded();
     }
 
@@ -86,6 +91,7 @@ Kirigami.Dialog {
         target: Karton
         function onErrorOccurred(errorMessage) {
             root.message = errorMessage;
+            root.messageIsError = true;
             if (applicationWindow()) {
                 applicationWindow().showPassiveNotification(errorMessage, "long");
             }
@@ -93,8 +99,8 @@ Kirigami.Dialog {
     }
 
     contentItem: Item {
-        implicitWidth: root.width
-        implicitHeight: root.height
+        implicitWidth: root.cardWidth
+        implicitHeight: root.cardHeight
 
         ColumnLayout {
             anchors.fill: parent
@@ -124,7 +130,7 @@ Kirigami.Dialog {
                 spacing: 0
 
                 Rectangle {
-                    Layout.preferredWidth: 190
+                    Layout.preferredWidth: root.width < 700 ? 160 : 200
                     Layout.fillHeight: true
                     radius: 8
                     color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
@@ -135,19 +141,55 @@ Kirigami.Dialog {
                         id: categoryList
                         anchors.fill: parent
                         anchors.margins: 12
-                        spacing: 2
+                        spacing: 4
                         model: root.categories
                         currentIndex: 0
-                        delegate: Controls.ItemDelegate {
+                        clip: true
+                        delegate: Rectangle {
+                            id: categoryButton
                             width: ListView.view.width
-                            height: 32
-                            focusPolicy: Qt.NoFocus
-                            highlighted: ListView.isCurrentItem
-                            onClicked: root.categoryIndex = index
-                            contentItem: Controls.Label {
+                            height: 36
+                            radius: 4
+                            color: ListView.isCurrentItem
+                                ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                          Kirigami.Theme.highlightColor.g,
+                                          Kirigami.Theme.highlightColor.b, 0.35)
+                                : (categoryMouse.containsMouse
+                                    ? Qt.rgba(Kirigami.Theme.textColor.r,
+                                              Kirigami.Theme.textColor.g,
+                                              Kirigami.Theme.textColor.b, 0.08)
+                                    : "transparent")
+                            Text {
                                 text: modelData.label
+                                color: Kirigami.Theme.textColor
+                                font.pixelSize: 14
+                                font.weight: ListView.isCurrentItem ? Font.DemiBold : Font.Normal
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.leftMargin: 12
+                                anchors.right: parent.right
+                                anchors.rightMargin: 8
                                 elide: Text.ElideRight
-                                font.pixelSize: 13
+                            }
+                            Rectangle {
+                                visible: ListView.isCurrentItem
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.topMargin: 4
+                                anchors.bottomMargin: 4
+                                width: 3
+                                radius: 1.5
+                                color: Kirigami.Theme.highlightColor
+                            }
+                            MouseArea {
+                                id: categoryMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    categoryList.currentIndex = index;
+                                    root.categoryIndex = index;
+                                }
                             }
                         }
                     }
@@ -156,12 +198,12 @@ Kirigami.Dialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.margins: 20
-                    spacing: 12
+                    Layout.margins: 24
+                    spacing: 16
 
                     Controls.Label {
                         text: root.categories[root.categoryIndex].label
-                        font.pixelSize: 18
+                        font.pixelSize: 20
                         font.weight: Font.Bold
                         Layout.fillWidth: true
                     }
@@ -222,8 +264,8 @@ Kirigami.Dialog {
                                             Layout.preferredWidth: 90
                                         }
                                         Controls.Button {
+                                            text: i18n("Create")
                                             icon.name: "list-add-symbolic"
-                                            display: Controls.AbstractButton.IconOnly
                                             onClicked: {
                                                 if (Karton.addDisk(root.domain, addDiskSize.value, addDiskFormat.currentText)) {
                                                     root.added();
@@ -541,10 +583,23 @@ Kirigami.Dialog {
                             Controls.Label {
                                 visible: root.message.length > 0
                                 text: root.message
-                                color: Kirigami.Theme.positiveTextColor
+                                color: root.messageIsError ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.positiveTextColor
                                 Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                             }
                         }
+                    }
+                }
+            }
+
+            Controls.ToolBar {
+                Layout.fillWidth: true
+                contentItem: RowLayout {
+                    Item { Layout.fillWidth: true }
+                    Controls.Button {
+                        text: i18n("Close")
+                        icon.name: "dialog-cancel-symbolic"
+                        onClicked: root.close()
                     }
                 }
             }
