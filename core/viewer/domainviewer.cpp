@@ -402,6 +402,7 @@ void DomainViewer::clipboardSelectionCallback(SpiceMainChannel *channel, guint s
     const QString text = QString::fromUtf8(static_cast<const char *>(data), static_cast<int>(size));
     qCInfo(KARTON_DEBUG) << "clipboard: received text from guest" << text.size() << "chars";
     item->m_lastGuestClipboardText = text;
+    item->m_lastSentHostClipboard = text;
     item->m_settingClipboard = true;
     QGuiApplication::clipboard()->setText(text, QClipboard::Clipboard);
     item->m_settingClipboard = false;
@@ -431,6 +432,10 @@ void DomainViewer::hostClipboardChanged()
         m_lastGuestClipboardText.clear();
         return;
     }
+    if (text == m_lastSentHostClipboard) {
+        return;
+    }
+    m_lastSentHostClipboard = text;
     guint32 types[] = {VD_AGENT_CLIPBOARD_UTF8_TEXT};
     m_pendingHostGrab = true;
     spice_main_channel_clipboard_selection_grab(m_main_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD, types, 1);

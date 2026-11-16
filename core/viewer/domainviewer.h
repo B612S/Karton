@@ -219,6 +219,7 @@ private:
     int m_clipboardTextMode = 3;
     int m_clipboardFilesMode = 0;
     QString m_lastGuestClipboardText;
+    QString m_lastSentHostClipboard;
     int m_spiceTlsPort = 0;
     QString m_spicePassword;
 
