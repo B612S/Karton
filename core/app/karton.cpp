@@ -1411,12 +1411,13 @@ bool Karton::setXmlDevice(const Domain *domain, const QString &tag, const QStrin
             break;
         }
     }
-    const QDomElement replacement = deviceDocument.documentElement();
     if (existing.isNull()) {
-        devices.appendChild(document.importNode(replacement, true));
-    } else {
-        devices.replaceChild(document.importNode(replacement, true), existing);
+        // Adding through libvirt's device API avoids rewriting the complete
+        // domain XML and works for shmem/watchdog/RNG hotplug as well.
+        return attachXmlDevice(domain, xml);
     }
+    const QDomElement replacement = deviceDocument.documentElement();
+    devices.replaceChild(document.importNode(replacement, true), existing);
 
     virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
