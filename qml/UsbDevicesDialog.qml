@@ -12,6 +12,8 @@ Kirigami.Dialog {
     property Domain domain: null
 
     title: domain ? i18n("USB Devices — %1", domain.config.name) : i18n("USB Devices")
+    preferredWidth: Math.min(680, applicationWindow() ? applicationWindow().width - 48 : 680)
+    preferredHeight: Math.min(620, applicationWindow() ? applicationWindow().height - 48 : 620)
 
     background: Rectangle {
         color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
