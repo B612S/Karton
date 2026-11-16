@@ -3,17 +3,17 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls as Controls
 
-// Flickable-based scrolling, matching Luma's settings pages. A Flickable
-// handles mouse-wheel and touchpad scrolling natively and does not depend on
-// ScrollView's internal content-size bookkeeping.
+// Flickable-based scrolling, matching Luma's settings pages. The wrapper
+// leaves room for the vertical scrollbar so controls never slide underneath it.
 Flickable {
     id: root
 
+    default property alias contentData: contentWrapper.data
+
     clip: true
     contentWidth: width
-    contentHeight: Math.max(height, contentItem.childrenRect.height)
+    contentHeight: contentWrapper.height
     boundsBehavior: Flickable.StopAtBounds
 
     ScrollBar.vertical: ScrollBar {
@@ -21,7 +21,9 @@ Flickable {
         width: 10
     }
 
-    // Luma reserves room for the scrollbar; otherwise form controls extend
-    // under it and become hard to click at the right edge.
-    Component.onCompleted: contentItem.width = Qt.binding(() => Math.max(0, root.width - 16))
+    Item {
+        id: contentWrapper
+        width: Math.max(0, root.width - 16)
+        height: childrenRect.height
+    }
 }
