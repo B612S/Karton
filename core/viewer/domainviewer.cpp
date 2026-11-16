@@ -302,6 +302,9 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
             });
         }
         QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
+        QTimer::singleShot(250, item, [item]() {
+            item->hostClipboardChanged();
+        });
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
         spice_channel_connect(channel);
