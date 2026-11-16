@@ -79,8 +79,8 @@ Kirigami.ScrollablePage {
         },
         Kirigami.Action {
             icon.name: "settings-configure-symbolic"
-            text: i18n("Connection Settings")
-            onTriggered: connectionDialog.open()
+            text: i18n("Settings")
+            onTriggered: applicationSettingsDialog.open()
         }
     ]
 
@@ -88,8 +88,8 @@ Kirigami.ScrollablePage {
         id: addDomainDialog
     }
 
-    ConnectionSettingsDialog {
-        id: connectionDialog
+    ApplicationSettingsDialog {
+        id: applicationSettingsDialog
     }
 
     ListView {

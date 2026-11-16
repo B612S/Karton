@@ -45,7 +45,7 @@ This project is still in early development and will likely break existing virtua
 - Runtime disk and ISO hotplug, with optional disk-file deletion on detach
 
 ## Configuration
-The connection URI can be changed in the Connection Settings dialog (restart
+The connection URI can be changed in Application Settings (restart
 required) or with `KARTON_LIBVIRT_URI`, which overrides the stored value (for
 example `KARTON_LIBVIRT_URI=qemu:///system`). Set
 `KARTON_GRAPHICS_API=opengl` if Vulkan is unavailable and the automatic

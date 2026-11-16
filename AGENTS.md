@@ -17,8 +17,8 @@ the VM console.
 Karton auto-detects the libvirt connection in `Karton::init()`: without an
 explicit setting it tries `qemu:///system` first, then `qemu:///session`, and
 selects the first connection that actually has domains. The active URI is shown
-in the empty-state message and can be overridden in the Connection Settings
-dialog (requires a restart) or with the `KARTON_LIBVIRT_URI` environment
+in the empty-state message and can be overridden in Application Settings
+(requires a restart) or with the `KARTON_LIBVIRT_URI` environment
 variable, which takes precedence. A stored URI is used first; if it has no
 domains and is one of the two local URIs, the other one is tried. The URI is
 stored in QSettings under `connection/uri` in
@@ -200,6 +200,9 @@ When testing destructive operations, prefer domains whose names start with
   `domainEdited`.
 - The QML dialogs keep themselves open while an asynchronous create/edit is in
   flight; do not close them optimistically after calling `Karton`.
+- `ApplicationSettingsDialog.qml` is the window-attached Luma-style global
+  settings overlay. Its Application page edits the libvirt connection URI; its
+  Libvirt Networks page manages host networks (start/stop, autostart, NAT).
 - Libvirt network management lives on `Karton` (`networks()`, `startNetwork()`,
   `stopNetwork()`, `createNatNetwork()`, `attachNetwork()`, `detachNetwork()`)
   and is exposed inline by the Network page of `qml/SettingsDialog.qml`. The
