@@ -14,6 +14,33 @@ if(KARTON_SANITIZE)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+option(KARTON_CLANG_TIDY "Run clang-tidy as part of the build" OFF)
+if(KARTON_CLANG_TIDY)
+    find_program(KARTON_CLANG_TIDY_EXE NAMES clang-tidy-wrapper
+        HINTS ${CMAKE_CURRENT_SOURCE_DIR}/scripts
+        NO_DEFAULT_PATH)
+    if(NOT KARTON_CLANG_TIDY_EXE)
+        find_program(KARTON_CLANG_TIDY_EXE NAMES clang-tidy)
+    endif()
+    if(NOT KARTON_CLANG_TIDY_EXE)
+        message(FATAL_ERROR "KARTON_CLANG_TIDY is enabled but clang-tidy was not found")
+    endif()
+    set(CMAKE_CXX_CLANG_TIDY
+        "${KARTON_CLANG_TIDY_EXE};--header-filter=^(core|main\.cpp);--quiet"
+    )
+endif()
+
+option(KARTON_CPPCHECK "Run cppcheck as part of the build" OFF)
+if(KARTON_CPPCHECK)
+    find_program(KARTON_CPPCHECK_EXE NAMES cppcheck)
+    if(NOT KARTON_CPPCHECK_EXE)
+        message(FATAL_ERROR "KARTON_CPPCHECK is enabled but cppcheck was not found")
+    endif()
+    set(CMAKE_CXX_CPPCHECK
+        "${KARTON_CPPCHECK_EXE};--enable=warning,performance,portability;--inline-suppr;--suppress=missingIncludeSystem;--quiet"
+    )
+endif()
+
 find_package(ECM 6.0.0 REQUIRED NO_MODULE)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${ECM_MODULE_PATH})

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+# SPDX-FileCopyrightText: 2026 Karton contributors
+#
+# clang-tidy does not understand this GCC-only flag emitted by KDE's compiler
+# settings. Strip it before invoking the analyzer.
+args=()
+for arg in "$@"; do
+    if [ "$arg" = "-mno-direct-extern-access" ]; then
+        continue
+    fi
+    args+=("$arg")
+done
+exec /usr/bin/clang-tidy "${args[@]}"

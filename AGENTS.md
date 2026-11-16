@@ -125,6 +125,21 @@ cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 ```
 
+Static analysis is opt-in and runs in a separate build tree:
+
+```sh
+cmake -S . -B build-analyze -G Ninja \
+    -DKARTON_BUILD_TESTS=ON \
+    -DKARTON_CLANG_TIDY=ON \
+    -DKARTON_SANITIZE=ON
+cmake --build build-analyze -j"$(nproc)"
+```
+
+`KARTON_CPPCHECK=ON` adds cppcheck if it is installed. `scripts/analyze.sh`
+does the same in one step. The clang-tidy wrapper removes the GCC-only
+`-mno-direct-extern-access` flag; keep analyzer builds out of the normal
+`build/` tree.
+
 **Always run `ctest` after QML, CMake or C++ changes.** The opt-in suite
 includes `tst_qml_startup`, which runs the real `karton --check-qml` path
 offscreen to load and instantiate the complete QML module, so missing imports,
