@@ -591,6 +591,208 @@ void Karton::viewerClosed()
     Q_EMIT viewerCountChanged();
 }
 
+QVariantMap Karton::domainHardwareInfo(const Domain *domain) const
+{
+    QVariantMap info;
+    if (!domain || !domain->domainPtr()) {
+        return info;
+    }
+
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return info;
+    }
+
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return info;
+    }
+    free(xml);
+
+    const QDomElement root = document.documentElement();
+    const QDomElement os = root.firstChildElement(QStringLiteral("os"));
+    info.insert(QStringLiteral("firmware"),
+                os.attribute(QStringLiteral("firmware")) == QStringLiteral("efi") ? QStringLiteral("uefi") : QStringLiteral("bios"));
+    const QDomElement loader = os.firstChildElement(QStringLiteral("loader"));
+    info.insert(QStringLiteral("secureBoot"), loader.attribute(QStringLiteral("secure")) == QStringLiteral("yes"));
+
+    QString bootDev;
+    const QDomNodeList bootNodes = os.elementsByTagName(QStringLiteral("boot"));
+    if (!bootNodes.isEmpty()) {
+        bootDev = bootNodes.at(0).toElement().attribute(QStringLiteral("dev"));
+    }
+    info.insert(QStringLiteral("bootDev"), bootDev.isEmpty() ? QStringLiteral("hd") : bootDev);
+
+    const QDomElement devices = root.firstChildElement(QStringLiteral("devices"));
+    const QDomElement video = devices.firstChildElement(QStringLiteral("video"));
+    const QDomElement videoModel = video.firstChildElement(QStringLiteral("model"));
+    info.insert(QStringLiteral("videoModel"), videoModel.attribute(QStringLiteral("type"), QStringLiteral("qxl")));
+    info.insert(QStringLiteral("videoHeads"), videoModel.attribute(QStringLiteral("heads"), QStringLiteral("1")).toInt());
+    const QDomElement acceleration = videoModel.firstChildElement(QStringLiteral("acceleration"));
+    info.insert(QStringLiteral("accel3d"), acceleration.attribute(QStringLiteral("accel3d")) == QStringLiteral("yes"));
+
+    const QDomElement sound = devices.firstChildElement(QStringLiteral("sound"));
+    info.insert(QStringLiteral("soundModel"), sound.isNull() ? QStringLiteral("none") : sound.attribute(QStringLiteral("model"), QStringLiteral("ich9")));
+    info.insert(QStringLiteral("description"), root.firstChildElement(QStringLiteral("description")).text());
+    return info;
+}
+
+bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &settings)
+{
+    if (!domain || !domain->domainPtr() || !m_conn) {
+        return false;
+    }
+
+    char *xmlDesc = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xmlDesc) {
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
+                                   "Failed to read configuration for domain %1: %2",
+                                   domain->config()->name(),
+                                   QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xmlDesc))) {
+        free(xmlDesc);
+        Q_EMIT errorOccurred(i18n("Failed to parse the virtual machine configuration."));
+        return false;
+    }
+    free(xmlDesc);
+
+    QDomElement root = document.documentElement();
+    QDomElement os = root.firstChildElement(QStringLiteral("os"));
+    if (settings.contains(QStringLiteral("firmware"))) {
+        const bool uefi = settings.value(QStringLiteral("firmware")).toString() == QStringLiteral("uefi");
+        if (uefi) {
+            os.setAttribute(QStringLiteral("firmware"), QStringLiteral("efi"));
+            QDomElement loader = os.firstChildElement(QStringLiteral("loader"));
+            if (loader.isNull()) {
+                loader = document.createElement(QStringLiteral("loader"));
+                const QDomElement typeElement = os.firstChildElement(QStringLiteral("type"));
+                os.insertAfter(loader, typeElement);
+            }
+            loader.setAttribute(QStringLiteral("secure"), settings.value(QStringLiteral("secureBoot")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"));
+        } else {
+            os.removeAttribute(QStringLiteral("firmware"));
+            const QDomElement loader = os.firstChildElement(QStringLiteral("loader"));
+            if (!loader.isNull()) {
+                os.removeChild(loader);
+            }
+            const QDomElement nvram = root.firstChildElement(QStringLiteral("nvram"));
+            if (!nvram.isNull()) {
+                root.removeChild(nvram);
+            }
+        }
+    } else if (settings.contains(QStringLiteral("secureBoot")) && os.attribute(QStringLiteral("firmware")) == QStringLiteral("efi")) {
+        QDomElement loader = os.firstChildElement(QStringLiteral("loader"));
+        if (!loader.isNull()) {
+            loader.setAttribute(QStringLiteral("secure"), settings.value(QStringLiteral("secureBoot")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"));
+        }
+    }
+
+    if (settings.contains(QStringLiteral("bootDev"))) {
+        QDomNodeList bootNodes = os.elementsByTagName(QStringLiteral("boot"));
+        for (int i = bootNodes.count() - 1; i >= 0; --i) {
+            const QDomElement boot = bootNodes.at(i).toElement();
+            if (boot.parentNode() == os) {
+                os.removeChild(boot);
+            }
+        }
+        const QString first = settings.value(QStringLiteral("bootDev")).toString();
+        QDomElement boot = document.createElement(QStringLiteral("boot"));
+        boot.setAttribute(QStringLiteral("dev"), first);
+        os.appendChild(boot);
+        if (first != QStringLiteral("hd")) {
+            QDomElement fallback = document.createElement(QStringLiteral("boot"));
+            fallback.setAttribute(QStringLiteral("dev"), QStringLiteral("hd"));
+            os.appendChild(fallback);
+        }
+    }
+
+    QDomElement devices = root.firstChildElement(QStringLiteral("devices"));
+    if (devices.isNull()) {
+        devices = document.createElement(QStringLiteral("devices"));
+        root.appendChild(devices);
+    }
+
+    if (settings.contains(QStringLiteral("videoModel"))) {
+        QDomElement video = devices.firstChildElement(QStringLiteral("video"));
+        if (video.isNull()) {
+            video = document.createElement(QStringLiteral("video"));
+            devices.appendChild(video);
+        }
+        QDomElement model = video.firstChildElement(QStringLiteral("model"));
+        if (model.isNull()) {
+            model = document.createElement(QStringLiteral("model"));
+            video.appendChild(model);
+        }
+        model.setAttribute(QStringLiteral("type"), settings.value(QStringLiteral("videoModel")).toString());
+        model.setAttribute(QStringLiteral("heads"), QString::number(qMax(1, settings.value(QStringLiteral("videoHeads")).toInt())));
+        model.setAttribute(QStringLiteral("primary"), QStringLiteral("yes"));
+        const QDomElement oldAcceleration = model.firstChildElement(QStringLiteral("acceleration"));
+        if (!oldAcceleration.isNull()) {
+            model.removeChild(oldAcceleration);
+        }
+        if (settings.value(QStringLiteral("accel3d")).toBool()) {
+            QDomElement acceleration = document.createElement(QStringLiteral("acceleration"));
+            acceleration.setAttribute(QStringLiteral("accel3d"), QStringLiteral("yes"));
+            model.appendChild(acceleration);
+        }
+    }
+
+    if (settings.contains(QStringLiteral("soundModel"))) {
+        const QString soundModel = settings.value(QStringLiteral("soundModel")).toString();
+        QDomElement sound = devices.firstChildElement(QStringLiteral("sound"));
+        if (soundModel == QStringLiteral("none")) {
+            if (!sound.isNull()) {
+                devices.removeChild(sound);
+            }
+        } else if (sound.isNull()) {
+            sound = document.createElement(QStringLiteral("sound"));
+            sound.setAttribute(QStringLiteral("model"), soundModel);
+            devices.appendChild(sound);
+        } else {
+            sound.setAttribute(QStringLiteral("model"), soundModel);
+        }
+    }
+
+    if (settings.contains(QStringLiteral("description"))) {
+        QDomElement description = root.firstChildElement(QStringLiteral("description"));
+        const QString text = settings.value(QStringLiteral("description")).toString();
+        if (text.trimmed().isEmpty()) {
+            if (!description.isNull()) {
+                root.removeChild(description);
+            }
+        } else {
+            if (description.isNull()) {
+                description = document.createElement(QStringLiteral("description"));
+                root.insertAfter(description, root.firstChildElement(QStringLiteral("name")));
+            }
+            while (!description.firstChild().isNull()) {
+                description.removeChild(description.firstChild());
+            }
+            description.appendChild(document.createTextNode(text));
+        }
+    }
+
+    virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
+    if (!redefined) {
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
+                                   "Failed to update configuration for domain %1: %2",
+                                   domain->config()->name(),
+                                   QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    virDomainFree(redefined);
+    refreshDomainList();
+    return true;
+}
+
 bool Karton::refreshDomainPreview(const Domain *domain)
 {
     if (!domain || !domain->domainPtr() || !m_conn) {

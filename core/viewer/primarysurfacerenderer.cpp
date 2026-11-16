@@ -141,6 +141,7 @@ QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *
     }
 
     node->setRect(bounds);
+    node->setFiltering(QSGTexture::Linear);
 
     // Keep the existing texture when the frame did not change; deleting the
     // node here used to make the VM display go black on unrelated repaints.

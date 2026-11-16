@@ -160,19 +160,9 @@ Kirigami.ScrollablePage {
             onTriggered: snapshotsDialog.open()
         },
         Kirigami.Action {
-            text: i18n("PCI Devices")
-            icon.name: "computer-symbolic"
-            onTriggered: pciDialog.open()
-        },
-        Kirigami.Action {
             text: i18n("Clone")
             icon.name: "edit-copy-symbolic"
             onTriggered: cloneDialog.open()
-        },
-        Kirigami.Action {
-            text: i18n("Storage")
-            icon.name: "drive-harddisk-symbolic"
-            onTriggered: storageDialog.open()
         },
         Kirigami.Action {
             text: i18nc("verb, delete a VM", "Delete")
@@ -206,7 +196,7 @@ Kirigami.ScrollablePage {
             icon.name: "settings-configure-symbolic"
             enabled: !isRunning
             onTriggered: {
-                configurationDialog.open();
+                settingsDialog.open();
             }
         }
     ]
@@ -221,34 +211,14 @@ Kirigami.ScrollablePage {
         domain: root.domain
     }
 
-    PciDevicesDialog {
-        id: pciDialog
-        domain: root.domain
-    }
-
     CloneDialog {
         id: cloneDialog
         domain: root.domain
     }
 
-    StorageDialog {
-        id: storageDialog
-        domain: root.domain
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+P"
-        onActivated: pciDialog.open()
-    }
-
     Shortcut {
         sequence: "Ctrl+Shift+C"
         onActivated: cloneDialog.open()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+D"
-        onActivated: storageDialog.open()
     }
 
     ColumnLayout {
@@ -372,8 +342,8 @@ Kirigami.ScrollablePage {
         }
     }
 
-    ConfigurationDialog {
-        id: configurationDialog
+    SettingsDialog {
+        id: settingsDialog
         domain: root.domain
     }
 

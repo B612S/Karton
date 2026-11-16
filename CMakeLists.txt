@@ -127,10 +127,10 @@ ecm_target_qml_sources(karton
     qml/VMViewerWindow.qml
     qml/InstallationDialog.qml
     qml/VMPage.qml
-    qml/ConfigurationDialog.qml
     qml/ConnectionSettingsDialog.qml
     qml/NetworksDialog.qml
     qml/UsbDevicesDialog.qml
+    qml/SettingsDialog.qml
     qml/SnapshotsDialog.qml
     qml/PciDevicesDialog.qml
     qml/CloneDialog.qml

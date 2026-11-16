@@ -209,6 +209,7 @@ QSGNode *GlScanoutRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNo
     }
 
     textureNode->setRect(bounds);
+    textureNode->setFiltering(QSGTexture::Linear);
 
     if (textureNode->texture()) {
         return textureNode;

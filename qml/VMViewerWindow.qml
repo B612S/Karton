@@ -140,11 +140,6 @@ Kirigami.ApplicationWindow {
                 onTriggered: usbDialog.open()
             }
             Controls.MenuItem {
-                text: i18n("Storage")
-                icon.name: "drive-harddisk-symbolic"
-                onTriggered: storageDialog.open()
-            }
-            Controls.MenuItem {
                 text: i18n("Networks")
                 icon.name: "network-wired-symbolic"
                 onTriggered: networksDialog.open()
@@ -159,7 +154,7 @@ Kirigami.ApplicationWindow {
             Controls.MenuItem {
                 text: i18n("Settings")
                 icon.name: "settings-configure-symbolic"
-                onTriggered: configurationDialog.open()
+                onTriggered: settingsDialog.open()
             }
             Controls.MenuItem {
                 text: i18n("Snapshots")
@@ -217,18 +212,13 @@ Kirigami.ApplicationWindow {
             domain: viewerWindow.domain
         }
 
-        ConfigurationDialog {
-            id: configurationDialog
+        SettingsDialog {
+            id: settingsDialog
             domain: viewerWindow.domain
         }
 
         SnapshotsDialog {
             id: snapshotsDialog
-            domain: viewerWindow.domain
-        }
-
-        StorageDialog {
-            id: storageDialog
             domain: viewerWindow.domain
         }
 

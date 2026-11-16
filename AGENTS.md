@@ -270,6 +270,12 @@ When testing destructive operations, prefer domains whose names start with
   resources (memory/storage/format) and system (firmware/network/CPU/
   acceleration). Keep the content of each step short; the previous single long
   form triggered a `Kirigami.Dialog` binding loop on `y`.
+- `SettingsDialog.qml` is the virt-manager-style hardware settings dialog:
+  Overview, CPUs & Memory, Boot Options, Disks, Network, Display, Sound and
+  USB & PCI pages. It reads `Karton::domainHardwareInfo()` and writes firmware,
+  boot order, video, sound and description through `editDomainHardware()`.
+  "Add Hardware" opens the Storage/Networks/USB/PCI management dialogs. Those
+  dialogs are intentionally not duplicated as VM-page menu actions.
 - New domains use user-mode networking with a `virtio` (default) or `e1000`
   interface, or no network at all. The model is stored in
   `DomainConfig::networkModel` and read back from the domain XML.
@@ -313,16 +319,19 @@ When testing destructive operations, prefer domains whose names start with
   resolution (notably while Windows boots); creating/using a texture from that
   pointer on the render thread used to crash `QSGBatchRenderer::prepareRenderPass`.
   `updatePaintNode()` must also clear its cached `m_displayNode`/`m_cursorNode`
-  pointers when Qt passes a null root after deleting the scene graph.
+  pointers when Qt passes a null root after deleting the scene graph. Display
+  textures use `QSGTexture::Linear` filtering so fonts stay readable when the
+  guest resolution does not exactly match the viewer size.
 - `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar only keeps the
   fullscreen button and a three-dot menu on the right. The menu is a
   `Controls.Menu` with Display/Devices/Machine sections: Actual Size, Fit to
-  Window, Fit Guest to Window, USB Devices, Storage, Networks, VM Settings and
-  Snapshots. Opening the menu releases the pointer grab first. There is no
-  explicit grab/release-pointer action: clicking the display grabs the pointer
-  and Esc releases it. A double-click on a VM list row opens that VM's viewer
-  (a stopped VM is started first). UI icons use the monochrome `*-symbolic`
-  variants.
+  Window, Fit Guest to Window, USB Devices, Networks, Settings and Snapshots.
+  Opening the menu releases the pointer grab first. There is no explicit
+  grab/release-pointer action: clicking the display grabs the pointer and Esc
+  releases it. A double-click on a VM list row opens that VM's viewer (a
+  stopped VM is started first). UI icons use the monochrome `*-symbolic`
+  variants. PCI and Storage no longer have their own VM-page menu actions;
+  they are managed from SettingsDialog.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.
