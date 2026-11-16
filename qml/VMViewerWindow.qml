@@ -209,12 +209,9 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    pageStack.globalToolBar.opacity: fullScreenToolbarOpacity
+    pageStack.globalToolBar.opacity: fullScreenToolbarOpacity * (isFullScreen ? 0.82 : 1)
     pageStack.globalToolBar.enabled: !isFullScreen || fullScreenToolbarVisible
     pageStack.globalToolBar.height: isFullScreen ? compactToolbarHeight : pageStack.globalToolBar.implicitHeight
-    pageStack.globalToolBar.background: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.22)
-    }
 
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
