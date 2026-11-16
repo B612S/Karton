@@ -407,7 +407,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -519,7 +518,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -583,7 +581,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -658,7 +655,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -830,7 +826,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -913,7 +908,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1026,7 +1020,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1103,7 +1096,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
 
@@ -1156,7 +1148,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
 
@@ -1209,7 +1200,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1281,7 +1271,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1334,7 +1323,6 @@ Kirigami.Dialog {
             ScrollableSettingsView {
                 Layout.fillHeight: true
                 implicitHeight: 0
-                contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
                     spacing: 16

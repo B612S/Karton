@@ -216,7 +216,6 @@ Kirigami.Dialog {
                     ScrollableSettingsView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        contentWidth: availableWidth
                         clip: true
 
                         ColumnLayout {

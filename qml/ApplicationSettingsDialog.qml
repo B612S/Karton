@@ -135,7 +135,6 @@ Kirigami.Dialog {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.margins: 24
-                    contentWidth: availableWidth
                     clip: true
 
                     ColumnLayout {

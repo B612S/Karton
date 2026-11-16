@@ -4,29 +4,21 @@
 import QtQuick
 import QtQuick.Controls as Controls
 
-Controls.ScrollView {
+// Flickable-based scrolling, matching Luma's settings pages. A Flickable
+// handles mouse-wheel and touchpad scrolling natively and does not depend on
+// ScrollView's internal content-size bookkeeping.
+Flickable {
     id: root
 
     clip: true
+    contentWidth: width
+    contentHeight: Math.max(height, contentItem.childrenRect.height)
+    boundsBehavior: Flickable.StopAtBounds
 
-    WheelHandler {
-        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-        onWheel: function(event) {
-            if (event.angleDelta.y === 0) {
-                return;
-            }
-            const flickable = root.contentItem;
-            if (!flickable || flickable.contentY === undefined || flickable.contentHeight === undefined) {
-                // Let the default ScrollView implementation handle it.
-                return;
-            }
-            const maximum = Math.max(0, flickable.contentHeight - flickable.height);
-            if (maximum <= 0) {
-                return;
-            }
-            const step = Math.max(40, flickable.height * 0.15);
-            flickable.contentY = Math.min(maximum, Math.max(0, flickable.contentY - event.angleDelta.y / 120 * step));
-            event.accepted = true;
-        }
+    ScrollBar.vertical: Controls.ScrollBar {
+        policy: Controls.ScrollBar.AsNeeded
+        width: 10
     }
+
+    Component.onCompleted: contentItem.width = Qt.binding(() => root.width)
 }
