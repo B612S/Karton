@@ -1195,6 +1195,19 @@ void Karton::saveDomainDisplayResolution(const Domain *domain, int width, int he
     }
 }
 
+Domain *Karton::domainByUuid(const QString &uuid) const
+{
+    if (uuid.isEmpty()) {
+        return nullptr;
+    }
+    for (Domain *candidate : std::as_const(m_domains)) {
+        if (candidate->config()->uuid() == uuid) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
 QString Karton::domainXml(const Domain *domain) const
 {
     if (!domain || !domain->domainPtr()) {

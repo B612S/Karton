@@ -93,6 +93,10 @@ Kirigami.Dialog {
         if (!domain) {
             return;
         }
+        const currentDomain = Karton.domainByUuid(domain.config.uuid);
+        if (currentDomain && currentDomain !== domain) {
+            domain = currentDomain;
+        }
         hardware = Karton.domainHardwareInfo(domain);
         disks = Karton.domainDisks(domain);
         interfaces = Karton.domainInterfaces(domain);

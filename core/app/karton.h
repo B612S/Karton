@@ -112,6 +112,7 @@ public Q_SLOTS:
     Q_INVOKABLE void saveMicrophoneEnabled(const Domain *domain, bool enabled);
     Q_INVOKABLE QVariantMap domainDisplayResolution(const Domain *domain) const;
     Q_INVOKABLE void saveDomainDisplayResolution(const Domain *domain, int width, int height);
+    Q_INVOKABLE Domain *domainByUuid(const QString &uuid) const;
     Q_INVOKABLE QString domainXml(const Domain *domain) const;
     Q_INVOKABLE QVariantList domainXmlDevices(const Domain *domain) const;
     Q_INVOKABLE bool domainHasDevice(const Domain *domain, const QString &tag) const;
