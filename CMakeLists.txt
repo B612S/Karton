@@ -100,7 +100,7 @@ target_include_directories(karton PRIVATE
 
 target_sources(karton
     PRIVATE
-    core/app/main.cpp
+    main.cpp
     core/app/karton.cpp
     core/app/vmlistmodel.cpp
     core/domain/domain.cpp

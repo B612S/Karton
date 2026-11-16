@@ -30,7 +30,7 @@ development or testing must pass `-c <same URI>` (usually
 
 | Path | Purpose |
 | --- | --- |
-| `core/app/main.cpp` | Entry point; sets up `KAboutData` and loads the QML module. |
+| `main.cpp` | Entry point; sets up `KAboutData` and loads the QML module. |
 | `core/app/karton.{h,cpp}` | `Karton` QML singleton: libvirt connection, domain list, VM lifecycle operations, paths. |
 | `core/domain/domain.{h,cpp}` | QML-exposed `Domain` wrapper around a `virDomainPtr`. |
 | `core/domain/domainconfig.{h,cpp}` | QML-exposed per-domain configuration/state model. |
@@ -52,7 +52,8 @@ development or testing must pass `-c <same URI>` (usually
 
 C++ sources are grouped by responsibility under `core/`:
 
-- `core/app/` — application entry point, `Karton` singleton and the VM list model.
+- `core/app/` — `Karton` singleton and the VM list model. The application entry
+  point lives in the repository-root `main.cpp`, matching Luma.
 - `core/domain/` — domain state, configuration, XML builder and reader.
 - `core/libvirt/` — libvirt event loop and lifecycle monitor.
 - `core/viewer/` — SPICE viewer and display renderers.
@@ -60,7 +61,8 @@ C++ sources are grouped by responsibility under `core/`:
 - `core/util/` — small helpers such as the command runner and DPI/keyboard utilities.
 
 New C++ files must go into the matching subsystem directory; create a new
-subsystem only when none of the existing groups fits. Include headers with the
+subsystem only when none of the existing groups fits. The one exception is the
+application entry point, which stays in the repository-root `main.cpp`. Include headers with the
 subsystem prefix, for example `#include "domain/domain.h"`; `core/` is an
 include root. QML stays in the top-level `qml/` directory.
 
