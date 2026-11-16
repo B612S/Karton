@@ -1341,6 +1341,15 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
     event->accept();
 }
 
+void DomainViewer::focusInEvent(QFocusEvent *event)
+{
+    QQuickItem::focusInEvent(event);
+    // On Wayland the clipboard may only become readable when the viewer gains
+    // focus. Re-send the current host clipboard after returning from another
+    // application.
+    QTimer::singleShot(0, this, &DomainViewer::hostClipboardChanged);
+}
+
 void DomainViewer::focusOutEvent(QFocusEvent *event)
 {
     if (!window() || !window()->isActive()) {
