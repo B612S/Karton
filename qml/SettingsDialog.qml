@@ -15,7 +15,8 @@ Kirigami.ApplicationWindow {
 
     visible: false
     modality: Qt.ApplicationModal
-    flags: Qt.Dialog
+    flags: Qt.Dialog | Qt.FramelessWindowHint
+    color: "transparent"
 
     property Domain domain: null
     property bool saving: false
@@ -216,9 +217,39 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    Rectangle {
+        anchors.fill: parent
+        radius: 8
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                       Kirigami.Theme.backgroundColor.g,
+                       Kirigami.Theme.backgroundColor.b, 0.95)
+        border.color: "transparent"
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.preferredHeight: 44
+        Layout.leftMargin: 24
+        Layout.rightMargin: 12
+
+        Controls.Label {
+            text: i18n("Settings")
+            font.pixelSize: 16
+            font.weight: Font.DemiBold
+            Layout.alignment: Qt.AlignVCenter
+        }
+        Item { Layout.fillWidth: true }
+        Controls.ToolButton {
+            icon.name: "dialog-close"
+            display: Controls.AbstractButton.IconOnly
+            Layout.alignment: Qt.AlignVCenter
+            onClicked: root.close()
+        }
+    }
 
     RowLayout {
         Layout.fillWidth: true
@@ -226,33 +257,90 @@ Kirigami.ApplicationWindow {
         clip: true
         spacing: 0
 
-        ListView {
-            id: categoryList
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+        Rectangle {
+            Layout.preferredWidth: root.width < 700 ? 160 : 200
             Layout.fillHeight: true
-            currentIndex: 0
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                           Kirigami.Theme.backgroundColor.g,
+                           Kirigami.Theme.backgroundColor.b, 0.5)
+            radius: 8
 
-            model: [
-                {label: i18n("Overview"), icon: "computer-symbolic"},
-                {label: i18n("CPUs & Memory"), icon: "preferences-system-symbolic"},
-                {label: i18n("Boot Options"), icon: "system-reboot-symbolic"},
-                {label: i18n("Disks"), icon: "drive-harddisk-symbolic"},
-                {label: i18n("Network"), icon: "network-wired-symbolic"},
-                {label: i18n("Display"), icon: "view-fullscreen-symbolic"},
-                {label: i18n("Sound"), icon: "audio-volume-high-symbolic"},
-                {label: i18n("USB"), icon: "drive-removable-media-usb-symbolic"},
-                {label: i18n("PCI"), icon: "computer-symbolic"},
-                {label: i18n("TPM"), icon: "security-high-symbolic"},
-                {label: i18n("OS Information"), icon: "document-properties-symbolic"},
-                {label: i18n("Performance"), icon: "speedometer-symbolic"}
-            ]
+            ListView {
+                id: categoryList
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 4
+                currentIndex: 0
 
-            delegate: Delegates.RoundedItemDelegate {
-                width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
-                text: modelData.label
-                icon.name: modelData.icon
-                highlighted: ListView.isCurrentItem
-                onClicked: categoryList.currentIndex = index
+                model: [
+                    {label: i18n("Overview")},
+                    {label: i18n("CPUs & Memory")},
+                    {label: i18n("Boot Options")},
+                    {label: i18n("Disks")},
+                    {label: i18n("Network")},
+                    {label: i18n("Display")},
+                    {label: i18n("Sound")},
+                    {label: i18n("USB")},
+                    {label: i18n("PCI")},
+                    {label: i18n("TPM")},
+                    {label: i18n("OS Information")},
+                    {label: i18n("Performance")}
+                ]
+
+                delegate: Rectangle {
+                    id: categoryButton
+                    width: ListView.view.width
+                    height: 36
+                    radius: 4
+                    activeFocusOnTab: true
+                    border.width: activeFocus ? 1 : 0
+                    border.color: Kirigami.Theme.highlightColor
+                    color: ListView.isCurrentItem
+                        ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                  Kirigami.Theme.highlightColor.g,
+                                  Kirigami.Theme.highlightColor.b, 0.35)
+                        : (categoryMouse.containsMouse
+                            ? Qt.rgba(Kirigami.Theme.textColor.r,
+                                      Kirigami.Theme.textColor.g,
+                                      Kirigami.Theme.textColor.b, 0.08)
+                            : "transparent")
+
+                    Rectangle {
+                        visible: ListView.isCurrentItem
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.topMargin: 4
+                        anchors.bottomMargin: 4
+                        width: 3
+                        radius: 1.5
+                        color: Kirigami.Theme.highlightColor
+                    }
+
+                    Text {
+                        text: modelData.label
+                        color: Kirigami.Theme.textColor
+                        font.pixelSize: 14
+                        font.weight: ListView.isCurrentItem ? Font.DemiBold : Font.Normal
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                    }
+
+                    Keys.onSpacePressed: categoryList.currentIndex = index
+                    Keys.onReturnPressed: categoryList.currentIndex = index
+                    Keys.onEnterPressed: categoryList.currentIndex = index
+
+                    MouseArea {
+                        id: categoryMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            categoryButton.forceActiveFocus();
+                            categoryList.currentIndex = index;
+                        }
+                    }
+                }
             }
         }
 
@@ -265,13 +353,14 @@ Kirigami.ApplicationWindow {
             Layout.fillHeight: true
             spacing: 0
 
-            Kirigami.Heading {
+            Controls.Label {
                 Layout.fillWidth: true
-                Layout.margins: Kirigami.Units.largeSpacing
+                Layout.margins: 24
                 text: categoryList.currentIndex >= 0 && categoryList.currentIndex < categoryList.model.length
                     ? categoryList.model[categoryList.currentIndex].label
                     : ""
-                level: 3
+                font.pixelSize: 20
+                font.weight: Font.Bold
             }
             Kirigami.Separator {
                 Layout.fillWidth: true
@@ -281,6 +370,7 @@ Kirigami.ApplicationWindow {
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.margins: 24
                 clip: true
                 currentIndex: categoryList.currentIndex
 
@@ -291,43 +381,105 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
+                    spacing: 16
 
-                        FormCard.FormTextFieldDelegate {
-                            id: nameField
-                            label: i18n("Name:")
+                    Controls.Label {
+                        text: i18n("General")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: i18n("Name")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.TextField {
+                            id: nameField
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                             validator: RegularExpressionValidator {
                                 regularExpression: /^[A-Za-z0-9._-]+$/
                             }
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormCheckDelegate {
-                            id: autostartCheck
+                        Controls.Label {
                             text: i18n("Start on boot")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.CheckBox {
+                            id: autostartCheck
+                            Layout.alignment: Qt.AlignRight
                             onToggled: if (root.domain && checked !== root.domain.autostart) Karton.setAutostart(root.domain, checked)
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextFieldDelegate {
-                            id: descriptionField
-                            label: i18n("Description:")
+                        Controls.Label {
+                            text: i18n("Description")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.TextField {
+                            id: descriptionField
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
-                    FormCard.FormCard {
+
+                    Controls.Label {
+                        text: i18n("Details")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        FormCard.FormTextDelegate {
+                        Layout.topMargin: 8
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
                             text: i18n("UUID")
-                            description: root.domain ? root.domain.config.uuid : ""
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextDelegate {
+                        Controls.Label {
+                            text: root.domain ? root.domain.config.uuid : ""
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            elide: Text.ElideRight
+                        }
+                        Controls.Label {
                             text: i18n("State")
-                            description: root.domain ? root.domain.config.state : ""
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Label {
+                            text: root.domain ? root.domain.config.state : ""
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
                     Item { Layout.fillHeight: true }
@@ -341,30 +493,57 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
+                    spacing: 16
+
+                    Controls.Label {
+                        text: i18n("CPUs & Memory")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        FormCard.FormSpinBoxDelegate {
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: i18n("Memory (GB)")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.SpinBox {
                             id: memorySpinBox
-                            label: i18n("Memory (GB)")
                             from: 1
                             to: Math.max(1024, root.domain ? root.domain.config.maxRam : 64)
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormSpinBoxDelegate {
+                        Controls.Label {
+                            text: i18n("CPUs")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.SpinBox {
                             id: cpuSpinBox
-                            label: i18n("CPUs")
                             from: 1
                             to: 256
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
                     Controls.Label {
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
                         wrapMode: Text.WordWrap
-                        opacity: 0.7
+                        opacity: 0.65
+                        font.pixelSize: 12
                         text: i18n("Changing memory or CPU count applies after the VM is restarted.")
                     }
                     Item { Layout.fillHeight: true }
@@ -378,35 +557,68 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
+                    spacing: 16
+
+                    Controls.Label {
+                        text: i18n("Boot Options")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        FormCard.FormComboBoxDelegate {
-                            id: firmwareCombo
-                            text: i18n("Firmware:")
-                            model: ["BIOS", "UEFI"]
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: i18n("Firmware")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: firmwareCombo
+                            model: ["BIOS", "UEFI"]
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                             onCurrentIndexChanged: secureBootCheck.visible = currentIndex === 1
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormCheckDelegate {
-                            id: secureBootCheck
+                        Controls.Label {
+                            visible: firmwareCombo.currentIndex === 1
                             text: i18n("Secure Boot")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormComboBoxDelegate {
-                            id: bootCombo
-                            text: i18n("Boot device:")
-                            model: root.bootLabels
+                        Controls.CheckBox {
+                            id: secureBootCheck
+                            visible: firmwareCombo.currentIndex === 1
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("Boot device")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: bootCombo
+                            model: root.bootLabels
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
                     Controls.Label {
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
                         wrapMode: Text.WordWrap
-                        opacity: 0.7
+                        opacity: 0.65
+                        font.pixelSize: 12
                         text: i18n("Firmware and boot order are written to the persistent VM configuration.")
                     }
                     Item { Layout.fillHeight: true }
@@ -420,20 +632,25 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
+                    spacing: 16
 
                     Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
                         text: i18n("Disks and CD-ROMs")
-                        font.bold: true
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
                     }
-
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
                     ListView {
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 6
                         clip: true
                         model: root.disks
-                        spacing: Kirigami.Units.smallSpacing
+                        spacing: 4
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
                             contentItem: RowLayout {
@@ -467,34 +684,59 @@ Kirigami.ApplicationWindow {
                     }
 
                     Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
                         text: i18n("Create a new disk")
-                        font.bold: true
-                    }
-                    FormCard.FormCard {
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
+                        Layout.topMargin: 8
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
 
-                        FormCard.FormSpinBoxDelegate {
+                        Controls.Label {
+                            text: i18n("New disk size (GB)")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.SpinBox {
                             id: newDiskSize
-                            label: i18n("New disk size (GB)")
                             from: 1
                             to: 2048
                             value: 8
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormComboBoxDelegate {
+                        Controls.Label {
+                            text: i18n("Format")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
                             id: newDiskFormat
-                            text: i18n("Format:")
                             model: ["qcow2", "raw", "vmdk"]
                             currentIndex: 0
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Item {
+                            Layout.columnSpan: 2
                             Layout.fillWidth: true
                         }
                         Controls.Button {
-                            Layout.alignment: Qt.AlignRight
                             text: i18n("Create disk")
                             icon.name: "list-add-symbolic"
+                            Layout.columnSpan: 2
+                            Layout.alignment: Qt.AlignRight
                             onClicked: {
                                 if (Karton.addDisk(root.domain, newDiskSize.value, newDiskFormat.currentText)) {
                                     root.refresh();
@@ -504,96 +746,158 @@ Kirigami.ApplicationWindow {
                     }
 
                     Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
                         text: i18n("Attach existing media")
-                        font.bold: true
-                    }
-                    FormCard.FormCard {
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
+                        Layout.topMargin: 8
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
 
-                        Controls.Button {
+                        Controls.Label {
+                            text: i18n("Disk image")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
-                            Layout.margins: Kirigami.Units.largeSpacing
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Button {
                             text: i18n("Attach disk image…")
                             icon.name: "document-open-symbolic"
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                             onClicked: imageFileDialog.open()
                         }
-                        FormCard.FormDelegateSeparator {}
-                        Controls.Button {
+                        Controls.Label {
+                            text: i18n("ISO image")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
-                            Layout.margins: Kirigami.Units.largeSpacing
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Button {
                             text: i18n("Attach ISO image…")
                             icon.name: "media-optical-symbolic"
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                             onClicked: isoFileDialog.open()
                         }
                     }
 
                     Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
                         text: i18n("Advanced disk options")
-                        font.bold: true
-                    }
-                    FormCard.FormCard {
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
+                        Layout.topMargin: 8
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
 
-                        FormCard.FormComboBoxDelegate {
-                            id: diskTargetCombo
-                            text: i18n("Disk:")
-                            model: root.disks.filter(function(disk) { return disk.device === "disk"; }).map(function(disk) { return disk.target; })
+                        Controls.Label {
+                            text: i18n("Disk")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: diskTargetCombo
+                            model: root.disks.filter(function(disk) { return disk.device === "disk"; }).map(function(disk) { return disk.target; })
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                             onCurrentTextChanged: root.refreshDiskAdvanced()
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormCheckDelegate {
-                            id: diskReadonlyCheck
+                        Controls.Label {
                             text: i18n("Read-only")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormCheckDelegate {
-                            id: diskShareableCheck
+                        Controls.CheckBox {
+                            id: diskReadonlyCheck
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
                             text: i18n("Shareable")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextFieldDelegate {
+                        Controls.CheckBox {
+                            id: diskShareableCheck
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("Serial")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.TextField {
                             id: diskSerialField
-                            label: i18n("Serial:")
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormComboBoxDelegate {
+                        Controls.Label {
+                            text: i18n("Cache mode")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
                             id: diskCacheCombo
-                            text: i18n("Cache mode:")
                             model: [i18n("Hypervisor default"), "none", "writethrough", "writeback", "directsync", "unsafe"]
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormComboBoxDelegate {
+                        Controls.Label {
+                            text: i18n("Discard mode")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
                             id: diskDiscardCombo
-                            text: i18n("Discard mode:")
                             model: [i18n("Hypervisor default"), "unmap", "ignore"]
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Item {
+                            Layout.columnSpan: 2
                             Layout.fillWidth: true
                         }
-                    }
-                    Controls.Button {
-                        Layout.alignment: Qt.AlignRight
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
-                        text: i18n("Apply disk options")
-                        icon.name: "dialog-ok-symbolic"
-                        enabled: diskTargetCombo.currentText.length > 0
-                        onClicked: {
-                            const advanced = {
-                                readonly: diskReadonlyCheck.checked,
-                                shareable: diskShareableCheck.checked,
-                                serial: diskSerialField.text,
-                                cache: diskCacheCombo.currentIndex === 0 ? "" : diskCacheCombo.currentText,
-                                discard: diskDiscardCombo.currentIndex === 0 ? "" : diskDiscardCombo.currentText
-                            };
-                            if (Karton.editDomainDiskAdvanced(root.domain, diskTargetCombo.currentText, advanced)) {
-                                root.refresh();
+                        Controls.Button {
+                            text: i18n("Apply disk options")
+                            icon.name: "dialog-ok-symbolic"
+                            Layout.columnSpan: 2
+                            Layout.alignment: Qt.AlignRight
+                            enabled: diskTargetCombo.currentText.length > 0
+                            onClicked: {
+                                const advanced = {
+                                    readonly: diskReadonlyCheck.checked,
+                                    shareable: diskShareableCheck.checked,
+                                    serial: diskSerialField.text,
+                                    cache: diskCacheCombo.currentIndex === 0 ? "" : diskCacheCombo.currentText,
+                                    discard: diskDiscardCombo.currentIndex === 0 ? "" : diskDiscardCombo.currentText
+                                };
+                                if (Karton.editDomainDiskAdvanced(root.domain, diskTargetCombo.currentText, advanced)) {
+                                    root.refresh();
+                                }
                             }
                         }
                     }
@@ -765,28 +1069,59 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
+                    spacing: 16
+
+                    Controls.Label {
+                        text: i18n("Display")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        FormCard.FormComboBoxDelegate {
-                            id: videoCombo
-                            text: i18n("Video model:")
-                            model: root.videoLabels
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: i18n("Video model")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormSpinBoxDelegate {
+                        Controls.ComboBox {
+                            id: videoCombo
+                            model: root.videoLabels
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("Heads")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.SpinBox {
                             id: videoHeadsSpin
-                            label: i18n("Heads")
                             from: 1
                             to: 4
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormCheckDelegate {
-                            id: accel3dCheck
+                        Controls.Label {
                             text: i18n("3D acceleration")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.CheckBox {
+                            id: accel3dCheck
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
                     Item { Layout.fillHeight: true }
@@ -800,14 +1135,36 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
+                    spacing: 16
+
+                    Controls.Label {
+                        text: i18n("Sound")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        FormCard.FormComboBoxDelegate {
-                            id: soundCombo
-                            text: i18n("Sound model:")
-                            model: root.soundLabels
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: i18n("Sound model")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: soundCombo
+                            model: root.soundLabels
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
                     Item { Layout.fillHeight: true }
@@ -1016,35 +1373,65 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
+                    spacing: 16
 
-                        FormCard.FormCheckDelegate {
-                            id: tpmEnabledCheck
+                    Controls.Label {
+                        text: i18n("TPM")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
                             text: i18n("Enable TPM")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormComboBoxDelegate {
+                        Controls.CheckBox {
+                            id: tpmEnabledCheck
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("TPM model")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
                             id: tpmModelCombo
-                            text: i18n("TPM model:")
                             model: ["CRB", "TIS"]
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormComboBoxDelegate {
-                            id: tpmVersionCombo
-                            text: i18n("TPM version:")
-                            model: ["2.0", "1.2"]
+                        Controls.Label {
+                            text: i18n("TPM version")
+                            font.pixelSize: 14
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: tpmVersionCombo
+                            model: ["2.0", "1.2"]
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
                     Controls.Label {
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
                         wrapMode: Text.WordWrap
-                        opacity: 0.7
+                        opacity: 0.65
+                        font.pixelSize: 12
                         text: i18n("TPM emulation requires swtpm in the host and is applied to the persistent VM configuration.")
                     }
                     Item { Layout.fillHeight: true }
@@ -1058,32 +1445,46 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
+                    spacing: 16
+
+                    Controls.Label {
+                        text: i18n("OS Information")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        FormCard.FormTextDelegate {
-                            text: i18n("Name")
-                            description: root.domain ? root.domain.config.name : ""
-                        }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextDelegate {
-                            text: i18n("UUID")
-                            description: root.domain ? root.domain.config.uuid : ""
-                        }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextDelegate {
-                            text: i18n("OS ID")
-                            description: root.domain ? root.domain.config.osId : ""
-                        }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextDelegate {
-                            text: i18n("Short OS ID")
-                            description: root.domain ? root.domain.config.shortOsId : ""
-                        }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextDelegate {
-                            text: i18n("State")
-                            description: root.domain ? root.domain.config.state : ""
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 16
+
+                        Repeater {
+                            model: [
+                                { label: i18n("Name"), value: root.domain ? root.domain.config.name : "" },
+                                { label: i18n("UUID"), value: root.domain ? root.domain.config.uuid : "" },
+                                { label: i18n("OS ID"), value: root.domain ? root.domain.config.osId : "" },
+                                { label: i18n("Short OS ID"), value: root.domain ? root.domain.config.shortOsId : "" },
+                                { label: i18n("State"), value: root.domain ? root.domain.config.state : "" }
+                            ]
+                            delegate: RowLayout {
+                                Layout.fillWidth: true
+                                Controls.Label {
+                                    text: modelData.label
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                }
+                                Controls.Label {
+                                    text: modelData.value
+                                    opacity: 0.7
+                                    Layout.preferredWidth: 260
+                                    horizontalAlignment: Text.AlignRight
+                                    elide: Text.ElideRight
+                                }
+                            }
                         }
                     }
                     Item { Layout.fillHeight: true }
@@ -1097,24 +1498,47 @@ Kirigami.ApplicationWindow {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
-                    FormCard.FormCard {
+                    spacing: 16
+
+                    Controls.Label {
+                        text: i18n("Performance")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        FormCard.FormTextDelegate {
-                            text: i18n("CPU Usage")
-                            description: root.performance.cpuPercent !== undefined ? i18n("%1 %", root.performance.cpuPercent.toFixed(1)) : "—"
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label { text: i18n("CPU Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
+                        Controls.Label {
+                            text: root.performance.cpuPercent !== undefined ? i18n("%1 %", root.performance.cpuPercent.toFixed(1)) : "—"
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextDelegate {
-                            text: i18n("Memory Usage")
-                            description: root.performance.memoryKiB !== undefined
+                        Controls.Label { text: i18n("Memory Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
+                        Controls.Label {
+                            text: root.performance.memoryKiB !== undefined
                                 ? i18n("%1 MiB of %2 MiB", (root.performance.memoryKiB / 1024).toFixed(0), (root.performance.maxMemoryKiB / 1024).toFixed(0))
                                 : "—"
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
-                        FormCard.FormDelegateSeparator {}
-                        FormCard.FormTextDelegate {
-                            text: i18n("vCPUs")
-                            description: root.performance.vcpus !== undefined ? root.performance.vcpus : ""
+                        Controls.Label { text: i18n("vCPUs"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
+                        Controls.Label {
+                            text: root.performance.vcpus !== undefined ? root.performance.vcpus : ""
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
                         }
                     }
                     Item { Layout.fillHeight: true }

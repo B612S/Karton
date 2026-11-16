@@ -12,6 +12,15 @@ Kirigami.Dialog {
     property Domain domain: null
 
     title: domain ? i18n("Clone — %1", domain.config.name) : i18n("Clone VM")
+
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                       Kirigami.Theme.backgroundColor.g,
+                       Kirigami.Theme.backgroundColor.b, 0.95)
+        radius: 8
+        border.color: "transparent"
+    }
+
     property string errorText: ""
     property bool cloning: false
 

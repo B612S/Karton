@@ -285,8 +285,11 @@ When testing destructive operations, prefer domains whose names start with
   page header, a fixed navigation column, one scrollable content page and a
   fixed footer. Pages: Overview, CPUs & Memory, Boot Options, Disks, Network,
   Display, Sound, USB, PCI, TPM, OS Information and Performance. Each page uses
-  the same FormCard sections; Disks are grouped into attached devices, create,
-  attach media and advanced options. Disks, networks, USB and PCI devices are managed inline
+  Luma-style transparent rounded window, 200/160 px category sidebar with a
+  translucent highlight and accent bar, 24 px content margins and two-column
+  label/control rows. Disks are grouped into attached devices, create, attach
+  media and advanced options. Other Karton dialogs share the same translucent
+  rounded background. Disks, networks, USB and PCI devices are managed inline
   (lists, add/attach/detach controls) instead of separate dialogs. Settings USB
   attach/detach is persistent (`attachUsbDevicePersistent` /
   `detachUsbDevicePersistent`); the viewer's USB dialog remains the runtime

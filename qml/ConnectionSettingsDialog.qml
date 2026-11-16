@@ -11,6 +11,15 @@ Kirigami.Dialog {
     id: connectionDialog
 
     title: i18n("Connection Settings")
+
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                       Kirigami.Theme.backgroundColor.g,
+                       Kirigami.Theme.backgroundColor.b, 0.95)
+        radius: 8
+        border.color: "transparent"
+    }
+
     modal: true
     padding: Kirigami.Units.largeSpacing
     preferredWidth: Kirigami.Units.gridUnit * 30

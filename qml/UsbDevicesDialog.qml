@@ -13,6 +13,15 @@ Kirigami.Dialog {
 
     title: domain ? i18n("USB Devices — %1", domain.config.name) : i18n("USB Devices")
 
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                       Kirigami.Theme.backgroundColor.g,
+                       Kirigami.Theme.backgroundColor.b, 0.95)
+        radius: 8
+        border.color: "transparent"
+    }
+
+
     property var hostDevices: []
     property var vmDevices: []
     property string errorText: ""

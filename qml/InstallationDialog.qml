@@ -13,6 +13,15 @@ Kirigami.Dialog {
     id: addDomainDialog
 
     title: i18n("Add New Virtual Machine")
+
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                       Kirigami.Theme.backgroundColor.g,
+                       Kirigami.Theme.backgroundColor.b, 0.95)
+        radius: 8
+        border.color: "transparent"
+    }
+
     padding: Kirigami.Units.largeSpacing
     property bool showError: false
     property bool creating: false

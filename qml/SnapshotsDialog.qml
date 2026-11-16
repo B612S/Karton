@@ -13,6 +13,15 @@ Kirigami.Dialog {
 
     title: domain ? i18n("Snapshots — %1", domain.config.name) : i18n("Snapshots")
 
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                       Kirigami.Theme.backgroundColor.g,
+                       Kirigami.Theme.backgroundColor.b, 0.95)
+        radius: 8
+        border.color: "transparent"
+    }
+
+
     property var snapshotList: []
     property string errorText: ""
 
