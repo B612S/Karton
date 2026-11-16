@@ -1955,7 +1955,7 @@ Kirigami.Dialog {
                 text: i18n("Add Hardware")
                 icon.name: "list-add-symbolic"
                 enabled: root.domain !== null
-                onClicked: addHardwareMenu.popup()
+                onClicked: addHardwareDialog.open()
             }
             Controls.Button {
                 text: i18n("Save")
@@ -1971,6 +1971,12 @@ Kirigami.Dialog {
         }
     }
     }
+    }
+
+    AddHardwareDialog {
+        id: addHardwareDialog
+        domain: root.domain
+        onDeviceAdded: root.refresh()
     }
 
     Kirigami.Dialog {

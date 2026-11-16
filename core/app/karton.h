@@ -105,6 +105,11 @@ public Q_SLOTS:
     Q_INVOKABLE bool attachInputDevice(const Domain *domain, const QString &type, const QString &bus);
     Q_INVOKABLE bool detachInputDevice(const Domain *domain, const QString &type, const QString &bus);
     Q_INVOKABLE bool detachXmlDevice(const Domain *domain, int index);
+    Q_INVOKABLE bool attachXmlDevice(const Domain *domain, const QString &xml);
+    Q_INVOKABLE bool addController(const Domain *domain, const QString &type);
+    Q_INVOKABLE bool addSerialPort(const Domain *domain);
+    Q_INVOKABLE bool addTextConsole(const Domain *domain);
+    Q_INVOKABLE bool addChannel(const Domain *domain, const QString &name);
     Q_INVOKABLE bool saveDomainXml(const Domain *domain, const QString &xml);
     Q_INVOKABLE QVariantMap domainHardwareInfo(const Domain *domain) const;
     Q_INVOKABLE bool editDomainHardware(const Domain *domain, const QVariantMap &settings);

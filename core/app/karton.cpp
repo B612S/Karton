@@ -1056,6 +1056,96 @@ QString Karton::domainXml(const Domain *domain) const
     return result;
 }
 
+bool Karton::attachXmlDevice(const Domain *domain, const QString &xml)
+{
+    if (!domain || !domain->domainPtr() || xml.trimmed().isEmpty()) {
+        return false;
+    }
+    unsigned int flags = VIR_DOMAIN_AFFECT_CONFIG;
+    if (domain->isActive()) {
+        flags |= VIR_DOMAIN_AFFECT_LIVE;
+    }
+    int result = virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), flags);
+    if (result < 0 && domain->isActive()) {
+        result = virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG);
+    }
+    if (result < 0) {
+        Q_EMIT errorOccurred(i18nc("The error message is supplied by libvirt", "Failed to add device: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    refreshDomainList();
+    return true;
+}
+
+bool Karton::addController(const Domain *domain, const QString &type)
+{
+    if (!domain || !domain->domainPtr() || type.isEmpty()) {
+        return false;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return false;
+    }
+    free(xml);
+    int nextIndex = 0;
+    const QDomNodeList controllers = document.elementsByTagName(QStringLiteral("controller"));
+    for (int i = 0; i < controllers.count(); ++i) {
+        const QDomElement controller = controllers.at(i).toElement();
+        if (controller.attribute(QStringLiteral("type")) == type) {
+            nextIndex = qMax(nextIndex, controller.attribute(QStringLiteral("index")).toInt() + 1);
+        }
+    }
+    QString xmlDevice = QStringLiteral("<controller type='%1' index='%2'").arg(type).arg(nextIndex);
+    if (type == QStringLiteral("usb")) {
+        xmlDevice += QStringLiteral(" model='qemu-xhci'");
+    }
+    xmlDevice += QStringLiteral("/>");
+    return attachXmlDevice(domain, xmlDevice);
+}
+
+bool Karton::addSerialPort(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    int port = 0;
+    const QVariantList serials = domainXmlDevices(domain);
+    for (const QVariant &entry : serials) {
+        if (entry.toMap().value(QStringLiteral("tag")).toString() == QStringLiteral("serial")) {
+            ++port;
+        }
+    }
+    return attachXmlDevice(domain, QStringLiteral("<serial type='pty'><target port='%1'/></serial>").arg(port));
+}
+
+bool Karton::addTextConsole(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    int port = 0;
+    const QVariantList devices = domainXmlDevices(domain);
+    for (const QVariant &entry : devices) {
+        if (entry.toMap().value(QStringLiteral("tag")).toString() == QStringLiteral("console")) {
+            ++port;
+        }
+    }
+    return attachXmlDevice(domain, QStringLiteral("<console type='pty'><target type='serial' port='%1'/></console>").arg(port));
+}
+
+bool Karton::addChannel(const Domain *domain, const QString &name)
+{
+    if (!domain || name.isEmpty()) {
+        return false;
+    }
+    return attachXmlDevice(domain, QStringLiteral("<channel type='unix'><target type='virtio' name='%1'/></channel>").arg(name));
+}
+
 QVariantList Karton::domainInputDevices(const Domain *domain) const
 {
     QVariantList result;

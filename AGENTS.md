@@ -318,7 +318,9 @@ When testing destructive operations, prefer domains whose names start with
   path. Disks expose advanced options (read-only, shareable, serial, cache and
   discard). It reads `Karton::domainHardwareInfo()` and writes firmware, boot
   order, video, sound, TPM and description through `editDomainHardware()`.
-  "Add Hardware" navigates to the relevant Settings page. Input devices
+  "Add Hardware" opens the grouped `AddHardwareDialog.qml` wizard, which can
+  create storage, network, input, controller, serial, console, channel, USB/PCI
+  passthrough, redirection, watchdog, RNG and TPM devices directly. Input devices
   (`<input>`) have their own page with add/edit-remove controls, and
   Controllers, Serial & Console and Other devices pages surface the remaining
   device categories from the domain XML using human-readable labels, with
