@@ -1654,6 +1654,40 @@ bool Karton::detachUsbDevice(const Domain *domain, const QString &vendor, const 
     return success;
 }
 
+bool Karton::attachUsbDevicePersistent(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device)
+{
+    if (!domain || !domain->domainPtr() || vendor.isEmpty() || product.isEmpty() || bus.isEmpty() || device.isEmpty()) {
+        return false;
+    }
+    const QString xml = usbHostdevXml(vendor, product, bus, device);
+    if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
+        Q_EMIT errorOccurred(i18nc("%1 is a USB device, %2 is an error",
+                                   "Failed to persist USB device %1: %2",
+                                   vendor + QLatin1Char(':') + product,
+                                   QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    refreshDomain(domain->domainPtr());
+    return true;
+}
+
+bool Karton::detachUsbDevicePersistent(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device)
+{
+    if (!domain || !domain->domainPtr() || vendor.isEmpty() || product.isEmpty() || bus.isEmpty() || device.isEmpty()) {
+        return false;
+    }
+    const QString xml = usbHostdevXml(vendor, product, bus, device);
+    if (virDomainDetachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
+        Q_EMIT errorOccurred(i18nc("%1 is a USB device, %2 is an error",
+                                   "Failed to remove persisted USB device %1: %2",
+                                   vendor + QLatin1Char(':') + product,
+                                   QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    refreshDomain(domain->domainPtr());
+    return true;
+}
+
 QVariantList Karton::domainSnapshots(const Domain *domain) const
 {
     QVariantList result;
@@ -2709,6 +2743,134 @@ bool Karton::detachDisk(const Domain *domain, const QString &targetDev, bool del
         refreshDomain(domain->domainPtr());
     }
     return success;
+}
+
+QVariantMap Karton::domainDiskAdvanced(const Domain *domain, const QString &targetDev) const
+{
+    QVariantMap info;
+    if (!domain || !domain->domainPtr() || targetDev.isEmpty()) {
+        return info;
+    }
+
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return info;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return info;
+    }
+    free(xml);
+
+    const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+    for (int i = 0; i < disks.count(); ++i) {
+        const QDomElement disk = disks.at(i).toElement();
+        if (disk.firstChildElement(QStringLiteral("target")).attribute(QStringLiteral("dev")) != targetDev) {
+            continue;
+        }
+        const QDomElement driver = disk.firstChildElement(QStringLiteral("driver"));
+        info.insert(QStringLiteral("readonly"), !disk.firstChildElement(QStringLiteral("readonly")).isNull());
+        info.insert(QStringLiteral("shareable"), !disk.firstChildElement(QStringLiteral("shareable")).isNull());
+        info.insert(QStringLiteral("serial"), disk.firstChildElement(QStringLiteral("serial")).text());
+        info.insert(QStringLiteral("cache"), driver.attribute(QStringLiteral("cache")));
+        info.insert(QStringLiteral("discard"), driver.attribute(QStringLiteral("discard")));
+        break;
+    }
+    return info;
+}
+
+bool Karton::editDomainDiskAdvanced(const Domain *domain, const QString &targetDev, const QVariantMap &settings)
+{
+    if (!domain || !domain->domainPtr() || !m_conn || targetDev.isEmpty()) {
+        return false;
+    }
+
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain", "Failed to read configuration for domain: %1", domain->config()->name()));
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        Q_EMIT errorOccurred(i18n("Failed to parse the virtual machine configuration."));
+        return false;
+    }
+    free(xml);
+
+    QDomElement selected;
+    const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+    for (int i = 0; i < disks.count(); ++i) {
+        const QDomElement disk = disks.at(i).toElement();
+        if (disk.firstChildElement(QStringLiteral("target")).attribute(QStringLiteral("dev")) == targetDev) {
+            selected = disk;
+            break;
+        }
+    }
+    if (selected.isNull()) {
+        Q_EMIT errorOccurred(i18nc("%1 is a disk target", "Disk %1 was not found.", targetDev));
+        return false;
+    }
+
+    auto setFlag = [&document, &selected](const QString &name, bool enabled) {
+        QDomElement element = selected.firstChildElement(name);
+        if (enabled && element.isNull()) {
+            selected.appendChild(document.createElement(name));
+        } else if (!enabled && !element.isNull()) {
+            selected.removeChild(element);
+        }
+    };
+    setFlag(QStringLiteral("readonly"), settings.value(QStringLiteral("readonly")).toBool());
+    setFlag(QStringLiteral("shareable"), settings.value(QStringLiteral("shareable")).toBool());
+
+    QDomElement serial = selected.firstChildElement(QStringLiteral("serial"));
+    const QString serialText = settings.value(QStringLiteral("serial")).toString();
+    if (serialText.isEmpty()) {
+        if (!serial.isNull()) {
+            selected.removeChild(serial);
+        }
+    } else {
+        if (serial.isNull()) {
+            serial = document.createElement(QStringLiteral("serial"));
+            selected.appendChild(serial);
+        }
+        serial.clear();
+        serial.appendChild(document.createTextNode(serialText));
+    }
+
+    QDomElement driver = selected.firstChildElement(QStringLiteral("driver"));
+    if (driver.isNull()) {
+        driver = document.createElement(QStringLiteral("driver"));
+        selected.insertBefore(driver, selected.firstChild());
+    }
+    const QString cache = settings.value(QStringLiteral("cache")).toString();
+    if (cache.isEmpty()) {
+        driver.removeAttribute(QStringLiteral("cache"));
+    } else {
+        driver.setAttribute(QStringLiteral("cache"), cache);
+    }
+    const QString discard = settings.value(QStringLiteral("discard")).toString();
+    if (discard.isEmpty()) {
+        driver.removeAttribute(QStringLiteral("discard"));
+    } else {
+        driver.setAttribute(QStringLiteral("discard"), discard);
+    }
+
+    virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
+    if (!redefined) {
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
+                                   "Failed to update configuration for domain %1: %2",
+                                   domain->config()->name(),
+                                   QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    virDomainFree(redefined);
+    refreshDomainList();
+    return true;
 }
 
 bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)

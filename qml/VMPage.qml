@@ -191,25 +191,6 @@ Kirigami.ScrollablePage {
             visible: isRunning
             onTriggered: Karton.forceStopDomain(domain)
         }
-        Controls.MenuItem {
-            text: isPaused ? i18n("Resume") : i18n("Pause")
-            icon.name: isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
-            visible: isRunning
-            onTriggered: {
-                if (isPaused) {
-                    Karton.resumeDomain(domain);
-                } else {
-                    Karton.pauseDomain(domain);
-                }
-            }
-        }
-        Controls.MenuSeparator {}
-        Controls.MenuItem {
-            text: i18n("Save State")
-            icon.name: "document-save-symbolic"
-            visible: isRunning
-            onTriggered: Karton.saveDomainState(domain)
-        }
     }
 
     Controls.Menu {

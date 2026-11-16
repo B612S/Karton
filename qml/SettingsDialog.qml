@@ -23,6 +23,7 @@ Kirigami.Dialog {
     property var pciDevices: []
     property var networks: []
     property var pciHostDevices: []
+    property var usbHostDevices: []
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
@@ -48,6 +49,7 @@ Kirigami.Dialog {
         pciDevices = Karton.domainPciDevices(domain);
         networks = Karton.networks();
         pciHostDevices = Karton.pciDevices();
+        usbHostDevices = Karton.usbDevices();
 
         firmwareCombo.currentIndex = hardware.firmware === "uefi" ? 1 : 0;
         secureBootCheck.checked = hardware.secureBoot === true;
@@ -58,6 +60,12 @@ Kirigami.Dialog {
         accel3dCheck.checked = hardware.accel3d === true;
         soundCombo.currentIndex = Math.max(0, soundModels.indexOf(hardware.soundModel));
         descriptionField.text = hardware.description || "";
+        if (disks.length > 0) {
+            if (diskTargetCombo.currentIndex < 0) {
+                diskTargetCombo.currentIndex = 0;
+            }
+            Qt.callLater(function() { root.refreshDiskAdvanced(); });
+        }
         tpmEnabledCheck.checked = hardware.tpmEnabled === true;
         tpmModelCombo.currentIndex = Math.max(0, ["tpm-crb", "tpm-tis"].indexOf(hardware.tpmModel));
         tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
@@ -69,6 +77,18 @@ Kirigami.Dialog {
             path = path.substring(7);
         }
         return decodeURIComponent(path);
+    }
+
+    function refreshDiskAdvanced() {
+        if (!root.domain || !diskTargetCombo.currentText) {
+            return;
+        }
+        const advanced = Karton.domainDiskAdvanced(root.domain, diskTargetCombo.currentText);
+        diskReadonlyCheck.checked = advanced.readonly === true;
+        diskShareableCheck.checked = advanced.shareable === true;
+        diskSerialField.text = advanced.serial || "";
+        diskCacheCombo.currentIndex = Math.max(0, ["", "none", "writethrough", "writeback", "directsync", "unsafe"].indexOf(advanced.cache || ""));
+        diskDiscardCombo.currentIndex = Math.max(0, ["", "unmap", "ignore"].indexOf(advanced.discard || ""));
     }
 
     onOpened: {
@@ -190,17 +210,17 @@ Kirigami.Dialog {
         Controls.MenuItem {
             text: i18n("USB device")
             icon.name: "drive-removable-media-usb-symbolic"
-            onTriggered: usbDialog.open()
+            onTriggered: categoryList.currentIndex = 7
         }
         Controls.MenuItem {
             text: i18n("PCI device")
             icon.name: "computer-symbolic"
-            onTriggered: categoryList.currentIndex = 7
+            onTriggered: categoryList.currentIndex = 8
         }
         Controls.MenuItem {
             text: i18n("TPM device")
             icon.name: "security-high-symbolic"
-            onTriggered: categoryList.currentIndex = 8
+            onTriggered: categoryList.currentIndex = 9
         }
     }
 
@@ -219,9 +239,10 @@ Kirigami.Dialog {
                 {label: i18n("Boot Options"), icon: "system-reboot-symbolic"},
                 {label: i18n("Disks"), icon: "drive-harddisk-symbolic"},
                 {label: i18n("Network"), icon: "network-wired-symbolic"},
-                {label: i18n("Display"), icon: "video-symbolic"},
+                {label: i18n("Display"), icon: "view-fullscreen-symbolic"},
                 {label: i18n("Sound"), icon: "audio-volume-high-symbolic"},
-                {label: i18n("USB & PCI"), icon: "drive-removable-media-usb-symbolic"},
+                {label: i18n("USB"), icon: "drive-removable-media-usb-symbolic"},
+                {label: i18n("PCI"), icon: "computer-symbolic"},
                 {label: i18n("TPM"), icon: "security-high-symbolic"}
             ]
 
@@ -508,6 +529,75 @@ Kirigami.Dialog {
                             }
                         }
                     }
+
+                    Controls.Label {
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        text: i18n("Advanced disk options")
+                        font.bold: true
+                    }
+                    FormCard.FormCard {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+
+                        FormCard.FormComboBoxDelegate {
+                            id: diskTargetCombo
+                            text: i18n("Disk:")
+                            model: root.disks.map(function(disk) { return disk.target; })
+                            Layout.fillWidth: true
+                            onCurrentTextChanged: root.refreshDiskAdvanced()
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormCheckDelegate {
+                            id: diskReadonlyCheck
+                            text: i18n("Read-only")
+                            Layout.fillWidth: true
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormCheckDelegate {
+                            id: diskShareableCheck
+                            text: i18n("Shareable")
+                            Layout.fillWidth: true
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextFieldDelegate {
+                            id: diskSerialField
+                            label: i18n("Serial:")
+                            Layout.fillWidth: true
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormComboBoxDelegate {
+                            id: diskCacheCombo
+                            text: i18n("Cache mode:")
+                            model: [i18n("Hypervisor default"), "none", "writethrough", "writeback", "directsync", "unsafe"]
+                            Layout.fillWidth: true
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormComboBoxDelegate {
+                            id: diskDiscardCombo
+                            text: i18n("Discard mode:")
+                            model: [i18n("Hypervisor default"), "unmap", "ignore"]
+                            Layout.fillWidth: true
+                        }
+                    }
+                    Controls.Button {
+                        Layout.alignment: Qt.AlignRight
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        text: i18n("Apply disk options")
+                        icon.name: "dialog-ok-symbolic"
+                        enabled: diskTargetCombo.currentText.length > 0
+                        onClicked: {
+                            const advanced = {
+                                readonly: diskReadonlyCheck.checked,
+                                shareable: diskShareableCheck.checked,
+                                serial: diskSerialField.text,
+                                cache: diskCacheCombo.currentIndex === 0 ? "" : diskCacheCombo.currentText,
+                                discard: diskDiscardCombo.currentIndex === 0 ? "" : diskDiscardCombo.currentText
+                            };
+                            if (Karton.editDomainDiskAdvanced(root.domain, diskTargetCombo.currentText, advanced)) {
+                                root.refresh();
+                            }
+                        }
+                    }
                     Item { Layout.fillHeight: true }
                 }
             }
@@ -719,7 +809,7 @@ Kirigami.Dialog {
                 }
             }
 
-            // USB and PCI
+            // USB
             Controls.ScrollView {
                 contentWidth: availableWidth
                 ColumnLayout {
@@ -727,13 +817,13 @@ Kirigami.Dialog {
 
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("USB devices")
+                        text: i18n("Persistent USB devices")
                         font.bold: true
                     }
                     ListView {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 6
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 5
                         clip: true
                         model: root.usbDevices
                         spacing: Kirigami.Units.smallSpacing
@@ -750,7 +840,7 @@ Kirigami.Dialog {
                                     text: i18n("Detach")
                                     icon.name: "list-remove-symbolic"
                                     onClicked: {
-                                        if (Karton.detachUsbDevice(root.domain, modelData.vendor, modelData.product, modelData.bus, modelData.device)) {
+                                        if (Karton.detachUsbDevicePersistent(root.domain, modelData.vendor, modelData.product, modelData.bus, modelData.device)) {
                                             root.refresh();
                                         }
                                     }
@@ -758,21 +848,67 @@ Kirigami.Dialog {
                             }
                         }
                     }
-                    RowLayout {
+
+                    Controls.Label {
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        text: i18n("Available host USB devices")
+                        font.bold: true
+                    }
+                    ListView {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
-                        Controls.Label {
-                            Layout.fillWidth: true
-                            text: i18n("USB passthrough is a runtime operation.")
-                            opacity: 0.7
-                            wrapMode: Text.WordWrap
-                        }
-                        Controls.Button {
-                            text: i18n("Manage USB Devices…")
-                            icon.name: "drive-removable-media-usb-symbolic"
-                            onClicked: usbDialog.open()
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 9
+                        clip: true
+                        model: root.usbHostDevices
+                        spacing: Kirigami.Units.smallSpacing
+                        delegate: Controls.ItemDelegate {
+                            width: ListView.view.width
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.label
+                                        elide: Text.ElideRight
+                                    }
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.vendor + ":" + modelData.product + " · bus " + modelData.bus + ", device " + modelData.device
+                                        opacity: 0.7
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                Controls.Button {
+                                    text: i18n("Attach")
+                                    icon.name: "list-add-symbolic"
+                                    enabled: !modelData.hub
+                                    onClicked: {
+                                        if (Karton.attachUsbDevicePersistent(root.domain, modelData.vendor, modelData.product, modelData.bus, modelData.device)) {
+                                            root.refresh();
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        wrapMode: Text.WordWrap
+                        opacity: 0.7
+                        text: i18n("Devices attached here are stored in the persistent VM configuration. For live passthrough while the VM is running, use USB Devices in the viewer menu.")
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+            }
+
+            // PCI
+            Controls.ScrollView {
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
 
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
@@ -863,6 +999,7 @@ Kirigami.Dialog {
                     Item { Layout.fillHeight: true }
                 }
             }
+
             // TPM
             Controls.ScrollView {
                 contentWidth: availableWidth
@@ -903,12 +1040,6 @@ Kirigami.Dialog {
                 }
             }
         }
-    }
-
-    UsbDevicesDialog {
-        id: usbDialog
-        domain: root.domain
-        onClosed: root.refresh()
     }
 
     FileDialog {

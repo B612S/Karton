@@ -15,7 +15,7 @@ Kirigami.ApplicationWindow {
     readonly property var screenInfo: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
 
     // Open large enough for a modern guest resolution instead of a small
-    // fixed window; Actual Size/Fit to Window remain available in the menu.
+    // fixed window; Actual Size and Fit Guest to Window remain available.
     width: screenInfo ? Math.min(screenInfo.width, Math.max(Kirigami.Units.gridUnit * 60, Math.min(screenInfo.width * 0.85, Kirigami.Units.gridUnit * 120))) : Kirigami.Units.gridUnit * 70
     height: screenInfo ? Math.min(screenInfo.height, Math.max(Kirigami.Units.gridUnit * 40, Math.min(screenInfo.height * 0.85, Kirigami.Units.gridUnit * 72))) : Kirigami.Units.gridUnit * 45
 
@@ -157,11 +157,6 @@ Kirigami.ApplicationWindow {
                 }
             }
             Controls.MenuItem {
-                text: i18n("Fit to Window")
-                icon.name: "zoom-fit-best-symbolic"
-                onTriggered: viewerWindow.showMaximized()
-            }
-            Controls.MenuItem {
                 text: i18n("Fit Guest to Window")
                 icon.name: "transform-scale-symbolic"
                 onTriggered: domainViewer.fitGuestToWindow()
@@ -243,89 +238,23 @@ Kirigami.ApplicationWindow {
             type: Kirigami.MessageType.Error
         }
 
-        Kirigami.PlaceholderMessage {
+        Kirigami.Icon {
+            id: startIcon
             anchors.centerIn: parent
-            width: Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 30)
             visible: !viewerWindow.isRunning
-            icon.name: "media-playback-start-symbolic"
-            text: i18n("The virtual machine is not running")
-            explanation: i18n("Start the VM to open its display.")
-            helpfulAction: Kirigami.Action {
-                text: i18n("Start")
-                icon.name: "media-playback-start-symbolic"
-                onTriggered: {
+            source: "media-playback-start-symbolic"
+            width: Kirigami.Units.gridUnit * 8
+            height: width
+            opacity: startMouseArea.containsMouse ? 0.75 : 1.0
+
+            MouseArea {
+                id: startMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
                     if (Karton.startDomain(viewerWindow.domain)) {
                         viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", viewerWindow.domain.config.name));
-                    }
-                }
-            }
-        }
-
-        Controls.Menu {
-            id: powerMenu
-
-            Controls.MenuItem {
-                text: i18n("Shut Down")
-                icon.name: "system-shutdown-symbolic"
-                onTriggered: {
-                    if (Karton.stopDomain(viewerWindow.domain)) {
-                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Shutting down VM: %1!", viewerWindow.domain.config.name));
-                    }
-                }
-            }
-            Controls.MenuItem {
-                text: i18n("Force Off")
-                icon.name: "process-stop-symbolic"
-                onTriggered: {
-                    if (Karton.forceStopDomain(viewerWindow.domain)) {
-                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", viewerWindow.domain.config.name));
-                    }
-                }
-            }
-            Controls.MenuItem {
-                text: viewerWindow.domain && viewerWindow.domain.isPaused ? i18n("Resume") : i18n("Pause")
-                icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
-                onTriggered: {
-                    if (!viewerWindow.domain) {
-                        return;
-                    }
-                    if (viewerWindow.domain.isPaused) {
-                        Karton.resumeDomain(viewerWindow.domain);
-                    } else {
-                        Karton.pauseDomain(viewerWindow.domain);
-                    }
-                }
-            }
-            Controls.MenuSeparator {}
-            Controls.MenuItem {
-                text: i18n("Save State")
-                icon.name: "document-save-symbolic"
-                onTriggered: {
-                    if (Karton.saveDomainState(viewerWindow.domain)) {
-                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Saving VM state: %1!", viewerWindow.domain.config.name));
-                    }
-                }
-            }
-        }
-
-        Controls.Menu {
-            id: rebootMenu
-
-            Controls.MenuItem {
-                text: i18n("Reboot")
-                icon.name: "system-reboot-symbolic"
-                onTriggered: {
-                    if (Karton.rebootDomain(viewerWindow.domain)) {
-                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Rebooting VM: %1!", viewerWindow.domain.config.name));
-                    }
-                }
-            }
-            Controls.MenuItem {
-                text: i18n("Reset")
-                icon.name: "system-reboot-symbolic"
-                onTriggered: {
-                    if (Karton.resetDomain(viewerWindow.domain)) {
-                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Resetting VM: %1!", viewerWindow.domain.config.name));
                     }
                 }
             }

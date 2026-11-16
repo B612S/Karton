@@ -102,6 +102,8 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantList domainUsbDevices(const Domain *domain) const;
     Q_INVOKABLE bool attachUsbDevice(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
     Q_INVOKABLE bool detachUsbDevice(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
+    Q_INVOKABLE bool attachUsbDevicePersistent(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
+    Q_INVOKABLE bool detachUsbDevicePersistent(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device);
     Q_INVOKABLE QVariantList domainSnapshots(const Domain *domain) const;
     Q_INVOKABLE bool createSnapshot(const Domain *domain, const QString &name, const QString &description, bool includeMemory);
     Q_INVOKABLE bool deleteSnapshot(const Domain *domain, const QString &name);
@@ -116,6 +118,8 @@ public Q_SLOTS:
     Q_INVOKABLE bool attachDiskImage(const Domain *domain, const QString &path, const QString &format);
     Q_INVOKABLE bool attachIso(const Domain *domain, const QString &path);
     Q_INVOKABLE bool detachDisk(const Domain *domain, const QString &targetDev, bool deleteFile);
+    Q_INVOKABLE QVariantMap domainDiskAdvanced(const Domain *domain, const QString &targetDev) const;
+    Q_INVOKABLE bool editDomainDiskAdvanced(const Domain *domain, const QString &targetDev, const QVariantMap &settings);
 
 Q_SIGNALS:
     void networksChanged();

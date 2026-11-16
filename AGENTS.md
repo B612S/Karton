@@ -271,14 +271,16 @@ When testing destructive operations, prefer domains whose names start with
   acceleration). Keep the content of each step short; the previous single long
   form triggered a `Kirigami.Dialog` binding loop on `y`.
 - `SettingsDialog.qml` is the virt-manager-style hardware settings dialog:
-  Overview, CPUs & Memory, Boot Options, Disks, Network, Display, Sound,
-  USB & PCI and TPM pages. Disks, networks and PCI devices are managed inline
-  (lists, add/attach/detach controls) instead of separate dialogs; only USB
-  remains a runtime dialog. It reads `Karton::domainHardwareInfo()` and writes
-  firmware, boot order, video, sound, TPM and description through
-  `editDomainHardware()`. "Add Hardware" navigates to the relevant Settings
-  page (or opens the USB dialog). There are no separate Storage/Networks/PCI
-  menu actions.
+  Overview, CPUs & Memory, Boot Options, Disks, Network, Display, Sound, USB,
+  PCI and TPM pages. Disks, networks, USB and PCI devices are managed inline
+  (lists, add/attach/detach controls) instead of separate dialogs. Settings USB
+  attach/detach is persistent (`attachUsbDevicePersistent` /
+  `detachUsbDevicePersistent`); the viewer's USB dialog remains the runtime
+  path. Disks expose advanced options (read-only, shareable, serial, cache and
+  discard). It reads `Karton::domainHardwareInfo()` and writes firmware, boot
+  order, video, sound, TPM and description through `editDomainHardware()`.
+  "Add Hardware" navigates to the relevant Settings page. There are no separate
+  Storage/Networks/PCI/USB menu actions.
 - New domains use user-mode networking with a `virtio` (default) or `e1000`
   interface, or no network at all. The model is stored in
   `DomainConfig::networkModel` and read back from the domain XML.
@@ -325,16 +327,18 @@ When testing destructive operations, prefer domains whose names start with
   textures use `QSGTexture::Linear` filtering so fonts stay readable when the
   guest resolution does not exactly match the viewer size.
 - `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar has labeled
-  runtime actions: Start when stopped, Power (menu with Shut Down, Force Off,
-  Pause/Resume, Save State), Reboot (menu with Reboot and Reset), fullscreen
-  and a three-dot menu. A stopped VM opens the viewer without starting it and
-  shows a Start placeholder; it is started only when the user asks. When a
-  running VM stops, the viewer closes automatically. Opening the menu releases
-  the pointer grab first. There is no explicit grab/release-pointer action:
-  clicking the display grabs the pointer and Esc releases it. A double-click on
-  a VM list row opens that VM's viewer, whether it is running or stopped. UI
-  icons use the monochrome `*-symbolic` variants. PCI and Storage have no
-  separate menu actions; they are managed inline from SettingsDialog.
+  runtime actions: Start when stopped, Power (menu with Shut Down and Force
+  Off), Reboot (menu with Reboot and Reset), fullscreen and a three-dot menu
+  containing Actual Size, Fit Guest to Window, USB Devices, Settings and
+  Snapshots. "Fit to Window" was deliberately removed. A stopped VM opens the
+  viewer without starting it and shows only a large clickable start triangle;
+  it is started only when the user asks. When a running VM stops, the viewer
+  closes automatically. Opening the menu releases the pointer grab first. There
+  is no explicit grab/release-pointer action: clicking the display grabs the
+  pointer and Esc releases it. A double-click on a VM list row opens that VM's
+  viewer, whether it is running or stopped. UI icons use the monochrome
+  `*-symbolic` variants. PCI and Storage have no separate menu actions; they are
+  managed inline from SettingsDialog.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.
