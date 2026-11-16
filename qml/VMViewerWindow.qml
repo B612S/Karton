@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls as Controls
+import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
@@ -27,7 +28,9 @@ Kirigami.ApplicationWindow {
     property int fixedContentWidth: 0
     property int fixedContentHeight: 0
     readonly property bool isFullScreen: visibility === Window.FullScreen
-    readonly property int compactToolbarHeight: Math.round(Kirigami.Units.gridUnit * 1.55)
+    // Floating fullscreen bar: tall enough for icon+label buttons, but not a
+    // full-width title bar.
+    readonly property int compactToolbarHeight: 52
     property bool fullScreenToolbarVisible: true
     property bool toolbarHovered: false
     property real fullScreenToolbarOpacity: (isFullScreen && !fullScreenToolbarVisible) ? 0 : 1
@@ -209,31 +212,20 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    // In fullscreen the normal window header is removed entirely; the
+    // floating bar below is the only chrome over the guest.
     Binding {
         target: pageStack.globalToolBar
         property: "preferredHeight"
-        value: viewerWindow.compactToolbarHeight
+        value: 0
         when: viewerWindow.isFullScreen
         restoreMode: Binding.RestoreBindingOrValue
     }
 
     pageStack.initialPage: Kirigami.Page {
+        id: viewerPage
         title: viewerWindow.title
         padding: 0
-
-        Component.onCompleted: Qt.callLater(applyViewerToolbarStyle)
-
-        function applyViewerToolbarStyle() {
-            if (!globalToolBarItem) {
-                return;
-            }
-            globalToolBarItem.opacity = Qt.binding(function() {
-                return viewerWindow.fullScreenToolbarOpacity * (viewerWindow.isFullScreen ? 0.82 : 1);
-            });
-            globalToolBarItem.enabled = Qt.binding(function() {
-                return !viewerWindow.isFullScreen || viewerWindow.fullScreenToolbarVisible;
-            });
-        }
 
         HoverHandler {
             id: toolbarHover
@@ -241,13 +233,73 @@ Kirigami.ApplicationWindow {
                 if (!viewerWindow.isFullScreen) {
                     return;
                 }
-                const nearTop = point.position.y <= viewerWindow.compactToolbarHeight + 12;
+                const nearTop = point.position.y <= viewerWindow.compactToolbarHeight + 20;
                 viewerWindow.toolbarHovered = nearTop;
                 if (nearTop) {
                     viewerWindow.fullScreenToolbarVisible = true;
                     toolbarHideTimer.stop();
                 } else {
                     toolbarHideTimer.restart();
+                }
+            }
+        }
+
+        Rectangle {
+            id: floatingToolbar
+            anchors.top: parent.top
+            anchors.topMargin: 8
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(viewerPage.width - 24, toolbarContent.implicitWidth + 32)
+            height: viewerWindow.compactToolbarHeight
+            radius: 12
+            color: Qt.rgba(0, 0, 0, 0.58)
+            visible: viewerWindow.isFullScreen
+            opacity: viewerWindow.fullScreenToolbarOpacity
+            enabled: viewerWindow.fullScreenToolbarVisible
+            z: 100
+
+            HoverHandler {
+                onHoveredChanged: {
+                    if (!viewerWindow.isFullScreen) {
+                        return;
+                    }
+                    viewerWindow.toolbarHovered = hovered;
+                    if (hovered) {
+                        viewerWindow.fullScreenToolbarVisible = true;
+                        toolbarHideTimer.stop();
+                    } else {
+                        toolbarHideTimer.restart();
+                    }
+                }
+            }
+
+            RowLayout {
+                id: toolbarContent
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 8
+                spacing: 4
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: viewerWindow.title
+                    color: "white"
+                    elide: Text.ElideRight
+                    font.bold: true
+                }
+
+                Repeater {
+                    model: viewerPage.actions
+
+                    Controls.ToolButton {
+                        action: modelData
+                        flat: true
+                        Layout.preferredHeight: 40
+                        Layout.alignment: Qt.AlignVCenter
+                        display: modelData.displayHint === Kirigami.DisplayHint.IconOnly
+                                 ? Controls.AbstractButton.IconOnly
+                                 : Controls.AbstractButton.TextBesideIcon
+                    }
                 }
             }
         }
