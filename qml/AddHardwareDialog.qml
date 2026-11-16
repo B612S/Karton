@@ -55,6 +55,7 @@ Kirigami.Dialog {
 
     onOpened: {
         refresh();
+        categoryList.currentIndex = 0;
         categoryIndex = 0;
         message = "";
         messageIsError = false;
