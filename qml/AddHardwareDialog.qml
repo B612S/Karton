@@ -19,7 +19,7 @@ Kirigami.Dialog {
     property string message: ""
     property bool messageIsError: false
 
-    signal deviceAdded()
+    signal deviceAdded(int categoryIndex)
 
     modal: true
     padding: 0
@@ -66,11 +66,33 @@ Kirigami.Dialog {
         pciHostDevices = Karton.pciDevices();
     }
 
+    function settingsCategoryFor(category) {
+        switch (category) {
+        case 0: return 3;  // Storage -> Disks
+        case 1: return 4;  // Network
+        case 2: return 12; // Input
+        case 3: return 13; // Controllers
+        case 4: return 14; // Serial
+        case 5: return 14; // Console
+        case 6: return 14; // Channel
+        case 7: return 7;  // USB
+        case 8: return 8;  // PCI
+        case 9: return 15; // Redirection -> Other
+        case 10: return 15; // Watchdog
+        case 11: return 15; // RNG
+        case 12: return 9; // TPM
+        default: return 0;
+        }
+    }
+
     function added() {
         refresh();
         message = i18n("Device added");
         messageIsError = false;
-        deviceAdded();
+        // Close the wizard and let Settings show the page where the new
+        // device can be seen and edited.
+        deviceAdded(settingsCategoryFor(categoryIndex));
+        close();
     }
 
     function addXml(xml) {

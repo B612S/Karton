@@ -1616,8 +1616,8 @@ Kirigami.Dialog {
 
                             Controls.TextArea {
                                 id: xmlEditor
-                                width: Math.max(xmlScroll.availableWidth, implicitWidth)
-                                height: Math.max(xmlScroll.availableHeight, implicitHeight)
+                                width: parent.width
+                                height: Math.max(xmlScroll.height, implicitHeight)
                                 text: root.xmlContent
                                 readOnly: !xmlEditSwitch.checked
                                 wrapMode: TextEdit.NoWrap
@@ -1687,7 +1687,13 @@ Kirigami.Dialog {
     AddHardwareDialog {
         id: addHardwareDialog
         domain: root.domain
-        onDeviceAdded: root.refresh()
+        onDeviceAdded: function(categoryIndex) {
+            root.refresh();
+            categoryList.currentIndex = categoryIndex;
+            if (applicationWindow()) {
+                applicationWindow().showPassiveNotification(i18n("Device added"));
+            }
+        }
     }
 
     Kirigami.Dialog {
