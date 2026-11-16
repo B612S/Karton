@@ -9,6 +9,7 @@
 #include <QAudioFormat>
 #include <QAudioSink>
 #include <QAudioSource>
+#include <QElapsedTimer>
 #include <QIODevice>
 #include <QImage>
 #include <QMutex>
@@ -219,6 +220,7 @@ private:
     int m_clipboardTextMode = 3;
     int m_clipboardFilesMode = 0;
     QString m_lastGuestClipboardText;
+    QElapsedTimer m_hostClipboardAge;
     int m_spiceTlsPort = 0;
     QString m_spicePassword;
 

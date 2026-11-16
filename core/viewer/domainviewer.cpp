@@ -350,6 +350,10 @@ gboolean DomainViewer::clipboardSelectionGrabCallback(SpiceMainChannel *channel,
     if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
         return TRUE;
     }
+    if (item->m_hostClipboardAge.isValid() && item->m_hostClipboardAge.elapsed() < 750) {
+        qCInfo(KARTON_DEBUG) << "clipboard: ignoring stale guest grab after host copy";
+        return TRUE;
+    }
     qCInfo(KARTON_DEBUG) << "clipboard: guest has data, requesting text";
     // The guest has clipboard data. Ask for UTF-8 text; the reply is handled
     // by clipboardSelectionCallback().
@@ -424,6 +428,7 @@ void DomainViewer::hostClipboardChanged()
     if (text.isEmpty()) {
         return;
     }
+    m_hostClipboardAge.start();
     if (!m_lastGuestClipboardText.isEmpty() && text == m_lastGuestClipboardText) {
         m_lastGuestClipboardText.clear();
         return;
