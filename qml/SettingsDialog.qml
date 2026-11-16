@@ -116,6 +116,15 @@ Kirigami.Dialog {
         displayResolutionCombo.currentIndex = resolutionIndex;
     }
 
+    function pciDeviceLabel(address) {
+        for (let i = 0; i < pciHostDevices.length; ++i) {
+            if (pciHostDevices[i].address === address) {
+                return pciHostDevices[i].label;
+            }
+        }
+        return address;
+    }
+
     function localPath(url) {
         let path = url.toString();
         if (path.startsWith("file://")) {
@@ -230,14 +239,20 @@ Kirigami.Dialog {
         id: addHardwareMenu
 
         Controls.MenuItem {
-            text: i18n("Disk image")
+            text: i18n("Disk image…")
             icon.name: "drive-harddisk-symbolic"
-            onTriggered: categoryList.currentIndex = 3
+            onTriggered: {
+                categoryList.currentIndex = 3;
+                imageFileDialog.open();
+            }
         }
         Controls.MenuItem {
-            text: i18n("ISO image")
+            text: i18n("ISO image…")
             icon.name: "media-optical-symbolic"
-            onTriggered: categoryList.currentIndex = 3
+            onTriggered: {
+                categoryList.currentIndex = 3;
+                isoFileDialog.open();
+            }
         }
         Controls.MenuItem {
             text: i18n("Network interface")
@@ -258,6 +273,34 @@ Kirigami.Dialog {
             text: i18n("TPM device")
             icon.name: "security-high-symbolic"
             onTriggered: categoryList.currentIndex = 9
+        }
+        Controls.MenuSeparator {}
+        Controls.MenuItem {
+            text: i18n("Mouse")
+            icon.name: "input-mouse-symbolic"
+            onTriggered: {
+                if (Karton.attachInputDevice(root.domain, "mouse", "ps2")) {
+                    root.refresh();
+                }
+            }
+        }
+        Controls.MenuItem {
+            text: i18n("Tablet")
+            icon.name: "input-tablet-symbolic"
+            onTriggered: {
+                if (Karton.attachInputDevice(root.domain, "tablet", "usb")) {
+                    root.refresh();
+                }
+            }
+        }
+        Controls.MenuItem {
+            text: i18n("Keyboard")
+            icon.name: "input-keyboard-symbolic"
+            onTriggered: {
+                if (Karton.attachInputDevice(root.domain, "keyboard", "ps2")) {
+                    root.refresh();
+                }
+            }
         }
     }
 
@@ -1344,7 +1387,7 @@ Kirigami.Dialog {
                                 spacing: Kirigami.Units.largeSpacing
                                 Controls.Label {
                                     Layout.fillWidth: true
-                                    text: modelData.address
+                                    text: root.pciDeviceLabel(modelData.address) + " · " + modelData.address
                                     elide: Text.ElideRight
                                 }
                                 Controls.Button {
@@ -1678,8 +1721,14 @@ Kirigami.Dialog {
                         width: ListView.view.width
                         focusPolicy: Qt.NoFocus
                         contentItem: RowLayout {
+                            spacing: 8
+                            Kirigami.Icon {
+                                source: modelData.icon
+                                implicitWidth: 20
+                                implicitHeight: 20
+                            }
                             Controls.Label {
-                                text: modelData.description
+                                text: modelData.label
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -1719,14 +1768,21 @@ Kirigami.Dialog {
                         width: ListView.view.width
                         focusPolicy: Qt.NoFocus
                         contentItem: RowLayout {
+                            spacing: 8
+                            Kirigami.Icon {
+                                source: modelData.icon
+                                implicitWidth: 20
+                                implicitHeight: 20
+                            }
                             Controls.Label {
-                                text: modelData.tag + " - " + modelData.description
+                                text: modelData.label + (modelData.description.length > 0 ? " · " + modelData.description : "")
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                             Controls.Button {
                                 text: i18n("Detach")
                                 icon.name: "list-remove-symbolic"
+                                enabled: modelData.tag !== "emulator"
                                 onClicked: {
                                     if (Karton.detachXmlDevice(root.domain, modelData.index)) {
                                         root.refresh();
@@ -1761,20 +1817,27 @@ Kirigami.Dialog {
                     Layout.fillHeight: true
                     clip: true
                     model: root.xmlDevices.filter(function(device) {
-                        return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console"].indexOf(device.tag) === -1;
+                        return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console", "emulator", "graphics", "audio"].indexOf(device.tag) === -1;
                     })
                     delegate: Controls.ItemDelegate {
                         width: ListView.view.width
                         focusPolicy: Qt.NoFocus
                         contentItem: RowLayout {
+                            spacing: 8
+                            Kirigami.Icon {
+                                source: modelData.icon
+                                implicitWidth: 20
+                                implicitHeight: 20
+                            }
                             Controls.Label {
-                                text: modelData.tag + " - " + modelData.description
+                                text: modelData.label + (modelData.description.length > 0 ? " · " + modelData.description : "")
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                             Controls.Button {
                                 text: i18n("Detach")
                                 icon.name: "list-remove-symbolic"
+                                enabled: modelData.tag !== "emulator"
                                 onClicked: {
                                     if (Karton.detachXmlDevice(root.domain, modelData.index)) {
                                         root.refresh();

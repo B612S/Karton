@@ -321,8 +321,11 @@ When testing destructive operations, prefer domains whose names start with
   "Add Hardware" navigates to the relevant Settings page. Input devices
   (`<input>`) have their own page with add/edit-remove controls, and
   Controllers, Serial & Console and Other devices pages surface the remaining
-  device categories from the domain XML. All pages are refreshed after XML
-  edits or device hotplug. The XML page is read-only by default with
+  device categories from the domain XML using human-readable labels, with
+  detach actions for non-system devices. Add Hardware also creates input
+  devices directly and opens the appropriate picker for disks, ISO images,
+  USB and PCI passthrough. All pages are refreshed after XML edits or device
+  hotplug. The XML page is read-only by default with
   an Edit switch; it uses `XmlHighlighter` for theme-coloured XML syntax
   highlighting, preserves its scroll position when toggling Edit, and saves
   through `saveDomainXml()`.

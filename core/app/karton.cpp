@@ -1223,6 +1223,8 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
     for (QDomElement device = devices.firstChildElement(); !device.isNull(); device = device.nextSiblingElement()) {
         const QString tag = device.tagName();
         QString detail = device.attribute(QStringLiteral("type"));
+        QString label = tag;
+        QString icon = QStringLiteral("device-symbolic");
         const auto childText = [&device](const QString &name, const QString &attribute) {
             const QDomElement child = device.firstChildElement(name);
             return child.isNull() ? QString() : child.attribute(attribute);
@@ -1250,8 +1252,114 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
         } else if (tag == QStringLiteral("graphics")) {
             detail = device.attribute(QStringLiteral("type"));
         }
+
+        if (tag == QStringLiteral("disk")) {
+            label = i18n("Disk");
+            icon = QStringLiteral("drive-harddisk-symbolic");
+        } else if (tag == QStringLiteral("interface")) {
+            label = i18n("Network interface");
+            icon = QStringLiteral("network-wired-symbolic");
+        } else if (tag == QStringLiteral("input")) {
+            const QString inputType = device.attribute(QStringLiteral("type"));
+            label = inputType == QStringLiteral("tablet") ? i18n("Tablet")
+                : inputType == QStringLiteral("mouse")    ? i18n("Mouse")
+                : inputType == QStringLiteral("keyboard") ? i18n("Keyboard")
+                                                          : i18n("Input device");
+            icon = inputType == QStringLiteral("keyboard") ? QStringLiteral("input-keyboard-symbolic")
+                : inputType == QStringLiteral("mouse")     ? QStringLiteral("input-mouse-symbolic")
+                                                           : QStringLiteral("input-tablet-symbolic");
+        } else if (tag == QStringLiteral("video")) {
+            label = i18n("Video");
+            icon = QStringLiteral("video-display-symbolic");
+        } else if (tag == QStringLiteral("sound")) {
+            label = i18n("Sound");
+            icon = QStringLiteral("audio-card-symbolic");
+        } else if (tag == QStringLiteral("hostdev")) {
+            label = device.attribute(QStringLiteral("type")) == QStringLiteral("usb") ? i18n("USB passthrough") : i18n("PCI passthrough");
+            icon = QStringLiteral("drive-removable-media-usb-symbolic");
+        } else if (tag == QStringLiteral("tpm")) {
+            label = i18n("TPM");
+            icon = QStringLiteral("security-high-symbolic");
+        } else if (tag == QStringLiteral("controller")) {
+            const QString controllerType = device.attribute(QStringLiteral("type"));
+            label = controllerType == QStringLiteral("usb")                                           ? i18n("USB Controller")
+                : controllerType == QStringLiteral("pci") || controllerType == QStringLiteral("pcie") ? i18n("PCI Express Controller")
+                : controllerType == QStringLiteral("sata")                                            ? i18n("SATA Controller")
+                : controllerType == QStringLiteral("virtio-serial")                                   ? i18n("VirtIO Serial Controller")
+                : controllerType == QStringLiteral("scsi")                                            ? i18n("SCSI Controller")
+                : controllerType == QStringLiteral("ide")                                             ? i18n("IDE Controller")
+                                                                                                      : i18n("%1 Controller", controllerType);
+            const QString controllerIndex = device.attribute(QStringLiteral("index"));
+            if (!controllerIndex.isEmpty()) {
+                label += QStringLiteral(" %1").arg(controllerIndex.toInt() + 1);
+            }
+            detail.clear();
+            icon = QStringLiteral("cpu-symbolic");
+        } else if (tag == QStringLiteral("serial")) {
+            label = i18n("Serial Port");
+            icon = QStringLiteral("network-wired-symbolic");
+        } else if (tag == QStringLiteral("console")) {
+            label = i18n("Text Console");
+            icon = QStringLiteral("utilities-terminal-symbolic");
+        } else if (tag == QStringLiteral("channel")) {
+            const QString name = childText(QStringLiteral("target"), QStringLiteral("name"));
+            if (name == QStringLiteral("org.qemu.guest_agent.0")) {
+                label = i18n("QEMU Guest Agent");
+            } else if (name == QStringLiteral("com.redhat.spice.0")) {
+                label = i18n("SPICE Agent");
+            } else if (name == QStringLiteral("org.spice-space.webdav.0")) {
+                label = i18n("SPICE WebDAV");
+            } else {
+                label = i18n("VirtIO Channel (%1)", name);
+            }
+            icon = QStringLiteral("network-connect-symbolic");
+        } else if (tag == QStringLiteral("redirdev")) {
+            label = i18n("USB Redirection (SPICE)");
+            icon = QStringLiteral("drive-removable-media-usb-symbolic");
+        } else if (tag == QStringLiteral("watchdog")) {
+            label = i18n("Watchdog");
+            icon = QStringLiteral("security-medium-symbolic");
+        } else if (tag == QStringLiteral("rng")) {
+            label = i18n("Random Number Generator");
+            icon = QStringLiteral("security-high-symbolic");
+        } else if (tag == QStringLiteral("memballoon")) {
+            label = i18n("Memory Balloon");
+            icon = QStringLiteral("memory-symbolic");
+        } else if (tag == QStringLiteral("panic")) {
+            label = i18n("Panic Device");
+            icon = QStringLiteral("dialog-warning-symbolic");
+        } else if (tag == QStringLiteral("shmem")) {
+            label = i18n("Shared Memory");
+            icon = QStringLiteral("memory-symbolic");
+        } else if (tag == QStringLiteral("iommu")) {
+            label = i18n("IOMMU");
+            icon = QStringLiteral("cpu-symbolic");
+        } else if (tag == QStringLiteral("vsock")) {
+            label = i18n("VSOCK");
+            icon = QStringLiteral("network-connect-symbolic");
+        } else if (tag == QStringLiteral("filesystem")) {
+            label = i18n("Filesystem");
+            icon = QStringLiteral("folder-symbolic");
+        } else if (tag == QStringLiteral("smartcard")) {
+            label = i18n("Smart Card");
+            icon = QStringLiteral("security-high-symbolic");
+        } else if (tag == QStringLiteral("hub")) {
+            label = i18n("USB Hub");
+            icon = QStringLiteral("drive-removable-media-usb-symbolic");
+        } else if (tag == QStringLiteral("emulator")) {
+            label = i18n("QEMU Emulator");
+            icon = QStringLiteral("computer-symbolic");
+        } else if (tag == QStringLiteral("graphics")) {
+            label = i18n("Display");
+            icon = QStringLiteral("video-display-symbolic");
+        } else if (tag == QStringLiteral("audio")) {
+            label = i18n("Audio backend");
+            icon = QStringLiteral("audio-card-symbolic");
+        }
         QVariantMap info;
         info.insert(QStringLiteral("tag"), tag);
+        info.insert(QStringLiteral("label"), label);
+        info.insert(QStringLiteral("icon"), icon);
         info.insert(QStringLiteral("description"), detail.trimmed());
         info.insert(QStringLiteral("index"), result.size());
         result.append(info);
