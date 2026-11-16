@@ -62,3 +62,16 @@ foreach(test_name IN LISTS KARTON_TESTS)
         LABELS "unit"
     )
 endforeach()
+
+# Load the whole QML module and every component instantiated by Main.qml. This
+# catches missing imports, attached properties and component type errors that
+# qmlcachegen alone does not report.
+add_test(NAME tst_qml_startup COMMAND $<TARGET_FILE:karton> --check-qml)
+set_tests_properties(tst_qml_startup PROPERTIES
+    ENVIRONMENT
+        "${KARTON_TEST_ENV}"
+        "KARTON_LIBVIRT_URI=qemu:///session"
+        "KARTON_GRAPHICS_API=software"
+    TIMEOUT 60
+    LABELS "qml"
+)

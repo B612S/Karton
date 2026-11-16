@@ -15,6 +15,7 @@
 #include <QSGRendererInterface>
 #include <QVulkanInstance>
 #include <QtQml>
+#include <cstdlib>
 
 #include "karton_debug.h"
 #include "karton_version.h"
@@ -82,10 +83,19 @@ int main(int argc, char *argv[])
     qCInfo(KARTON_DEBUG) << "Hello! Starting Karton...";
 
     KLocalization::setupLocalizedContext(&engine);
+    const bool checkQml = QCoreApplication::arguments().contains(QStringLiteral("--check-qml"));
     engine.loadFromModule("org.kde.karton", "Main");
 
     if (engine.rootObjects().isEmpty()) {
         return -1;
+    }
+
+    // Used by the opt-in test suite to catch QML component/import errors
+    // without entering the event loop or requiring a graphical session.
+    if (checkQml) {
+        // QML starts helper threads and Qt's normal teardown can wait on them
+        // in a headless test run. The smoke test only needs the load result.
+        std::_Exit(0);
     }
 
     return app.exec();
