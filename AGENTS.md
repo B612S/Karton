@@ -338,7 +338,9 @@ When testing destructive operations, prefer domains whose names start with
   edits or device hotplug. The XML page is read-only by default with
   an Edit switch; it uses `XmlHighlighter` for theme-coloured XML syntax
   highlighting, preserves its scroll position when toggling Edit, and saves
-  through `saveDomainXml()`.
+  through `saveDomainXml()`, which validates the complete document against
+  libvirt's domain schema (`VIR_DOMAIN_DEFINE_VALIDATE`). Invalid or unsupported
+  XML is rejected, reported, and the editor reverts to the last valid version.
   There are no separate Storage/Networks/PCI/USB menu actions.
 - New domains use user-mode networking with a `virtio` (default) or `e1000`
   interface, or no network at all. The model is stored in
