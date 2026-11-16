@@ -2118,6 +2118,42 @@ bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, cons
     return false;
 }
 
+static bool hasUsbHostdev(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return false;
+    }
+    bool found = false;
+    QDomDocument document;
+    if (document.setContent(QString::fromUtf8(xml))) {
+        const QDomNodeList hostdevs = document.elementsByTagName(QStringLiteral("hostdev"));
+        for (int i = 0; i < hostdevs.count(); ++i) {
+            const QDomElement element = hostdevs.at(i).toElement();
+            if (element.attribute(QStringLiteral("type")) != QStringLiteral("usb")) {
+                continue;
+            }
+            const QDomElement source = element.firstChildElement(QStringLiteral("source"));
+            const QDomElement vendorElement = source.firstChildElement(QStringLiteral("vendor"));
+            const QDomElement productElement = source.firstChildElement(QStringLiteral("product"));
+            const QDomElement address = source.firstChildElement(QStringLiteral("address"));
+            if (vendorElement.attribute(QStringLiteral("id")) == vendor && productElement.attribute(QStringLiteral("id")) == product
+                && address.attribute(QStringLiteral("bus")) == bus && address.attribute(QStringLiteral("device")) == device) {
+                found = true;
+                break;
+            }
+        }
+    }
+    free(xml);
+    return found;
+}
+
 static QString usbHostdevXml(const QString &vendor, const QString &product, const QString &bus, const QString &device)
 {
     return QStringLiteral(
@@ -2295,6 +2331,10 @@ bool Karton::attachUsbDevice(const Domain *domain, const QString &vendor, const 
         Q_EMIT errorOccurred(i18n("USB vendor, product, bus and device are required."));
         return false;
     }
+    if (hasUsbHostdev(domain, vendor, product, bus, device)) {
+        Q_EMIT errorOccurred(i18n("This USB device is already attached."));
+        return false;
+    }
 
     const QString xml = usbHostdevXml(vendor, product, bus, device);
     bool success = false;
@@ -2373,6 +2413,10 @@ bool Karton::detachUsbDevice(const Domain *domain, const QString &vendor, const 
 bool Karton::attachUsbDevicePersistent(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device)
 {
     if (!domain || !domain->domainPtr() || vendor.isEmpty() || product.isEmpty() || bus.isEmpty() || device.isEmpty()) {
+        return false;
+    }
+    if (hasUsbHostdev(domain, vendor, product, bus, device)) {
+        Q_EMIT errorOccurred(i18n("This USB device is already attached."));
         return false;
     }
     const QString xml = usbHostdevXml(vendor, product, bus, device);
@@ -2873,6 +2917,16 @@ bool Karton::attachPciDevice(const Domain *domain, const QString &pciDomain, con
     if (normalizedDomain.isEmpty() || normalizedBus.isEmpty() || normalizedSlot.isEmpty() || normalizedFunction.isEmpty()) {
         Q_EMIT errorOccurred(i18n("Invalid PCI address."));
         return false;
+    }
+    for (const QVariant &entry : domainPciDevices(domain)) {
+        const QVariantMap info = entry.toMap();
+        if (info.value(QStringLiteral("pciDomain")).toString().compare(normalizedDomain, Qt::CaseInsensitive) == 0
+            && info.value(QStringLiteral("bus")).toString().compare(normalizedBus, Qt::CaseInsensitive) == 0
+            && info.value(QStringLiteral("slot")).toString().compare(normalizedSlot, Qt::CaseInsensitive) == 0
+            && info.value(QStringLiteral("function")).toString().compare(normalizedFunction, Qt::CaseInsensitive) == 0) {
+            Q_EMIT errorOccurred(i18n("This PCI device is already attached."));
+            return false;
+        }
     }
 
     const QString xml = pciHostdevXml(normalizedDomain, normalizedBus, normalizedSlot, normalizedFunction);

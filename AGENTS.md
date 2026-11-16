@@ -220,6 +220,9 @@ When testing destructive operations, prefer domains whose names start with
   detach removes the CONFIG device even if the guest cannot hot-unplug the live
   device. Interface rows show IP addresses obtained from the guest agent/lease
   and provide an Edit dialog for MAC/model changes.
+- Attaching an already-present USB or PCI host device is rejected instead of
+  creating duplicate `<hostdev>` entries. Device lists use the inactive XML so
+  persistent changes are visible immediately on running domains.
 - Runtime USB passthrough is available through `Karton::usbDevices()`,
   `domainUsbDevices()`, `attachUsbDevice()` and `detachUsbDevice()`, with the
   UI in `qml/UsbDevicesDialog.qml`. Host devices come from libvirt node devices

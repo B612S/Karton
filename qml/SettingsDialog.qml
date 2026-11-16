@@ -124,6 +124,18 @@ Kirigami.Dialog {
         root.xmlDirty = false;
     }
 
+    function usbDeviceLabel(device) {
+        for (let i = 0; i < usbHostDevices.length; ++i) {
+            if (usbHostDevices[i].vendor === device.vendor
+                && usbHostDevices[i].product === device.product
+                && usbHostDevices[i].bus === device.bus
+                && usbHostDevices[i].device === device.device) {
+                return usbHostDevices[i].label;
+            }
+        }
+        return device.vendor + ":" + device.product;
+    }
+
     function pciDeviceLabel(address) {
         for (let i = 0; i < pciHostDevices.length; ++i) {
             if (pciHostDevices[i].address === address) {
@@ -679,12 +691,13 @@ Kirigami.Dialog {
                     }
                     ListView {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 6
+                        Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 14, contentHeight)
                         clip: true
                         model: root.disks
                         spacing: 4
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
+                            focusPolicy: Qt.NoFocus
                             contentItem: RowLayout {
                                 spacing: Kirigami.Units.largeSpacing
                                 ColumnLayout {
@@ -850,7 +863,7 @@ Kirigami.Dialog {
                     }
                     ListView {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 9
+                        Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 14, contentHeight)
                         clip: true
                         model: root.interfaces
                         spacing: 4
@@ -1114,17 +1127,18 @@ Kirigami.Dialog {
                     ListView {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 5
+                        Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 14, contentHeight)
                         clip: true
                         model: root.usbDevices
                         spacing: Kirigami.Units.smallSpacing
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
+                            focusPolicy: Qt.NoFocus
                             contentItem: RowLayout {
                                 spacing: Kirigami.Units.largeSpacing
                                 Controls.Label {
                                     Layout.fillWidth: true
-                                    text: modelData.vendor + ":" + modelData.product
+                                    text: root.usbDeviceLabel(modelData)
                                     elide: Text.ElideRight
                                 }
                                 Controls.Button {
@@ -1166,12 +1180,13 @@ Kirigami.Dialog {
                     ListView {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 6
+                        Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 14, contentHeight)
                         clip: true
                         model: root.pciDevices
                         spacing: Kirigami.Units.smallSpacing
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
+                            focusPolicy: Qt.NoFocus
                             contentItem: RowLayout {
                                 spacing: Kirigami.Units.largeSpacing
                                 Controls.Label {
