@@ -1,18 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <defs>
-    <linearGradient id="o" x1="6" y1="6" x2="42" y2="26" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f7c778"/><stop offset="1" stop-color="#d88a31"/>
-    </linearGradient>
-    <linearGradient id="b" x1="6" y1="18" x2="42" y2="36" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#557791"/><stop offset="1" stop-color="#334b61"/>
-    </linearGradient>
-    <linearGradient id="d" x1="6" y1="28" x2="42" y2="44" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#d99a4d"/><stop offset="1" stop-color="#a95c1c"/>
-    </linearGradient>
-  </defs>
-  <path d="M6 32 24 42l18-10-18-10L6 32Z" fill="url(#d)"/>
-  <path d="M6 24 24 34l18-10L24 14 6 24Z" fill="url(#b)"/>
-  <path d="M6 16 24 26l18-10L24 6 6 16Z" fill="url(#o)"/>
-  <path d="M24 10.5v4" stroke="#26303e" stroke-width="1.8" stroke-linecap="round"/>
-  <path d="M20.8 12a4.3 4.3 0 1 0 6.4 0" fill="none" stroke="#26303e" stroke-width="1.8" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Karton icon in the same frameless flat idiom as Luma and Luma Converter:
+       the cardboard box that gives the app its name, with the VM power mark on
+       its front. No plate; one flat tone per surface; the Papirus drop shadow
+       (black at 20%, one unit down). The darker overhanging lid and its seam
+       keep the mark reading as a box rather than a display at 24 px. -->
+  <g transform="translate(0 1)" opacity="0.2">
+    <rect x="10" y="12" width="44" height="10" rx="3" fill="#000000"/>
+    <rect x="12" y="20" width="40" height="32" rx="2" fill="#000000"/>
+  </g>
+  <rect x="12" y="20" width="40" height="32" rx="2" fill="#E8A94F"/>
+  <rect x="10" y="12" width="44" height="10" rx="3" fill="#D08A35"/>
+  <rect x="31.35" y="12" width="1.3" height="10" fill="#B5701F"/>
+  <path d="M 35.92 32.72 A 5.8 5.8 0 1 1 28.08 32.72" fill="none" stroke="#2B3644" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M 32 29.8 L 32 35.6" fill="none" stroke="#2B3644" stroke-width="2.6" stroke-linecap="round"/>
 </svg>
