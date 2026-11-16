@@ -149,6 +149,7 @@ Kirigami.ScrollablePage {
 
     Controls.Menu {
         id: powerMenu
+        closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
 
         Controls.MenuItem {
             text: i18n("Power Off")
@@ -159,6 +160,7 @@ Kirigami.ScrollablePage {
 
     Controls.Menu {
         id: rebootMenu
+        closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
 
         Controls.MenuItem {
             text: i18n("Reset")
@@ -169,6 +171,7 @@ Kirigami.ScrollablePage {
 
     Controls.Menu {
         id: moreMenu
+        closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
 
         Controls.MenuItem {
             text: i18n("Hibernate")
