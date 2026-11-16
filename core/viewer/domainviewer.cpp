@@ -425,18 +425,22 @@ void DomainViewer::cursorHideCallback(SpiceCursorChannel *channel, gpointer user
     auto *item = static_cast<DomainViewer *>(userData);
     qCDebug(KARTON_DEBUG) << "SPICE cursor-hide";
     bool pointerInside = false;
+    bool haveCursor = false;
     {
         QMutexLocker locker(&item->m_cursorMutex);
         pointerInside = item->m_pointerInside;
+        haveCursor = item->m_cursorVisible && !item->m_cursorImage.isNull();
         if (!pointerInside) {
             item->m_cursorVisible = false;
         }
     }
-    if (pointerInside) {
+    if (pointerInside && haveCursor) {
         // Keep the last guest cursor while the pointer is over the display;
         // otherwise the host arrow flashes in during guest window dragging.
         item->setCursor(Qt::BlankCursor);
     } else if (!item->m_pointerGrabbed) {
+        // No guest cursor is available (for example after clearing it while
+        // entering fullscreen). Do not leave the host cursor blank.
         item->unsetCursor();
     }
     item->update();
@@ -459,12 +463,7 @@ void DomainViewer::clearCursor()
         m_cursorTextureDirty = true;
         m_hasCursorPaintPosition = false;
     }
-    bool pointerInside = false;
-    {
-        QMutexLocker locker(&m_cursorMutex);
-        pointerInside = m_pointerInside;
-    }
-    if (!m_pointerGrabbed && !pointerInside) {
+    if (!m_pointerGrabbed) {
         unsetCursor();
     }
     update();

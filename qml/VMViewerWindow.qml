@@ -293,13 +293,22 @@ Kirigami.ApplicationWindow {
                     model: viewerPage.actions
 
                     Controls.ToolButton {
+                        id: actionButton
                         action: modelData
                         flat: true
+                        hoverEnabled: true
                         Layout.preferredHeight: 40
                         Layout.alignment: Qt.AlignVCenter
                         display: modelData.displayHint === Kirigami.DisplayHint.IconOnly
                                  ? Controls.AbstractButton.IconOnly
                                  : Controls.AbstractButton.TextBesideIcon
+
+                        background: Rectangle {
+                            radius: 8
+                            color: actionButton.down
+                                   ? Qt.rgba(1, 1, 1, 0.22)
+                                   : actionButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        }
                     }
                 }
             }
