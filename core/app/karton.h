@@ -72,6 +72,7 @@ Q_SIGNALS:
     void closePopupsRequested();
     void domainsChanged(const virDomainPtr domainPtr, int event, int detail);
     void errorOccurred(const QString &errorMessage);
+    void clipboardSettingsChanged();
     void domainAdded(Domain *domain);
     void domainRemoved(Domain *domain);
     void domainCreated(bool success, const QString &name);

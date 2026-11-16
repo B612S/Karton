@@ -156,6 +156,14 @@ Kirigami.ApplicationWindow {
     }
 
     Connections {
+        target: Karton
+        function onClipboardSettingsChanged() {
+            domainViewer.clipboardTextMode = Karton.clipboardTextMode();
+            domainViewer.clipboardFilesMode = Karton.clipboardFilesMode();
+        }
+    }
+
+    Connections {
         target: viewerWindow.domain
         function onIsActiveChanged(active) {
             if (active) {

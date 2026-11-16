@@ -1016,6 +1016,7 @@ void Karton::saveClipboardTextMode(int mode)
 {
     QSettings settings(kartonConfigPath(), QSettings::IniFormat);
     settings.setValue(QStringLiteral("clipboard/textMode"), qBound(0, mode, 3));
+    Q_EMIT clipboardSettingsChanged();
 }
 
 int Karton::clipboardFilesMode() const
@@ -1028,6 +1029,7 @@ void Karton::saveClipboardFilesMode(int mode)
 {
     QSettings settings(kartonConfigPath(), QSettings::IniFormat);
     settings.setValue(QStringLiteral("clipboard/filesMode"), qBound(0, mode, 3));
+    Q_EMIT clipboardSettingsChanged();
 }
 
 bool Karton::spiceTlsEnabled() const
