@@ -1309,6 +1309,13 @@ void DomainViewer::mousePressEvent(QMouseEvent *event)
     m_hasLocalPointerPosition = true;
     m_lastPointerPosition = event->position();
     m_hasLastPointerPosition = true;
+    // On Wayland the viewer must be the active window before Qt can read the
+    // host clipboard. Clicking the display should activate it explicitly,
+    // rather than requiring a click on the window frame.
+    if (QQuickWindow *viewerWindow = window()) {
+        viewerWindow->raise();
+        viewerWindow->requestActivate();
+    }
     grabPointer();
     forceActiveFocus();
 
