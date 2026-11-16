@@ -108,6 +108,7 @@ target_sources(karton
     core/libvirt/libvirtmonitor.cpp
     core/libvirt/libvirteventloop.cpp
     core/viewer/domainviewer.cpp
+    core/viewer/clipboardmanager.cpp
     core/viewer/spicedisplayrenderer.h
     core/viewer/glscanoutrenderer.cpp
     core/viewer/primarysurfacerenderer.cpp

@@ -338,6 +338,10 @@ Every settings page must look and behave the same:
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
   macOS and DOS), installed into hicolor. The VM page uses Luma-style
   transparent details rows and a rounded preview frame.
+- `ClipboardManager` (`core/viewer/clipboardmanager.*`) owns the Qt/SPICE
+  clipboard bridge: host clipboard events, guest clipboard requests, ownership
+  state and clipboard modes. `DomainViewer` only attaches it to the main
+  channel and forwards the text/files modes.
 - Clipboard synchronization uses the SPICE main channel and the guest agent.
   Application Settings has separate text/file modes: 0 disabled, 1 host to
   guest, 2 guest to host, 3 bidirectional (`clipboard/textMode` and

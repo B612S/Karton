@@ -22,6 +22,7 @@
 #include <memory>
 
 class QSGSimpleTextureNode;
+class ClipboardManager;
 
 #include "domain/domain.h"
 #include "viewer/spicedisplayrenderer.h"
@@ -157,10 +158,6 @@ private:
     static void cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData);
     static void cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData);
     static void mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer userData);
-    static gboolean clipboardSelectionGrabCallback(SpiceMainChannel *channel, guint selection, guint32 *types, guint ntypes, gpointer userData);
-    static gboolean clipboardSelectionRequestCallback(SpiceMainChannel *channel, guint selection, guint32 type, gpointer userData);
-    static void clipboardSelectionCallback(SpiceMainChannel *channel, guint selection, guint32 type, gconstpointer data, guint size, gpointer userData);
-    void hostClipboardChanged();
     static void cursorHideCallback(SpiceCursorChannel *channel, gpointer userData);
     static void cursorResetCallback(SpiceCursorChannel *channel, gpointer userData);
     void clearCursor();
@@ -190,9 +187,7 @@ private:
     SpiceSession *m_session = nullptr;
     SpiceMainChannel *m_main_channel = nullptr;
     SpiceInputsChannel *m_inputs_channel = nullptr;
-    QMetaObject::Connection m_clipboardConnection;
-    bool m_settingClipboard = false;
-    bool m_pendingHostGrab = false;
+    ClipboardManager *m_clipboard = nullptr;
 
     int m_current_button_mask = 0;
     bool m_pointerGrabbed = false;
@@ -218,8 +213,6 @@ private:
     QString m_spiceCaCertificate;
     int m_clipboardTextMode = 3;
     int m_clipboardFilesMode = 0;
-    QString m_lastGuestClipboardText;
-    QString m_lastSentHostClipboard;
     int m_spiceTlsPort = 0;
     QString m_spicePassword;
 

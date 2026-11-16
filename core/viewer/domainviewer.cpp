@@ -3,6 +3,8 @@
 
 #include "viewer/domainviewer.h"
 
+#include "viewer/clipboardmanager.h"
+
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 #include <spice-client.h>
@@ -12,7 +14,6 @@
 
 #include <KLocalizedString>
 
-#include <QClipboard>
 #include <QCursor>
 #include <QDomDocument>
 #include <QDomElement>
@@ -47,6 +48,7 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     , m_audioFormat()
 {
     setFlag(ItemHasContents, true);
+    m_clipboard = new ClipboardManager(this);
     setAcceptedMouseButtons(Qt::AllButtons);
     setAcceptHoverEvents(true);
     setFlag(ItemIsFocusScope, true);
@@ -270,6 +272,9 @@ void DomainViewer::disconnectFromSpice()
     }
 
     stopRecording();
+    if (m_clipboard) {
+        m_clipboard->detach();
+    }
     m_main_channel = nullptr;
     m_inputs_channel = nullptr;
     m_recordChannel = nullptr;
@@ -293,14 +298,7 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         spice_channel_connect(channel);
         item->m_main_channel = SPICE_MAIN_CHANNEL(channel);
         g_signal_connect(channel, "main-agent-update", G_CALLBACK(mainAgentUpdateCallback), item);
-        g_signal_connect(channel, "main-clipboard-selection-grab", G_CALLBACK(clipboardSelectionGrabCallback), item);
-        g_signal_connect(channel, "main-clipboard-selection-request", G_CALLBACK(clipboardSelectionRequestCallback), item);
-        g_signal_connect(channel, "main-clipboard-selection", G_CALLBACK(clipboardSelectionCallback), item);
-        if (!item->m_clipboardConnection) {
-            item->m_clipboardConnection = QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, item, [item]() {
-                item->hostClipboardChanged();
-            });
-        }
+        item->m_clipboard->attach(SPICE_MAIN_CHANNEL(channel));
         QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
@@ -339,106 +337,11 @@ void DomainViewer::mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer u
     item->updateDisplayResolution();
 }
 
-gboolean DomainViewer::clipboardSelectionGrabCallback(SpiceMainChannel *channel, guint selection, guint32 *types, guint ntypes, gpointer userData)
-{
-    Q_UNUSED(types);
-    Q_UNUSED(ntypes);
-    auto *item = static_cast<DomainViewer *>(userData);
-    if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
-        return TRUE;
-    }
-    if (item->m_pendingHostGrab) {
-        qCInfo(KARTON_DEBUG) << "clipboard: guest grab ignored while host clipboard is pending";
-        item->m_pendingHostGrab = false;
-        return TRUE;
-    }
-    qCInfo(KARTON_DEBUG) << "clipboard: guest has data, requesting text";
-    // The guest has clipboard data. Ask for UTF-8 text; the reply is handled
-    // by clipboardSelectionCallback().
-    spice_main_channel_clipboard_selection_request(channel, selection, VD_AGENT_CLIPBOARD_UTF8_TEXT);
-    return TRUE;
-}
-
-gboolean DomainViewer::clipboardSelectionRequestCallback(SpiceMainChannel *channel, guint selection, guint32 type, gpointer userData)
-{
-    auto *item = static_cast<DomainViewer *>(userData);
-    if (item->m_clipboardTextMode != 1 && item->m_clipboardTextMode != 3) {
-        return FALSE;
-    }
-    if (type != VD_AGENT_CLIPBOARD_UTF8_TEXT) {
-        return FALSE;
-    }
-    const QByteArray text = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
-    item->m_pendingHostGrab = false;
-    qCInfo(KARTON_DEBUG) << "clipboard: guest requested text, sending" << text.size() << "bytes, selection" << selection << "by-demand"
-                         << spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD_BY_DEMAND) << "selection-cap"
-                         << spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD_SELECTION);
-    // Let the main channel finish processing the request before answering;
-    // calling notify synchronously from the signal handler can race the
-    // clipboard request on the guest side.
-    g_object_ref(channel);
-    QTimer::singleShot(0, qApp, [channel, selection, text]() {
-        spice_main_channel_clipboard_selection_notify(channel,
-                                                      selection,
-                                                      VD_AGENT_CLIPBOARD_UTF8_TEXT,
-                                                      reinterpret_cast<const guchar *>(text.constData()),
-                                                      static_cast<size_t>(text.size()));
-        g_object_unref(channel);
-    });
-    return TRUE;
-}
-
-void DomainViewer::clipboardSelectionCallback(SpiceMainChannel *channel, guint selection, guint32 type, gconstpointer data, guint size, gpointer userData)
-{
-    Q_UNUSED(channel);
-    Q_UNUSED(selection);
-    if (type != VD_AGENT_CLIPBOARD_UTF8_TEXT || !data) {
-        return;
-    }
-    auto *item = static_cast<DomainViewer *>(userData);
-    if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
-        return;
-    }
-    const QString text = QString::fromUtf8(static_cast<const char *>(data), static_cast<int>(size));
-    qCInfo(KARTON_DEBUG) << "clipboard: received text from guest" << text.size() << "chars";
-    item->m_lastGuestClipboardText = text;
-    item->m_lastSentHostClipboard = text;
-    item->m_settingClipboard = true;
-    QGuiApplication::clipboard()->setText(text, QClipboard::Clipboard);
-    item->m_settingClipboard = false;
-}
-
 void DomainViewer::syncHostClipboard()
 {
-    if (m_main_channel) {
-        hostClipboardChanged();
+    if (m_clipboard) {
+        m_clipboard->syncHostClipboard();
     }
-}
-
-void DomainViewer::hostClipboardChanged()
-{
-    if (!m_main_channel || m_settingClipboard) {
-        return;
-    }
-    if (m_clipboardTextMode != 1 && m_clipboardTextMode != 3) {
-        return;
-    }
-    const QString text = QGuiApplication::clipboard()->text(QClipboard::Clipboard);
-    qCInfo(KARTON_DEBUG) << "clipboard: host changed, mode" << m_clipboardTextMode << "text" << text.size() << "chars";
-    if (text.isEmpty()) {
-        return;
-    }
-    if (!m_lastGuestClipboardText.isEmpty() && text == m_lastGuestClipboardText) {
-        m_lastGuestClipboardText.clear();
-        return;
-    }
-    if (text == m_lastSentHostClipboard) {
-        return;
-    }
-    m_lastSentHostClipboard = text;
-    guint32 types[] = {VD_AGENT_CLIPBOARD_UTF8_TEXT};
-    m_pendingHostGrab = true;
-    spice_main_channel_clipboard_selection_grab(m_main_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD, types, 1);
 }
 
 // ========================== Display rendering  ========================
@@ -932,6 +835,9 @@ void DomainViewer::setClipboardTextMode(int mode)
         return;
     }
     m_clipboardTextMode = mode;
+    if (m_clipboard) {
+        m_clipboard->setTextMode(mode);
+    }
     Q_EMIT clipboardTextModeChanged();
 }
 
@@ -942,6 +848,9 @@ void DomainViewer::setClipboardFilesMode(int mode)
         return;
     }
     m_clipboardFilesMode = mode;
+    if (m_clipboard) {
+        m_clipboard->setFilesMode(mode);
+    }
     Q_EMIT clipboardFilesModeChanged();
 }
 
