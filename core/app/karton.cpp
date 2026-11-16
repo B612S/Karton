@@ -1322,6 +1322,16 @@ bool Karton::addChannel(const Domain *domain, const QString &name)
     if (!domain || name.isEmpty()) {
         return false;
     }
+    if (name == QStringLiteral("com.redhat.spice.0")) {
+        return attachXmlDevice(domain, QStringLiteral("<channel type='spicevmc'><target type='virtio' name='com.redhat.spice.0'/></channel>"));
+    }
+    if (name == QStringLiteral("org.spice-space.webdav.0")) {
+        return attachXmlDevice(domain,
+                               QStringLiteral("<channel type='spiceport'>"
+                                              "<source channel='org.spice-space.webdav.0'/>"
+                                              "<target type='virtio' name='org.spice-space.webdav.0'/>"
+                                              "</channel>"));
+    }
     return attachXmlDevice(domain, QStringLiteral("<channel type='unix'><target type='virtio' name='%1'/></channel>").arg(name));
 }
 
@@ -1619,7 +1629,11 @@ bool Karton::ensureWebdavChannel(const Domain *domain)
     if (current.contains("org.spice-space.webdav.0")) {
         return true;
     }
-    return attachXmlDevice(domain, QStringLiteral("<channel type='spiceport'><target type='virtio' name='org.spice-space.webdav.0'/></channel>"));
+    return attachXmlDevice(domain,
+                           QStringLiteral("<channel type='spiceport'>"
+                                          "<source channel='org.spice-space.webdav.0'/>"
+                                          "<target type='virtio' name='org.spice-space.webdav.0'/>"
+                                          "</channel>"));
 }
 
 bool Karton::disableWebdavChannel(const Domain *domain)
