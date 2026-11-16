@@ -408,7 +408,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -521,7 +520,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -586,7 +584,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -662,7 +659,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -835,7 +831,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -919,7 +914,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1033,7 +1027,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1111,7 +1104,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
 
@@ -1165,7 +1157,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
 
@@ -1219,7 +1210,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1292,7 +1282,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
@@ -1346,7 +1335,6 @@ Kirigami.Dialog {
                 Layout.fillHeight: true
                 implicitHeight: 0
                 contentWidth: availableWidth
-                contentHeight: contentItem ? contentItem.implicitHeight : 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16

@@ -217,7 +217,6 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         contentWidth: availableWidth
-                        contentHeight: contentItem ? contentItem.implicitHeight : 0
                         clip: true
 
                         ColumnLayout {

@@ -15,10 +15,17 @@ Controls.ScrollView {
             if (event.angleDelta.y === 0) {
                 return;
             }
-            const viewport = root.height;
-            const maximum = Math.max(0, root.contentHeight - viewport);
-            const step = Math.max(40, viewport * 0.15);
-            root.contentY = Math.min(maximum, Math.max(0, root.contentY - event.angleDelta.y / 120 * step));
+            const flickable = root.contentItem;
+            if (!flickable || flickable.contentY === undefined || flickable.contentHeight === undefined) {
+                // Let the default ScrollView implementation handle it.
+                return;
+            }
+            const maximum = Math.max(0, flickable.contentHeight - flickable.height);
+            if (maximum <= 0) {
+                return;
+            }
+            const step = Math.max(40, flickable.height * 0.15);
+            flickable.contentY = Math.min(maximum, Math.max(0, flickable.contentY - event.angleDelta.y / 120 * step));
             event.accepted = true;
         }
     }
