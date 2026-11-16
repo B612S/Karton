@@ -5,11 +5,13 @@
 // instantiates components that Main.qml only creates at runtime, so invalid
 // property assignments in those components fail the QML test suite.
 import QtQuick
+import org.kde.kirigami as Kirigami
 import org.kde.karton
 
-Item {
+Kirigami.ApplicationWindow {
     width: 1
     height: 1
+    visible: false
 
     VMViewerWindow {
         domain: null

@@ -220,9 +220,20 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
         padding: 0
-        globalToolBarItem.opacity: viewerWindow.fullScreenToolbarOpacity
-        globalToolBarItem.enabled: !viewerWindow.isFullScreen || viewerWindow.fullScreenToolbarVisible
-        globalToolBarItem.background.color: Qt.rgba(0, 0, 0, 0.30)
+
+        Component.onCompleted: Qt.callLater(applyViewerToolbarStyle)
+
+        function applyViewerToolbarStyle() {
+            if (!globalToolBarItem) {
+                return;
+            }
+            globalToolBarItem.opacity = Qt.binding(function() {
+                return viewerWindow.fullScreenToolbarOpacity * (viewerWindow.isFullScreen ? 0.82 : 1);
+            });
+            globalToolBarItem.enabled = Qt.binding(function() {
+                return !viewerWindow.isFullScreen || viewerWindow.fullScreenToolbarVisible;
+            });
+        }
 
         HoverHandler {
             id: toolbarHover

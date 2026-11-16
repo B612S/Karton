@@ -13,12 +13,29 @@
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QTimer>
 #include <QVulkanInstance>
 #include <QtQml>
 #include <cstdlib>
 
 #include "karton_debug.h"
 #include "karton_version.h"
+
+static bool qmlCheckFailed = false;
+
+static void qmlCheckMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+{
+    Q_UNUSED(context);
+    if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg) {
+        if (message.contains(QStringLiteral("qrc:/qt/qml/org/kde/karton/"))
+            && (message.contains(QStringLiteral("Cannot")) || message.contains(QStringLiteral("non-existent"))
+                || message.contains(QStringLiteral("unavailable")) || message.contains(QStringLiteral("failed to load"))
+                || message.contains(QStringLiteral("as it is null")))) {
+            qmlCheckFailed = true;
+        }
+    }
+    fprintf(stderr, "%s\n", qPrintable(message));
+}
 
 static QSGRendererInterface::GraphicsApi preferredGraphicsApi()
 {
@@ -84,6 +101,9 @@ int main(int argc, char *argv[])
 
     KLocalization::setupLocalizedContext(&engine);
     const bool checkQml = QCoreApplication::arguments().contains(QStringLiteral("--check-qml"));
+    if (checkQml) {
+        qInstallMessageHandler(qmlCheckMessageHandler);
+    }
     engine.loadFromModule("org.kde.karton", "Main");
 
     if (engine.rootObjects().isEmpty()) {
@@ -100,9 +120,13 @@ int main(int argc, char *argv[])
         if (engine.rootObjects().isEmpty()) {
             return -1;
         }
-        // QML starts helper threads and Qt's normal teardown can wait on them
-        // in a headless test run. The smoke test only needs the load result.
-        std::_Exit(0);
+        // Let the event loop deliver delayed component creation and bindings;
+        // otherwise a null visual item or a late binding error can escape the
+        // smoke test. QML starts helper threads, so exit without Qt teardown.
+        QTimer::singleShot(500, &app, []() {
+            std::_Exit(qmlCheckFailed ? 1 : 0);
+        });
+        return app.exec();
     }
 
     return app.exec();
