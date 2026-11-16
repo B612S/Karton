@@ -100,6 +100,13 @@ int main(int argc, char *argv[])
     qCInfo(KARTON_DEBUG) << "Hello! Starting Karton...";
 
     KLocalization::setupLocalizedContext(&engine);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
+        // Qt Wayland/NVIDIA can abort while destroying platform windows during
+        // application teardown. All Karton state has already been persisted by
+        // the QML close handlers; exit once the event loop has stopped.
+        std::_Exit(0);
+    });
+
     const bool checkQml = QCoreApplication::arguments().contains(QStringLiteral("--check-qml"));
     if (checkQml) {
         qInstallMessageHandler(qmlCheckMessageHandler);
