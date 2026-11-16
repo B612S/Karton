@@ -47,6 +47,14 @@ Kirigami.Dialog {
         }
     }
 
+    customFooterActions: [
+        Kirigami.Action {
+            text: i18n("Close")
+            icon.name: "dialog-cancel-symbolic"
+            onTriggered: root.close()
+        }
+    ]
+
     ColumnLayout {
         Layout.fillWidth: true
         width: root.availableWidth
@@ -196,12 +204,5 @@ Kirigami.Dialog {
             }
         }
 
-        Controls.Button {
-            Layout.alignment: Qt.AlignRight
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.bottomMargin: Kirigami.Units.largeSpacing
-            text: i18n("Close")
-            onClicked: root.close()
-        }
     }
 }
