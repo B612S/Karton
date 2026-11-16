@@ -209,9 +209,6 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    pageStack.globalToolBar.opacity: fullScreenToolbarOpacity * (isFullScreen ? 0.82 : 1)
-    pageStack.globalToolBar.enabled: !isFullScreen || fullScreenToolbarVisible
-
     Binding {
         target: pageStack.globalToolBar
         property: "preferredHeight"
