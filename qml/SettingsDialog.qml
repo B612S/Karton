@@ -139,6 +139,7 @@ Kirigami.Dialog {
         panicCheck.checked = root.hasXmlDevice("panic");
         panicModelCombo.currentIndex = Math.max(0, ["isa", "pvpanic"].indexOf(panicCheck.checked ? root.deviceByTag("panic").model : ""));
         vsockCheck.checked = root.hasXmlDevice("vsock");
+        memoryBackingCheck.checked = root.hardware.sharedMemoryBacking === true;
         const shmem = root.deviceByTag("shmem");
         shmemCheck.checked = shmem !== null;
         shmemNameField.text = shmem ? shmem.name : "karton";
@@ -1752,22 +1753,14 @@ Kirigami.Dialog {
                     }
                 }
 
-                GridLayout {
-                    columns: 2
-                    columnSpacing: 16
-                    rowSpacing: 16
+                Controls.CheckBox {
+                    id: memoryBackingCheck
+                    text: i18n("Shared memory backing (virtiofs)")
                     Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Controls.Label {
-                        text: i18n("Shared memory backing (virtiofs)")
-                        Layout.fillWidth: true
-                        opacity: 0.7
-                    }
-                    Controls.Label {
-                        text: root.hardware.sharedMemoryBacking === true ? i18n("Enabled") : i18n("Disabled")
-                        opacity: 0.7
-                        Layout.preferredWidth: 260
-                        Layout.alignment: Qt.AlignRight
+                    onToggled: {
+                        if (!root.optionalUpdating && Karton.setSharedMemoryBacking(root.domain, checked)) {
+                            root.refresh();
+                        }
                     }
                 }
 

@@ -741,6 +741,70 @@ QVariantMap Karton::domainHardwareInfo(const Domain *domain) const
     return info;
 }
 
+bool Karton::setSharedMemoryBacking(const Domain *domain, bool enabled)
+{
+    if (!domain || !domain->domainPtr() || !m_conn) {
+        return false;
+    }
+    char *xmlDesc = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xmlDesc) {
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xmlDesc))) {
+        free(xmlDesc);
+        return false;
+    }
+    free(xmlDesc);
+
+    QDomElement root = document.documentElement();
+    QDomElement memoryBacking = root.firstChildElement(QStringLiteral("memoryBacking"));
+    if (enabled) {
+        if (memoryBacking.isNull()) {
+            memoryBacking = document.createElement(QStringLiteral("memoryBacking"));
+            const QDomElement currentMemory = root.firstChildElement(QStringLiteral("currentMemory"));
+            if (!currentMemory.isNull()) {
+                root.insertAfter(memoryBacking, currentMemory);
+            } else {
+                root.insertBefore(memoryBacking, root.firstChildElement(QStringLiteral("vcpu")));
+            }
+        }
+        QDomElement source = memoryBacking.firstChildElement(QStringLiteral("source"));
+        if (source.isNull()) {
+            source = document.createElement(QStringLiteral("source"));
+            memoryBacking.appendChild(source);
+        }
+        source.setAttribute(QStringLiteral("type"), QStringLiteral("memfd"));
+        QDomElement access = memoryBacking.firstChildElement(QStringLiteral("access"));
+        if (access.isNull()) {
+            access = document.createElement(QStringLiteral("access"));
+            memoryBacking.appendChild(access);
+        }
+        access.setAttribute(QStringLiteral("mode"), QStringLiteral("shared"));
+    } else if (!memoryBacking.isNull()) {
+        const QDomElement access = memoryBacking.firstChildElement(QStringLiteral("access"));
+        if (!access.isNull()) {
+            memoryBacking.removeChild(access);
+        }
+        const QDomElement source = memoryBacking.firstChildElement(QStringLiteral("source"));
+        if (!source.isNull() && source.attribute(QStringLiteral("type")) == QStringLiteral("memfd")) {
+            memoryBacking.removeChild(source);
+        }
+        if (!memoryBacking.hasChildNodes()) {
+            root.removeChild(memoryBacking);
+        }
+    }
+
+    virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    if (!redefined) {
+        Q_EMIT errorOccurred(i18nc("%1 is the error message", "Failed to update shared memory backing: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    virDomainFree(redefined);
+    refreshDomainList();
+    return true;
+}
+
 bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &settings)
 {
     if (!domain || !domain->domainPtr() || !m_conn) {
