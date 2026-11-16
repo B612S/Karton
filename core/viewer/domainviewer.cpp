@@ -298,12 +298,12 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         g_signal_connect(channel, "main-clipboard-selection", G_CALLBACK(clipboardSelectionCallback), item);
         if (!item->m_clipboardConnection) {
             item->m_clipboardConnection = QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, item, [item]() {
-                item->hostClipboardChanged();
+                item->scheduleHostClipboardSync();
             });
         }
         QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
         QTimer::singleShot(250, item, [item]() {
-            item->hostClipboardChanged();
+            item->scheduleHostClipboardSync();
         });
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
@@ -406,8 +406,16 @@ void DomainViewer::clipboardSelectionCallback(SpiceMainChannel *channel, guint s
 
 void DomainViewer::syncHostClipboard()
 {
-    // Give the host clipboard manager a moment to settle after focus changes.
-    QTimer::singleShot(100, this, &DomainViewer::hostClipboardChanged);
+    // On Wayland the clipboard offer may not be readable immediately after a
+    // focus change or while another application owns it. Retry a few times.
+    scheduleHostClipboardSync();
+}
+
+void DomainViewer::scheduleHostClipboardSync()
+{
+    for (const int delay : {50, 250, 750}) {
+        QTimer::singleShot(delay, this, &DomainViewer::hostClipboardChanged);
+    }
 }
 
 void DomainViewer::hostClipboardChanged()
