@@ -25,10 +25,10 @@ Kirigami.ScrollablePage {
         }
     }
 
-    topPadding: 0
-    bottomPadding: Kirigami.Units.gridUnit
-    leftPadding: 0
-    rightPadding: 0
+    topPadding: 24
+    bottomPadding: 24
+    leftPadding: 24
+    rightPadding: 24
 
     Connections {
         target: Karton
