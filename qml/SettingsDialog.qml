@@ -82,6 +82,8 @@ Kirigami.Dialog {
         videoHeadsSpin.value = Math.max(1, hardware.videoHeads || 1);
         accel3dCheck.checked = hardware.accel3d === true;
         soundCombo.currentIndex = Math.max(0, soundModels.indexOf(hardware.soundModel));
+        soundOutputCheck.checked = Karton.audioPlaybackEnabled(domain);
+        microphoneCheck.checked = Karton.microphoneEnabled(domain);
         descriptionField.text = hardware.description || "";
         if (disks.length > 0) {
             if (diskTargetCombo.currentIndex < 0) {
@@ -1057,6 +1059,40 @@ Kirigami.Dialog {
                             model: root.soundLabels
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("Sound output")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.CheckBox {
+                            id: soundOutputCheck
+                            Layout.alignment: Qt.AlignRight
+                            onToggled: {
+                                Karton.saveAudioPlaybackEnabled(root.domain, checked);
+                                const viewer = Karton.viewerForDomain(root.domain);
+                                if (viewer && viewer.domainViewerItem) {
+                                    viewer.domainViewerItem.audioPlaybackEnabled = checked;
+                                }
+                            }
+                        }
+                        Controls.Label {
+                            text: i18n("Microphone")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.CheckBox {
+                            id: microphoneCheck
+                            Layout.alignment: Qt.AlignRight
+                            onToggled: {
+                                Karton.saveMicrophoneEnabled(root.domain, checked);
+                                const viewer = Karton.viewerForDomain(root.domain);
+                                if (viewer && viewer.domainViewerItem) {
+                                    viewer.domainViewerItem.microphoneEnabled = checked;
+                                }
+                            }
                         }
                     }
                     Item { Layout.fillHeight: true }

@@ -1006,6 +1006,42 @@ void Karton::saveViewerWindowSize(const Domain *domain, int width, int height)
     settings.setValue(prefix + QStringLiteral("height"), height);
 }
 
+bool Karton::audioPlaybackEnabled(const Domain *domain) const
+{
+    if (!domain) {
+        return true;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return settings.value(QStringLiteral("audio/%1/playback").arg(domain->config()->uuid()), true).toBool();
+}
+
+void Karton::saveAudioPlaybackEnabled(const Domain *domain, bool enabled)
+{
+    if (!domain) {
+        return;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("audio/%1/playback").arg(domain->config()->uuid()), enabled);
+}
+
+bool Karton::microphoneEnabled(const Domain *domain) const
+{
+    if (!domain) {
+        return false;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return settings.value(QStringLiteral("audio/%1/microphone").arg(domain->config()->uuid()), false).toBool();
+}
+
+void Karton::saveMicrophoneEnabled(const Domain *domain, bool enabled)
+{
+    if (!domain) {
+        return;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("audio/%1/microphone").arg(domain->config()->uuid()), enabled);
+}
+
 QVariantMap Karton::domainDisplayResolution(const Domain *domain) const
 {
     QVariantMap resolution;

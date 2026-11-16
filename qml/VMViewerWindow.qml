@@ -23,6 +23,7 @@ Kirigami.ApplicationWindow {
     readonly property bool isRunning: domain ? domain.isActive : false
     property bool wasRunning: false
     property bool sizeRestored: false
+    property alias domainViewerItem: domainViewer
     property int fixedContentWidth: 0
     property int fixedContentHeight: 0
 
@@ -77,6 +78,8 @@ Kirigami.ApplicationWindow {
             fixedContentHeight = resolution.height;
             domainViewer.setFixedDisplayResolution(resolution.width, resolution.height);
         }
+        domainViewer.audioPlaybackEnabled = Karton.audioPlaybackEnabled(domain);
+        domainViewer.microphoneEnabled = Karton.microphoneEnabled(domain);
         const savedSize = Karton.viewerWindowSize(domain);
         if (savedSize.width > 0 && savedSize.height > 0) {
             width = Math.max(320, Math.min(savedSize.width, Screen.width * 0.95));

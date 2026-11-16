@@ -293,7 +293,9 @@ When testing destructive operations, prefer domains whose names start with
   form triggered a `Kirigami.Dialog` binding loop on `y`.
 - Window sizes are persisted in the same `karton.conf`: one main-window size and
   a separate viewer size keyed by each VM UUID, saved after resize and on close.
-  The Display settings page also stores an optional fixed guest resolution per
+  The Sound settings page stores per-VM playback and microphone enable flags
+  (`audio/<uuid>/playback|microphone`); the viewer applies them to SPICE
+  playback and record channels. The Display settings page also stores an optional fixed guest resolution per
   VM (`display/<uuid>/width|height`), with presets and a Custom width/height
   pair. When set, the viewer requests that exact
   SPICE resolution, scales the content to fit the screen, and locks the window

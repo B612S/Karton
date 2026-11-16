@@ -250,8 +250,10 @@ void DomainViewer::disconnectFromSpice()
         m_session = nullptr;
     }
 
+    stopRecording();
     m_main_channel = nullptr;
     m_inputs_channel = nullptr;
+    m_recordChannel = nullptr;
     m_connected = false;
     m_lastDisplayResolution = QSize();
     releasePointerGrab();
@@ -284,6 +286,12 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         g_signal_connect(channel, "playback-start", G_CALLBACK(playback_start_callback), item);
         g_signal_connect(channel, "playback-data", G_CALLBACK(playback_data_callback), item);
         g_signal_connect(channel, "playback-stop", G_CALLBACK(playback_stop_callback), item);
+    } else if (SPICE_IS_RECORD_CHANNEL(channel)) {
+        qCInfo(KARTON_DEBUG) << "SPICE: Audio record connected";
+        spice_channel_connect(channel);
+        item->m_recordChannel = SPICE_RECORD_CHANNEL(channel);
+        g_signal_connect(channel, "record-start", G_CALLBACK(record_start_callback), item);
+        g_signal_connect(channel, "record-stop", G_CALLBACK(record_stop_callback), item);
     } else if (SPICE_IS_CURSOR_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Cursor connected";
         item->attachCursorChannel(channel);
@@ -698,6 +706,9 @@ void DomainViewer::playback_start_callback(SpicePlaybackChannel *channel, gint f
     qCInfo(KARTON_DEBUG) << "Audio playback starting - Format:" << format << "Channels:" << channels << "Rate:" << rate;
 
     item->stopAudio();
+    if (!item->m_audioPlaybackEnabled) {
+        return;
+    }
 
     item->m_audioFormat.setSampleRate(rate);
     item->m_audioFormat.setChannelCount(channels);
@@ -737,6 +748,93 @@ void DomainViewer::stopAudio()
     }
 
     m_audioDevice = nullptr;
+}
+
+void DomainViewer::setAudioPlaybackEnabled(bool enabled)
+{
+    if (m_audioPlaybackEnabled == enabled) {
+        return;
+    }
+    m_audioPlaybackEnabled = enabled;
+    if (!enabled) {
+        stopAudio();
+    }
+    Q_EMIT audioPlaybackEnabledChanged();
+}
+
+void DomainViewer::setMicrophoneEnabled(bool enabled)
+{
+    if (m_microphoneEnabled == enabled) {
+        return;
+    }
+    m_microphoneEnabled = enabled;
+    if (enabled) {
+        if (m_recording) {
+            startRecording();
+        }
+    } else {
+        stopRecording();
+    }
+    Q_EMIT microphoneEnabledChanged();
+}
+
+void DomainViewer::record_start_callback(SpiceRecordChannel *channel, gint format, gint channels, gint rate, gpointer user_data)
+{
+    Q_UNUSED(channel);
+    Q_UNUSED(format);
+    DomainViewer *item = static_cast<DomainViewer *>(user_data);
+    item->m_recording = true;
+    item->m_recordFormat.setSampleRate(rate);
+    item->m_recordFormat.setChannelCount(channels);
+    item->m_recordFormat.setSampleFormat(QAudioFormat::Int16);
+    if (item->m_microphoneEnabled) {
+        item->startRecording();
+    }
+}
+
+void DomainViewer::record_stop_callback(SpiceRecordChannel *channel, gpointer user_data)
+{
+    Q_UNUSED(channel);
+    DomainViewer *item = static_cast<DomainViewer *>(user_data);
+    item->m_recording = false;
+    item->stopRecording();
+}
+
+void DomainViewer::startRecording()
+{
+    stopRecording();
+    if (!m_recordChannel || !m_microphoneEnabled) {
+        return;
+    }
+    m_audioSource = new QAudioSource(m_recordFormat, this);
+    m_recordDevice = m_audioSource->start();
+    if (!m_recordDevice) {
+        delete m_audioSource;
+        m_audioSource = nullptr;
+        return;
+    }
+    connect(m_recordDevice, &QIODevice::readyRead, this, &DomainViewer::readRecordingData);
+}
+
+void DomainViewer::stopRecording()
+{
+    if (m_audioSource) {
+        m_audioSource->stop();
+        delete m_audioSource;
+        m_audioSource = nullptr;
+    }
+    m_recordDevice = nullptr;
+}
+
+void DomainViewer::readRecordingData()
+{
+    if (!m_recordDevice || !m_recordChannel || !m_microphoneEnabled) {
+        return;
+    }
+    const QByteArray data = m_recordDevice->readAll();
+    if (!data.isEmpty()) {
+        spice_record_channel_send_data(m_recordChannel, const_cast<char *>(data.constData()), data.size(), static_cast<guint32>(g_get_monotonic_time() / 1000));
+    }
 }
 
 // ========================== Input handling =============================

@@ -8,6 +8,7 @@
 
 #include <QAudioFormat>
 #include <QAudioSink>
+#include <QAudioSource>
 #include <QIODevice>
 #include <QImage>
 #include <QMutex>
@@ -33,6 +34,8 @@ class DomainViewer : public QQuickItem
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(bool pointerGrabbed READ pointerGrabbed NOTIFY pointerGrabbedChanged)
     Q_PROPERTY(bool agentConnected READ agentConnected NOTIFY agentConnectedChanged)
+    Q_PROPERTY(bool audioPlaybackEnabled READ audioPlaybackEnabled WRITE setAudioPlaybackEnabled NOTIFY audioPlaybackEnabledChanged)
+    Q_PROPERTY(bool microphoneEnabled READ microphoneEnabled WRITE setMicrophoneEnabled NOTIFY microphoneEnabledChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -58,6 +61,16 @@ public:
     {
         return m_agentConnected;
     }
+    bool audioPlaybackEnabled() const
+    {
+        return m_audioPlaybackEnabled;
+    }
+    void setAudioPlaybackEnabled(bool enabled);
+    bool microphoneEnabled() const
+    {
+        return m_microphoneEnabled;
+    }
+    void setMicrophoneEnabled(bool enabled);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
 
@@ -94,6 +107,8 @@ Q_SIGNALS:
     void errorMessageChanged();
     void pointerGrabbedChanged();
     void agentConnectedChanged();
+    void audioPlaybackEnabledChanged();
+    void microphoneEnabledChanged();
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
@@ -120,6 +135,11 @@ private:
     static void playback_start_callback(SpicePlaybackChannel *channel, gint format, gint channels, gint rate, gpointer user_data);
     static void playback_data_callback(SpicePlaybackChannel *channel, gpointer data, gint size, gpointer user_data);
     static void playback_stop_callback(SpicePlaybackChannel *channel, gpointer user_data);
+    static void record_start_callback(SpiceRecordChannel *channel, gint format, gint channels, gint rate, gpointer user_data);
+    static void record_stop_callback(SpiceRecordChannel *channel, gpointer user_data);
+    void startRecording();
+    void stopRecording();
+    void readRecordingData();
 
     void updatePointer(const QPointF &position, int buttonMask);
     void updateCursorPaintPosition();
@@ -151,6 +171,13 @@ private:
     QAudioSink *m_audioSink = nullptr;
     QIODevice *m_audioDevice = nullptr;
     QAudioFormat m_audioFormat;
+    SpiceRecordChannel *m_recordChannel = nullptr;
+    QAudioSource *m_audioSource = nullptr;
+    QIODevice *m_recordDevice = nullptr;
+    QAudioFormat m_recordFormat;
+    bool m_audioPlaybackEnabled = true;
+    bool m_microphoneEnabled = false;
+    bool m_recording = false;
 
     QMutex m_cursorMutex;
     QImage m_cursorImage;

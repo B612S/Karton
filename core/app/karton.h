@@ -97,6 +97,10 @@ public Q_SLOTS:
     Q_INVOKABLE void saveMainWindowSize(int width, int height);
     Q_INVOKABLE QVariantMap viewerWindowSize(const Domain *domain) const;
     Q_INVOKABLE void saveViewerWindowSize(const Domain *domain, int width, int height);
+    Q_INVOKABLE bool audioPlaybackEnabled(const Domain *domain) const;
+    Q_INVOKABLE void saveAudioPlaybackEnabled(const Domain *domain, bool enabled);
+    Q_INVOKABLE bool microphoneEnabled(const Domain *domain) const;
+    Q_INVOKABLE void saveMicrophoneEnabled(const Domain *domain, bool enabled);
     Q_INVOKABLE QVariantMap domainDisplayResolution(const Domain *domain) const;
     Q_INVOKABLE void saveDomainDisplayResolution(const Domain *domain, int width, int height);
     Q_INVOKABLE QString domainXml(const Domain *domain) const;
