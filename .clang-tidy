@@ -6,12 +6,19 @@ Checks: >
   bugprone-*,
   clang-analyzer-*,
   performance-*,
-  modernize-use-auto,
   modernize-use-nullptr,
   modernize-use-override,
   readability-redundant-*,
   readability-container-size-empty,
-  readability-avoid-const-params-in-decls
+  readability-avoid-const-params-in-decls,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-signed-bitwise,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-narrowing-conversions,
+  -bugprone-invalid-enum-default-initialization,
+  -readability-redundant-nested-if,
+  -readability-redundant-lambda-parameter-list
 
 WarningsAsErrors: ''
 

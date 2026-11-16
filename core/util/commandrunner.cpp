@@ -8,7 +8,7 @@
 
 #include "karton_debug.h"
 
-void CommandRunner::runCommand(const QString &program, const QStringList &arguments, CommandCallback callback)
+void CommandRunner::runCommand(const QString &program, const QStringList &arguments, const CommandCallback &callback)
 {
     qCDebug(KARTON_DEBUG) << "Running command:" << program << arguments;
 

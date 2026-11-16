@@ -16,7 +16,7 @@
 
 GlScanoutRenderer::~GlScanoutRenderer()
 {
-    detach();
+    GlScanoutRenderer::detach();
 }
 
 void GlScanoutRenderer::attach(SpiceDisplayChannel *channel)

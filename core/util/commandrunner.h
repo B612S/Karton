@@ -19,7 +19,7 @@ public:
 
     // Starts a command without blocking. The callback runs on the object's
     // thread with the exit status and stdout (or stderr on failure).
-    void runCommand(const QString &program, const QStringList &arguments, CommandCallback callback);
+    void runCommand(const QString &program, const QStringList &arguments, const CommandCallback &callback);
 
     // Runs a command and waits for it to finish. Returns true only when the
     // process started and exited with code 0.

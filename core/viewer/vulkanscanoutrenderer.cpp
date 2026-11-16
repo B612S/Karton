@@ -191,7 +191,7 @@ bool transitionImage(VkDevice device,
 
 VulkanScanoutRenderer::~VulkanScanoutRenderer()
 {
-    detach();
+    VulkanScanoutRenderer::detach();
 }
 
 void VulkanScanoutRenderer::attach(SpiceDisplayChannel *channel)
@@ -552,7 +552,7 @@ bool VulkanScanoutRenderer::importScanout(QQuickWindow *window, const Scanout &s
         QImage converted(static_cast<int>(scanout.width), static_cast<int>(scanout.height), QImage::Format_RGBA8888);
         const auto *source = static_cast<const uint16_t *>(mapped);
         for (quint32 y = 0; y < scanout.height; ++y) {
-            auto *destination = reinterpret_cast<uchar *>(converted.scanLine(static_cast<int>(y)));
+            auto *destination = converted.scanLine(static_cast<int>(y));
             for (quint32 x = 0; x < scanout.width; ++x) {
                 const uint16_t pixel = source[y * scanout.width + x];
                 destination[x * 4 + 0] = static_cast<uchar>(((pixel >> 11) & 0x1f) * 255 / 31);
@@ -565,7 +565,7 @@ bool VulkanScanoutRenderer::importScanout(QQuickWindow *window, const Scanout &s
         functions->vkUnmapMemory(device, bufferMemory);
         functions->vkFreeMemory(device, bufferMemory, nullptr);
         functions->vkDestroyBuffer(device, buffer, nullptr);
-        result.cpuImage = converted;
+        result.cpuImage = std::move(converted);
     } else {
         if (!transitionImage(device,
                              functions,
@@ -666,7 +666,7 @@ QSGNode *VulkanScanoutRenderer::updatePaintNode(QQuickWindow *window, QSGNode *o
         if (image.cpuImage.isNull()) {
             m_images.push_back(image);
         }
-        m_current = image;
+        m_current = std::move(image);
         m_hasCurrent = true;
         m_textureImage = VK_NULL_HANDLE;
     }

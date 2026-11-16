@@ -8,8 +8,10 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QPainter>
+
 #include <QSaveFile>
 #include <QString>
+#include <utility>
 
 #include "domain/domainconfig.h"
 #include "karton_debug.h"
@@ -144,7 +146,7 @@ void Domain::savePreviewFrame(QImage frame)
         return;
     }
 
-    m_previewFrame = frame;
+    m_previewFrame = std::move(frame);
     Q_EMIT previewFrameChanged();
     Q_EMIT previewChanged();
 }

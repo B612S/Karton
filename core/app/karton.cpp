@@ -57,7 +57,6 @@ QString kartonConfigPath()
 Karton::Karton(QObject *parent)
     : QObject(parent)
     , m_conn(nullptr)
-    , m_domains()
     , m_monitor(nullptr)
     , m_commandRunner(new CommandRunner(this))
 {
@@ -3566,7 +3565,7 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
 
 static QString normaliseDiskFormat(const QString &format)
 {
-    const QString lower = format.trimmed().toLower();
+    QString lower = format.trimmed().toLower();
     if (lower == QStringLiteral("raw") || lower == QStringLiteral("vmdk") || lower == QStringLiteral("qcow2")) {
         return lower;
     }

@@ -1155,10 +1155,7 @@ void DomainViewer::wheelEvent(QWheelEvent *event)
         spice_inputs_channel_button_release(m_inputs_channel, SPICE_MOUSE_BUTTON_DOWN, 0);
     }
 
-    if (angleDelta.x() > 0) { // scroll right
-        // TODO: find horizontal in spice protocol
-    } else if (angleDelta.x() < 0) { // scroll left
-    }
+    // Horizontal scrolling is not part of the SPICE mouse-wheel protocol.
 
     qCDebug(KARTON_DEBUG) << "wheel event at" << event->position() << "delta:" << angleDelta;
 }
