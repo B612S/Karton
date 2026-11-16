@@ -732,6 +732,12 @@ QVariantMap Karton::domainHardwareInfo(const Domain *domain) const
     info.insert(QStringLiteral("tpmModel"), tpm.attribute(QStringLiteral("model"), QStringLiteral("tpm-crb")));
     info.insert(QStringLiteral("tpmVersion"), tpmBackend.attribute(QStringLiteral("version"), QStringLiteral("2.0")));
     info.insert(QStringLiteral("description"), root.firstChildElement(QStringLiteral("description")).text());
+    const QDomElement memoryBacking = root.firstChildElement(QStringLiteral("memoryBacking"));
+    const QDomElement memoryAccess = memoryBacking.firstChildElement(QStringLiteral("access"));
+    const QDomElement memorySource = memoryBacking.firstChildElement(QStringLiteral("source"));
+    info.insert(QStringLiteral("sharedMemoryBacking"),
+                memoryAccess.attribute(QStringLiteral("mode")) == QStringLiteral("shared")
+                    || memorySource.attribute(QStringLiteral("type")) == QStringLiteral("memfd"));
     return info;
 }
 

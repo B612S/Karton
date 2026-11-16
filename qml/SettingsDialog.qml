@@ -1716,7 +1716,7 @@ Kirigami.Dialog {
 
                 Controls.CheckBox {
                     id: shmemCheck
-                    text: i18n("Shared memory (IVSHMEM)")
+                    text: i18n("Shared memory device (IVSHMEM)")
                     Layout.fillWidth: true
                     onToggled: root.updateOptionalDevice("shmem", checked, root.shmemXml())
                 }
@@ -1749,6 +1749,25 @@ Kirigami.Dialog {
                         Layout.preferredWidth: 260
                         model: ["ivshmem-plain", "ivshmem-doorbell"]
                         onCurrentIndexChanged: root.applyOptionalSettings("shmem", root.shmemXml())
+                    }
+                }
+
+                GridLayout {
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 16
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24
+                    Controls.Label {
+                        text: i18n("Shared memory backing (virtiofs)")
+                        Layout.fillWidth: true
+                        opacity: 0.7
+                    }
+                    Controls.Label {
+                        text: root.hardware.sharedMemoryBacking === true ? i18n("Enabled") : i18n("Disabled")
+                        opacity: 0.7
+                        Layout.preferredWidth: 260
+                        Layout.alignment: Qt.AlignRight
                     }
                 }
 
