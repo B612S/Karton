@@ -37,7 +37,7 @@ Kirigami.Dialog {
     property bool xmlDirty: false
     property bool xmlLoading: false
     property bool optionalUpdating: false
-    readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 12, 7, 8, 9, 17, 13, 14, 15, 10, 11, 16]
+    readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 10, 7, 8, 9, 15, 11, 12, 13, 14]
     property string xmlContent: ""
     property string xmlLastValid: ""
     property var xmlDevices: []
@@ -452,8 +452,6 @@ Kirigami.Dialog {
                     {label: i18n("Controllers")},
                     {label: i18n("Serial & Console")},
                     {label: i18n("Other devices")},
-                    {label: i18n("OS Information")},
-                    {label: i18n("Performance")},
                     {label: i18n("XML")}
                 ]
                 delegate: Rectangle {
@@ -645,6 +643,110 @@ Kirigami.Dialog {
                         }
                         Controls.Label {
                             text: root.domain ? root.domain.config.state : ""
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                    }
+
+                    Controls.Label {
+                        text: i18n("Operating System")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
+                        Layout.topMargin: 8
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: i18n("OS ID")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Label {
+                            text: root.domain ? root.domain.config.osId : ""
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            elide: Text.ElideRight
+                        }
+                        Controls.Label {
+                            text: i18n("Short OS ID")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Label {
+                            text: root.domain ? root.domain.config.shortOsId : ""
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Controls.Label {
+                        text: i18n("Performance")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
+                        Layout.topMargin: 8
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: i18n("CPU Usage")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Label {
+                            text: root.performance.cpuPercent !== undefined ? i18n("%1 %", root.performance.cpuPercent.toFixed(1)) : "—"
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("Memory Usage")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Label {
+                            text: root.performance.memoryKiB !== undefined
+                                ? i18n("%1 MiB of %2 MiB", (root.performance.memoryKiB / 1024).toFixed(0), (root.performance.maxMemoryKiB / 1024).toFixed(0))
+                                : "—"
+                            opacity: 0.7
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: i18n("vCPUs")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.Label {
+                            text: root.performance.vcpus !== undefined ? root.performance.vcpus : ""
                             opacity: 0.7
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
@@ -1361,89 +1463,6 @@ Kirigami.Dialog {
                         opacity: 0.65
                         font.pixelSize: 12
                         text: i18n("TPM emulation requires swtpm in the host and is applied to the persistent VM configuration.")
-                    }
-                    Item { Layout.fillHeight: true }
-                }
-            }
-
-            // OS information
-            ScrollableSettingsView {
-                Layout.fillHeight: true
-                implicitHeight: 0
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 16
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 16
-
-                        Repeater {
-                            model: [
-                                { label: i18n("Name"), value: root.domain ? root.domain.config.name : "" },
-                                { label: i18n("UUID"), value: root.domain ? root.domain.config.uuid : "" },
-                                { label: i18n("OS ID"), value: root.domain ? root.domain.config.osId : "" },
-                                { label: i18n("Short OS ID"), value: root.domain ? root.domain.config.shortOsId : "" },
-                                { label: i18n("State"), value: root.domain ? root.domain.config.state : "" }
-                            ]
-                            delegate: RowLayout {
-                                Layout.fillWidth: true
-                                Controls.Label {
-                                    text: modelData.label
-                                    font.pixelSize: 14
-                                    Layout.fillWidth: true
-                                }
-                                Controls.Label {
-                                    text: modelData.value
-                                    opacity: 0.7
-                                    Layout.preferredWidth: 260
-                                    horizontalAlignment: Text.AlignRight
-                                    elide: Text.ElideRight
-                                }
-                            }
-                        }
-                    }
-                    Item { Layout.fillHeight: true }
-                }
-            }
-
-            // Performance
-            ScrollableSettingsView {
-                Layout.fillHeight: true
-                implicitHeight: 0
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 16
-
-                    GridLayout {
-                        columns: 2
-                        columnSpacing: 16
-                        rowSpacing: 16
-                        Layout.fillWidth: true
-
-                        Controls.Label { text: i18n("CPU Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
-                        Controls.Label {
-                            text: root.performance.cpuPercent !== undefined ? i18n("%1 %", root.performance.cpuPercent.toFixed(1)) : "—"
-                            opacity: 0.7
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label { text: i18n("Memory Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
-                        Controls.Label {
-                            text: root.performance.memoryKiB !== undefined
-                                ? i18n("%1 MiB of %2 MiB", (root.performance.memoryKiB / 1024).toFixed(0), (root.performance.maxMemoryKiB / 1024).toFixed(0))
-                                : "—"
-                            opacity: 0.7
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label { text: i18n("vCPUs"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
-                        Controls.Label {
-                            text: root.performance.vcpus !== undefined ? root.performance.vcpus : ""
-                            opacity: 0.7
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
                     }
                     Item { Layout.fillHeight: true }
                 }

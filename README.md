@@ -65,8 +65,6 @@ VM pages include:
 - Controllers
 - Serial & Console
 - Remaining XML devices
-- OS Information
-- Performance
 - Domain XML editor
 
 The XML editor is read-only by default, has an explicit Edit switch, syntax
