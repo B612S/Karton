@@ -1594,38 +1594,33 @@ Kirigami.Dialog {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 12
-                Controls.Label {
-                    text: i18n("Other devices")
-                    font.pixelSize: 15
-                    font.weight: Font.Bold
-                    Layout.fillWidth: true
-                }
-                Controls.Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    opacity: 0.65
-                    font.pixelSize: 12
-                    text: i18n("Additional devices declared in the domain XML, such as RNG, balloon, watchdog, panic, shared memory, IOMMU, vsock, filesystem and redirection devices.")
-                }
+                spacing: 16
+
                 Controls.Label {
                     text: i18n("System devices")
                     font.pixelSize: 15
                     font.weight: Font.Bold
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                }
+
+                Controls.CheckBox {
+                    id: watchdogCheck
+                    text: i18n("Watchdog")
+                    Layout.fillWidth: true
+                    onToggled: root.updateOptionalDevice("watchdog", checked, root.watchdogXml())
                 }
                 GridLayout {
+                    visible: watchdogCheck.checked
                     columns: 2
                     columnSpacing: 16
                     rowSpacing: 8
                     Layout.fillWidth: true
-                    Controls.Label { text: i18n("Watchdog"); Layout.fillWidth: true }
-                    Controls.CheckBox {
-                        id: watchdogCheck
-                        Layout.alignment: Qt.AlignRight
-                        onToggled: root.updateOptionalDevice("watchdog", checked, root.watchdogXml())
-                    }
+                    Layout.leftMargin: 28
                     Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogModelCombo
@@ -1640,38 +1635,80 @@ Kirigami.Dialog {
                         model: ["reset", "poweroff", "shutdown", "pause", "none"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
-                    Controls.Label { text: i18n("RNG"); Layout.fillWidth: true }
-                    Controls.CheckBox {
-                        id: rngCheck
-                        Layout.alignment: Qt.AlignRight
-                        onToggled: root.updateOptionalDevice("rng", checked, root.rngXml())
-                    }
-                    Controls.Label { text: i18n("RNG backend"); Layout.fillWidth: true }
+                }
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
+
+                Controls.CheckBox {
+                    id: rngCheck
+                    text: i18n("Random Number Generator")
+                    Layout.fillWidth: true
+                    onToggled: root.updateOptionalDevice("rng", checked, root.rngXml())
+                }
+                GridLayout {
+                    visible: rngCheck.checked
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 8
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 28
+                    Controls.Label { text: i18n("Backend"); Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: rngBackendCombo
                         Layout.preferredWidth: 220
                         model: ["random", "egd"]
                         onCurrentIndexChanged: root.applyOptionalSettings("rng", root.rngXml())
                     }
-                    Controls.Label { text: i18n("Panic notifier"); Layout.fillWidth: true }
-                    Controls.CheckBox {
-                        id: panicCheck
-                        Layout.alignment: Qt.AlignRight
-                        onToggled: root.updateOptionalDevice("panic", checked, root.panicXml())
-                    }
-                    Controls.Label { text: i18n("Panic model"); Layout.fillWidth: true }
+                }
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
+
+                Controls.CheckBox {
+                    id: panicCheck
+                    text: i18n("Panic notifier")
+                    Layout.fillWidth: true
+                    onToggled: root.updateOptionalDevice("panic", checked, root.panicXml())
+                }
+                GridLayout {
+                    visible: panicCheck.checked
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 8
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 28
+                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: panicModelCombo
                         Layout.preferredWidth: 220
                         model: ["isa", "pvpanic"]
                         onCurrentIndexChanged: root.applyOptionalSettings("panic", root.panicXml())
                     }
-                    Controls.Label { text: i18n("VSOCK"); Layout.fillWidth: true }
-                    Controls.CheckBox {
-                        id: vsockCheck
-                        Layout.alignment: Qt.AlignRight
-                        onToggled: root.updateOptionalDevice("vsock", checked, "<vsock model='virtio'><cid auto='yes'/></vsock>")
-                    }
+                }
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
+
+                Controls.CheckBox {
+                    id: vsockCheck
+                    text: i18n("VirtIO VSOCK")
+                    Layout.fillWidth: true
+                    onToggled: root.updateOptionalDevice("vsock", checked, "<vsock model='virtio'><cid auto='yes'/></vsock>")
+                }
+
+                Controls.Label {
+                    text: i18n("Additional XML devices")
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.65
+                    font.pixelSize: 12
+                    text: i18n("Other devices declared in the domain XML, such as shared memory, IOMMU, filesystem and USB redirection devices.")
                 }
                 ListView {
                     Layout.fillWidth: true
