@@ -69,117 +69,43 @@ Kirigami.ScrollablePage {
         }
     }
 
+    function openViewerWindow() {
+        if (!domain) {
+            return;
+        }
+        const existing = Karton.viewerForDomain(domain);
+        if (existing) {
+            existing.show();
+            existing.raise();
+            existing.requestActivate();
+            return;
+        }
+        const component = Qt.createComponent("VMViewerWindow.qml");
+        if (component.status !== Component.Ready) {
+            console.error("Failed to create VM viewer:", component.errorString());
+            return;
+        }
+        const window = component.createObject(null, {
+            domain: domain
+        });
+        if (!window) {
+            console.error("Failed to create VM viewer window");
+        }
+    }
+
+    function togglePause() {
+        if (!domain || !isRunning) {
+            return;
+        }
+        if (isPaused) {
+            Karton.resumeDomain(domain);
+        } else {
+            Karton.pauseDomain(domain);
+        }
+    }
+
     actions: [
         Kirigami.Action {
-            text: i18n("Power")
-            icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
-            onTriggered: powerMenu.popup()
-        },
-        Kirigami.Action {
-            text: i18n("Pause")
-            icon.name: "media-playback-pause-symbolic"
-            visible: isRunning && !isPaused
-            onTriggered: {
-                if (Karton.pauseDomain(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Pausing VM: %1!", domain.config.name));
-                }
-            }
-        },
-        Kirigami.Action {
-            text: i18n("Resume")
-            icon.name: "media-playback-start-symbolic"
-            visible: isPaused
-            onTriggered: {
-                if (Karton.resumeDomain(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Resuming VM: %1!", domain.config.name));
-                }
-            }
-        },
-        Kirigami.Action {
-            text: i18n("Reboot")
-            icon.name: "system-reboot-symbolic"
-            visible: isRunning
-            onTriggered: rebootMenu.popup()
-        },
-        Kirigami.Action {
-            text: i18n("Save State")
-            icon.name: "document-save-symbolic"
-            visible: isRunning
-            onTriggered: {
-                if (Karton.saveDomainState(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Saving VM state: %1!", domain.config.name));
-                }
-            }
-        },
-        Kirigami.Action {
-            text: i18n("Delete Saved State")
-            icon.name: "edit-delete-symbolic"
-            visible: !isRunning && hasSavedState
-            onTriggered: {
-                if (Karton.deleteSavedState(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Deleted saved state for VM: %1", domain.config.name));
-                }
-            }
-        },
-        Kirigami.Action {
-            text: i18n("Snapshots")
-            icon.name: "camera-photo-symbolic"
-            shortcut: "Ctrl+Shift+S"
-            onTriggered: snapshotsDialog.open()
-        },
-        Kirigami.Action {
-            text: i18n("Clone")
-            icon.name: "edit-copy-symbolic"
-            onTriggered: cloneDialog.open()
-        },
-        Kirigami.Action {
-            text: i18nc("verb, delete a VM", "Delete")
-            icon.name: "delete-symbolic"
-            visible: !isRunning
-            onTriggered: {
-                deleteConfirmationDialog.domain = domain;
-                deleteConfirmationDialog.open();
-            }
-        },
-        Kirigami.Action {
-            id: viewVMAction
-            text: i18nc("verb, open viewer for VM", "View VM")
-            icon.name: "computer-laptop-symbolic"
-            onTriggered: {
-                const existing = domain ? Karton.viewerForDomain(domain) : null;
-                if (existing) {
-                    existing.show();
-                    existing.raise();
-                    existing.requestActivate();
-                    return;
-                }
-                const component = Qt.createComponent("VMViewerWindow.qml");
-                if (component.status !== Component.Ready) {
-                    console.error("Failed to create VM viewer:", component.errorString());
-                    return;
-                }
-                const window = component.createObject(null, {
-                    domain: domain
-                });
-                if (!window) {
-                    console.error("Failed to create VM viewer window");
-                }
-            }
-        },
-        Kirigami.Action {
-            icon.name: "settings-configure-symbolic"
-            enabled: !isRunning
-            onTriggered: {
-                settingsDialog.show();
-            }
-        }
-    ]
-
-
-    Controls.Menu {
-        id: powerMenu
-
-        Controls.MenuItem {
             text: isRunning ? i18n("Shut Down") : i18n("Start")
             icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
             onTriggered: {
@@ -189,11 +115,44 @@ Kirigami.ScrollablePage {
                     Karton.startDomain(domain);
                 }
             }
-        }
-        Controls.MenuItem {
-            text: i18n("Force Off")
-            icon.name: "process-stop-symbolic"
+        },
+        Kirigami.Action {
+            icon.name: "arrow-down-symbolic"
+            displayHint: Kirigami.DisplayHint.IconOnly
             visible: isRunning
+            onTriggered: powerMenu.popup()
+        },
+        Kirigami.Action {
+            text: isPaused ? i18n("Resume") : i18n("Pause")
+            icon.name: isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+            visible: isRunning
+            onTriggered: root.togglePause()
+        },
+        Kirigami.Action {
+            text: i18n("Reboot")
+            icon.name: "system-reboot-symbolic"
+            visible: isRunning
+            onTriggered: Karton.rebootDomain(domain)
+        },
+        Kirigami.Action {
+            icon.name: "arrow-down-symbolic"
+            displayHint: Kirigami.DisplayHint.IconOnly
+            visible: isRunning
+            onTriggered: rebootMenu.popup()
+        },
+        Kirigami.Action {
+            text: i18n("More")
+            icon.name: "view-more-symbolic"
+            onTriggered: moreMenu.popup()
+        }
+    ]
+
+    Controls.Menu {
+        id: powerMenu
+
+        Controls.MenuItem {
+            text: i18n("Power Off")
+            icon.name: "process-stop-symbolic"
             onTriggered: Karton.forceStopDomain(domain)
         }
     }
@@ -202,14 +161,64 @@ Kirigami.ScrollablePage {
         id: rebootMenu
 
         Controls.MenuItem {
-            text: i18n("Reboot")
-            icon.name: "system-reboot-symbolic"
-            onTriggered: Karton.rebootDomain(domain)
-        }
-        Controls.MenuItem {
             text: i18n("Reset")
             icon.name: "system-reboot-symbolic"
             onTriggered: Karton.resetDomain(domain)
+        }
+    }
+
+    Controls.Menu {
+        id: moreMenu
+
+        Controls.MenuItem {
+            text: i18n("Hibernate")
+            icon.name: "document-save-symbolic"
+            visible: isRunning
+            onTriggered: {
+                if (Karton.saveDomainState(domain)) {
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Hibernating VM: %1", domain.config.name));
+                }
+            }
+        }
+        Controls.MenuItem {
+            text: i18n("Delete Hibernation")
+            icon.name: "edit-delete-symbolic"
+            visible: !isRunning && hasSavedState
+            onTriggered: {
+                if (Karton.deleteSavedState(domain)) {
+                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Deleted hibernation for VM: %1", domain.config.name));
+                }
+            }
+        }
+        Controls.MenuSeparator {
+            visible: hasSavedState || isRunning
+        }
+        Controls.MenuItem {
+            text: i18n("Snapshots")
+            icon.name: "camera-photo-symbolic"
+            onTriggered: snapshotsDialog.open()
+        }
+        Controls.MenuItem {
+            text: i18n("Clone")
+            icon.name: "edit-copy-symbolic"
+            onTriggered: cloneDialog.open()
+        }
+        Controls.MenuItem {
+            text: i18n("Settings")
+            icon.name: "settings-configure-symbolic"
+            onTriggered: settingsDialog.show()
+        }
+        Controls.MenuSeparator {
+            visible: !isRunning
+        }
+        Controls.MenuItem {
+            text: i18nc("verb, delete a VM", "Delete")
+            icon.name: "delete-symbolic"
+            visible: !isRunning
+            onTriggered: {
+                deleteConfirmationDialog.domain = domain;
+                deleteConfirmationDialog.open();
+            }
         }
     }
 
@@ -262,7 +271,7 @@ Kirigami.ScrollablePage {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
-                onClicked: viewVMAction.trigger()
+                onClicked: root.openViewerWindow()
             }
         }
         FormCard.FormCard {

@@ -150,24 +150,46 @@ Kirigami.ApplicationWindow {
 
         actions: [
             Kirigami.Action {
-                text: i18n("Start")
-                icon.name: "media-playback-start-symbolic"
-                visible: !viewerWindow.isRunning
+                text: viewerWindow.isRunning ? i18n("Shut Down") : i18n("Start")
+                icon.name: viewerWindow.isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
                 onTriggered: {
-                    if (Karton.startDomain(viewerWindow.domain)) {
+                    if (viewerWindow.isRunning) {
+                        Karton.stopDomain(viewerWindow.domain);
+                    } else if (Karton.startDomain(viewerWindow.domain)) {
                         viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", viewerWindow.domain.config.name));
                     }
                 }
             },
             Kirigami.Action {
-                text: i18n("Power")
-                icon.name: "system-shutdown-symbolic"
+                icon.name: "arrow-down-symbolic"
+                displayHint: Kirigami.DisplayHint.IconOnly
                 visible: viewerWindow.isRunning
                 onTriggered: powerMenu.popup()
             },
             Kirigami.Action {
+                text: viewerWindow.domain && viewerWindow.domain.isPaused ? i18n("Resume") : i18n("Pause")
+                icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+                visible: viewerWindow.isRunning
+                onTriggered: {
+                    if (!viewerWindow.domain) {
+                        return;
+                    }
+                    if (viewerWindow.domain.isPaused) {
+                        Karton.resumeDomain(viewerWindow.domain);
+                    } else {
+                        Karton.pauseDomain(viewerWindow.domain);
+                    }
+                }
+            },
+            Kirigami.Action {
                 text: i18n("Reboot")
                 icon.name: "system-reboot-symbolic"
+                visible: viewerWindow.isRunning
+                onTriggered: Karton.rebootDomain(viewerWindow.domain)
+            },
+            Kirigami.Action {
+                icon.name: "arrow-down-symbolic"
+                displayHint: Kirigami.DisplayHint.IconOnly
                 visible: viewerWindow.isRunning
                 onTriggered: rebootMenu.popup()
             },
@@ -182,6 +204,7 @@ Kirigami.ApplicationWindow {
                 }
             },
             Kirigami.Action {
+                text: i18n("More")
                 icon.name: "view-more-symbolic"
                 onTriggered: {
                     domainViewer.releasePointerGrab();
@@ -189,6 +212,26 @@ Kirigami.ApplicationWindow {
                 }
             }
         ]
+
+        Controls.Menu {
+            id: powerMenu
+
+            Controls.MenuItem {
+                text: i18n("Power Off")
+                icon.name: "process-stop-symbolic"
+                onTriggered: Karton.forceStopDomain(viewerWindow.domain)
+            }
+        }
+
+        Controls.Menu {
+            id: rebootMenu
+
+            Controls.MenuItem {
+                text: i18n("Reset")
+                icon.name: "system-reboot-symbolic"
+                onTriggered: Karton.resetDomain(viewerWindow.domain)
+            }
+        }
 
         Controls.Menu {
             id: viewerMenu
@@ -229,6 +272,16 @@ Kirigami.ApplicationWindow {
                 text: i18n("Machine")
                 enabled: false
                 font.bold: true
+            }
+            Controls.MenuItem {
+                text: i18n("Hibernate")
+                icon.name: "document-save-symbolic"
+                visible: viewerWindow.isRunning
+                onTriggered: {
+                    if (Karton.saveDomainState(viewerWindow.domain)) {
+                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Hibernating VM: %1", viewerWindow.domain.config.name));
+                    }
+                }
             }
             Controls.MenuItem {
                 text: i18n("Settings")

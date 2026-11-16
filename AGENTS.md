@@ -349,9 +349,10 @@ When testing destructive operations, prefer domains whose names start with
   guest resolution does not exactly match the viewer size.
 - `VMViewerWindow.qml` registers itself with `Karton::registerViewer()`.
   Opening the same VM again focuses/raises the existing window instead of
-  creating a duplicate. Its toolbar has labeled runtime actions: Start when stopped, Power (menu with Shut Down and Force
-  Off), Reboot (menu with Reboot and Reset), fullscreen and a three-dot menu
-  containing Actual Size, Fit Guest to Window, USB Devices, Settings and
+  creating a duplicate. Its toolbar has the same split actions as the VM page:
+  Shut Down/Start with a separate arrow for Power Off, Pause (no extra menu),
+  Reboot with a separate arrow for Reset, fullscreen and a More menu containing
+  Actual Size, Fit Guest to Window, USB Devices, Hibernate, Settings and
   Snapshots. "Fit to Window" was deliberately removed. A stopped VM opens the
   viewer without starting it and shows only a large clickable start triangle;
   it is started only when the user asks. When a running VM stops, the viewer
