@@ -341,8 +341,10 @@ Every settings page must look and behave the same:
 - `SettingsDialog.qml` is a window-modal overlay dialog attached to the
   owning window. It is capped at 1000×680, has a shared page header, a fixed
   navigation column, one scrollable content page and a fixed footer, and never
-  opens as an independent top-level window. Pages: Overview, CPUs & Memory, Boot Options, Disks, Network,
-  Display, Sound, USB, PCI, TPM, OS Information and Performance. Each page uses
+  opens as an independent top-level window. Pages: Overview, CPUs & Memory,
+  Boot Options, Disks, Network, Display, Sound, Input, USB, PCI, TPM,
+  Filesystem, Controllers, Serial & Console, Other devices, OS Information,
+  Performance and XML. Each page uses
   Luma-style transparent rounded window, 200/160 px category sidebar with a
   translucent highlight and accent bar, 24 px content margins and two-column
   label/control rows. The Add/Save/Close actions are `customFooterActions` on
