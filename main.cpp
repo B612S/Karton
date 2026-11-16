@@ -93,6 +93,13 @@ int main(int argc, char *argv[])
     // Used by the opt-in test suite to catch QML component/import errors
     // without entering the event loop or requiring a graphical session.
     if (checkQml) {
+        // Main.qml alone does not instantiate VMViewerWindow and the dialogs
+        // that are created only on user action. Load the smoke component too,
+        // so invalid property assignments in those components fail this test.
+        engine.loadFromModule("org.kde.karton", "QmlSmokeTest");
+        if (engine.rootObjects().isEmpty()) {
+            return -1;
+        }
         // QML starts helper threads and Qt's normal teardown can wait on them
         // in a headless test run. The smoke test only needs the load result.
         std::_Exit(0);

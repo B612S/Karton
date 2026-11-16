@@ -142,8 +142,10 @@ does the same in one step. The clang-tidy wrapper removes the GCC-only
 
 **Always run `ctest` after QML, CMake or C++ changes.** The opt-in suite
 includes `tst_qml_startup`, which runs the real `karton --check-qml` path
-offscreen to load and instantiate the complete QML module, so missing imports,
-attached properties and unavailable component types fail the build/test gate.
+offscreen to load and instantiate the complete QML module plus `QmlSmokeTest`,
+which creates the runtime-only viewer and dialogs with a null domain. Missing
+imports, invalid properties and unavailable component types therefore fail the
+build/test gate.
 Without `-DKARTON_BUILD_TESTS=ON` no test target is created. The unit tests run
 without a display or libvirt connection, use `QT_QPA_PLATFORM=offscreen`, and
 redirect `XDG_CONFIG_HOME`/`XDG_CACHE_HOME`/`XDG_STATE_HOME` into the build

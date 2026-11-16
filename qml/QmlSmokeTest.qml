@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Karton contributors
+
+// Test-only component loaded by `karton --check-qml`. Keep it headless: it
+// instantiates components that Main.qml only creates at runtime, so invalid
+// property assignments in those components fail the QML test suite.
+import QtQuick
+import org.kde.karton
+
+Item {
+    width: 1
+    height: 1
+
+    VMViewerWindow {
+        domain: null
+        visible: false
+    }
+
+    UsbDevicesDialog {
+        domain: null
+        visible: false
+    }
+
+    SettingsDialog {
+        domain: null
+        visible: false
+    }
+
+    AddHardwareDialog {
+        domain: null
+        visible: false
+    }
+
+    SnapshotsDialog {
+        domain: null
+        visible: false
+    }
+}

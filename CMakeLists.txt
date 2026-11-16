@@ -164,6 +164,7 @@ ecm_target_qml_sources(karton
     qml/Main.qml
     qml/VMListPage.qml
     qml/VMViewerWindow.qml
+    qml/QmlSmokeTest.qml
     qml/InstallationDialog.qml
     qml/VMPage.qml
     qml/AddHardwareDialog.qml
