@@ -533,6 +533,27 @@ bool Karton::rebootDomain(const Domain *domain)
     return true;
 }
 
+bool Karton::resetDomain(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    if (virDomainReset(domainPtr, 0) < 0) {
+        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
+                                       "Failed to reset domain %1: %2",
+                                       domain->config()->name(),
+                                       QString::fromUtf8(virGetLastErrorMessage()));
+        qCWarning(KARTON_DEBUG) << errorMsg;
+        Q_EMIT errorOccurred(errorMsg);
+        return false;
+    }
+
+    qCInfo(KARTON_DEBUG) << "Successfully reset domain:" << domain->config()->name();
+    return true;
+}
+
 bool Karton::saveDomainState(const Domain *domain)
 {
     if (!domain || !domain->domainPtr()) {

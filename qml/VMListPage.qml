@@ -114,11 +114,6 @@ Kirigami.ScrollablePage {
             }
         },
         Kirigami.Action {
-            icon.name: "network-wired-symbolic"
-            text: i18n("Networks")
-            onTriggered: networksDialog.open()
-        },
-        Kirigami.Action {
             icon.name: "settings-configure-symbolic"
             text: i18n("Connection Settings")
             onTriggered: connectionDialog.open()
@@ -131,10 +126,6 @@ Kirigami.ScrollablePage {
 
     ConnectionSettingsDialog {
         id: connectionDialog
-    }
-
-    NetworksDialog {
-        id: networksDialog
     }
 
     ListView {

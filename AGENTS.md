@@ -189,10 +189,10 @@ When testing destructive operations, prefer domains whose names start with
   flight; do not close them optimistically after calling `Karton`.
 - Libvirt network management lives on `Karton` (`networks()`, `startNetwork()`,
   `stopNetwork()`, `createNatNetwork()`, `attachNetwork()`, `detachNetwork()`)
-  and is exposed by `qml/NetworksDialog.qml`. NIC attach uses separate LIVE and
-  CONFIG libvirt calls so a running VM keeps the interface after shutdown; NIC
-  detach removes the CONFIG device even if the guest cannot hot-unplug the live
-  device.
+  and is exposed inline by the Network page of `qml/SettingsDialog.qml`. NIC
+  attach uses separate LIVE and CONFIG libvirt calls so a running VM keeps the
+  interface after shutdown; NIC detach removes the CONFIG device even if the
+  guest cannot hot-unplug the live device.
 - Runtime USB passthrough is available through `Karton::usbDevices()`,
   `domainUsbDevices()`, `attachUsbDevice()` and `detachUsbDevice()`, with the
   UI in `qml/UsbDevicesDialog.qml`. Host devices come from libvirt node devices
@@ -206,20 +206,20 @@ When testing destructive operations, prefer domains whose names start with
   libvirt merges the overlay back instead of failing with "deletion of external
   disk snapshots with children not supported".
 - Runtime PCI passthrough is exposed through `Karton::pciDevices()`,
-  `domainPciDevices()`, `attachPciDevice()` and `detachPciDevice()`, with the UI
-  in `qml/PciDevicesDialog.qml`. The dialog warns that the device is detached
-  from the host and only enables Attach for devices with an IOMMU group.
+  `domainPciDevices()`, `attachPciDevice()` and `detachPciDevice()`, with the
+  UI inline in the USB & PCI page of `qml/SettingsDialog.qml`. Attach is only
+  enabled for devices with an IOMMU group and the page warns that the device is
+  detached from the host.
 - VM cloning is implemented by `Karton::cloneDomain()`, with the UI in
   `qml/CloneDialog.qml`. It copies local file-backed disks with `qemu-img
   convert -U`, strips the UUID, MAC addresses, hostdevs, NVRAM and Karton
   metadata, and defines a stopped clone. The copy runs asynchronously through
   `CommandRunner`; partial destination files are removed on failure.
 - Disk/ISO hotplug is exposed through `Karton::domainDisks()`, `addDisk()`,
-  `attachDiskImage()`, `attachIso()` and `detachDisk()`, with the UI in
-  `qml/StorageDialog.qml`. New disks are created with `qemu-img create` and
-  attached as virtio devices; ISO images are attached as read-only SATA cdroms.
-  The Storage dialog uses FileDialog pickers for images/ISOs and can optionally
-  delete a data disk file after detaching it from a stopped VM.
+  `attachDiskImage()`, `attachIso()` and `detachDisk()`, with the UI inline in
+  the Disks page of `qml/SettingsDialog.qml`. New disks are created with
+  `qemu-img create` and attached as virtio devices; ISO images are attached as
+  read-only SATA cdroms. The page uses FileDialog pickers for images/ISOs.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's
@@ -272,10 +272,12 @@ When testing destructive operations, prefer domains whose names start with
   form triggered a `Kirigami.Dialog` binding loop on `y`.
 - `SettingsDialog.qml` is the virt-manager-style hardware settings dialog:
   Overview, CPUs & Memory, Boot Options, Disks, Network, Display, Sound and
-  USB & PCI pages. It reads `Karton::domainHardwareInfo()` and writes firmware,
+  USB & PCI pages. Disks, networks and PCI devices are managed inline (lists,
+  add/attach/detach controls) instead of separate dialogs; only USB remains a
+  runtime dialog. It reads `Karton::domainHardwareInfo()` and writes firmware,
   boot order, video, sound and description through `editDomainHardware()`.
-  "Add Hardware" opens the Storage/Networks/USB/PCI management dialogs. Those
-  dialogs are intentionally not duplicated as VM-page menu actions.
+  "Add Hardware" navigates to the relevant Settings page (or opens the USB
+  dialog). There are no separate Storage/Networks/PCI menu actions.
 - New domains use user-mode networking with a `virtio` (default) or `e1000`
   interface, or no network at all. The model is stored in
   `DomainConfig::networkModel` and read back from the domain XML.
@@ -322,16 +324,15 @@ When testing destructive operations, prefer domains whose names start with
   pointers when Qt passes a null root after deleting the scene graph. Display
   textures use `QSGTexture::Linear` filtering so fonts stay readable when the
   guest resolution does not exactly match the viewer size.
-- `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar only keeps the
-  fullscreen button and a three-dot menu on the right. The menu is a
-  `Controls.Menu` with Display/Devices/Machine sections: Actual Size, Fit to
-  Window, Fit Guest to Window, USB Devices, Networks, Settings and Snapshots.
-  Opening the menu releases the pointer grab first. There is no explicit
-  grab/release-pointer action: clicking the display grabs the pointer and Esc
-  releases it. A double-click on a VM list row opens that VM's viewer (a
-  stopped VM is started first). UI icons use the monochrome `*-symbolic`
-  variants. PCI and Storage no longer have their own VM-page menu actions;
-  they are managed from SettingsDialog.
+- `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar has runtime
+  power actions (shut down/force off, reboot/reset, pause/resume), a fullscreen
+  button and a three-dot menu with Actual Size, Fit to Window, Fit Guest to
+  Window, USB Devices, Settings and Snapshots. Opening the menu releases the
+  pointer grab first. There is no explicit grab/release-pointer action: clicking
+  the display grabs the pointer and Esc releases it. A double-click on a VM list
+  row opens that VM's viewer (a stopped VM is started first). UI icons use the
+  monochrome `*-symbolic` variants. PCI and Storage have no separate menu
+  actions; they are managed inline from SettingsDialog.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.

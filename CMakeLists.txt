@@ -128,13 +128,10 @@ ecm_target_qml_sources(karton
     qml/InstallationDialog.qml
     qml/VMPage.qml
     qml/ConnectionSettingsDialog.qml
-    qml/NetworksDialog.qml
     qml/UsbDevicesDialog.qml
     qml/SettingsDialog.qml
     qml/SnapshotsDialog.qml
-    qml/PciDevicesDialog.qml
     qml/CloneDialog.qml
-    qml/StorageDialog.qml
 )
 
 ecm_qt_declare_logging_category(

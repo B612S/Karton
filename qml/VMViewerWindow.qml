@@ -83,6 +83,58 @@ Kirigami.ApplicationWindow {
 
         actions: [
             Kirigami.Action {
+                icon.name: "system-shutdown-symbolic"
+                visible: viewerWindow.domain ? viewerWindow.domain.isActive : false
+                onTriggered: {
+                    if (Karton.stopDomain(viewerWindow.domain)) {
+                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Shutting down VM: %1!", viewerWindow.domain.config.name));
+                    }
+                }
+
+                Kirigami.Action {
+                    text: i18n("Force Off")
+                    icon.name: "process-stop-symbolic"
+                    onTriggered: {
+                        if (Karton.forceStopDomain(viewerWindow.domain)) {
+                            viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", viewerWindow.domain.config.name));
+                        }
+                    }
+                }
+            },
+            Kirigami.Action {
+                icon.name: "system-reboot-symbolic"
+                visible: viewerWindow.domain ? viewerWindow.domain.isActive : false
+                onTriggered: {
+                    if (Karton.rebootDomain(viewerWindow.domain)) {
+                        viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Rebooting VM: %1!", viewerWindow.domain.config.name));
+                    }
+                }
+
+                Kirigami.Action {
+                    text: i18n("Reset")
+                    icon.name: "system-reboot-symbolic"
+                    onTriggered: {
+                        if (Karton.resetDomain(viewerWindow.domain)) {
+                            viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Resetting VM: %1!", viewerWindow.domain.config.name));
+                        }
+                    }
+                }
+            },
+            Kirigami.Action {
+                icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+                visible: viewerWindow.domain ? viewerWindow.domain.isActive : false
+                onTriggered: {
+                    if (!viewerWindow.domain) {
+                        return;
+                    }
+                    if (viewerWindow.domain.isPaused) {
+                        Karton.resumeDomain(viewerWindow.domain);
+                    } else {
+                        Karton.pauseDomain(viewerWindow.domain);
+                    }
+                }
+            },
+            Kirigami.Action {
                 icon.name: "view-fullscreen-symbolic"
                 onTriggered: {
                     if (viewerWindow.visibility === Window.FullScreen) {
@@ -138,11 +190,6 @@ Kirigami.ApplicationWindow {
                 text: i18n("USB Devices")
                 icon.name: "drive-removable-media-usb-symbolic"
                 onTriggered: usbDialog.open()
-            }
-            Controls.MenuItem {
-                text: i18n("Networks")
-                icon.name: "network-wired-symbolic"
-                onTriggered: networksDialog.open()
             }
             Controls.MenuSeparator {}
 
@@ -222,9 +269,5 @@ Kirigami.ApplicationWindow {
             domain: viewerWindow.domain
         }
 
-        NetworksDialog {
-            id: networksDialog
-            domain: viewerWindow.domain
-        }
     }
 }

@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.kirigamiaddons.delegates as Delegates
 import org.kde.kirigamiaddons.formcard 1.0 as FormCard
@@ -20,6 +21,8 @@ Kirigami.Dialog {
     property var interfaces: []
     property var usbDevices: []
     property var pciDevices: []
+    property var networks: []
+    property var pciHostDevices: []
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
@@ -43,6 +46,8 @@ Kirigami.Dialog {
         interfaces = Karton.domainInterfaces(domain);
         usbDevices = Karton.domainUsbDevices(domain);
         pciDevices = Karton.domainPciDevices(domain);
+        networks = Karton.networks();
+        pciHostDevices = Karton.pciDevices();
 
         firmwareCombo.currentIndex = hardware.firmware === "uefi" ? 1 : 0;
         secureBootCheck.checked = hardware.secureBoot === true;
@@ -53,6 +58,14 @@ Kirigami.Dialog {
         accel3dCheck.checked = hardware.accel3d === true;
         soundCombo.currentIndex = Math.max(0, soundModels.indexOf(hardware.soundModel));
         descriptionField.text = hardware.description || "";
+    }
+
+    function localPath(url) {
+        let path = url.toString();
+        if (path.startsWith("file://")) {
+            path = path.substring(7);
+        }
+        return decodeURIComponent(path);
     }
 
     onOpened: {
@@ -156,17 +169,17 @@ Kirigami.Dialog {
         Controls.MenuItem {
             text: i18n("Disk image")
             icon.name: "drive-harddisk-symbolic"
-            onTriggered: storageDialog.open()
+            onTriggered: categoryList.currentIndex = 3
         }
         Controls.MenuItem {
             text: i18n("ISO image")
             icon.name: "media-optical-symbolic"
-            onTriggered: storageDialog.open()
+            onTriggered: categoryList.currentIndex = 3
         }
         Controls.MenuItem {
             text: i18n("Network interface")
             icon.name: "network-wired-symbolic"
-            onTriggered: networksDialog.open()
+            onTriggered: categoryList.currentIndex = 4
         }
         Controls.MenuItem {
             text: i18n("USB device")
@@ -176,7 +189,7 @@ Kirigami.Dialog {
         Controls.MenuItem {
             text: i18n("PCI device")
             icon.name: "computer-symbolic"
-            onTriggered: pciDialog.open()
+            onTriggered: categoryList.currentIndex = 7
         }
     }
 
@@ -346,29 +359,142 @@ Kirigami.Dialog {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
+
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
                         text: i18n("Disks and CD-ROMs")
                         font.bold: true
                     }
+
                     ListView {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 12
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 10
                         clip: true
                         model: root.disks
                         spacing: Kirigami.Units.smallSpacing
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
-                            text: (modelData.device === "cdrom" ? i18n("CD-ROM") : i18n("Disk")) + " · " + modelData.target + " — " + modelData.source
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: (modelData.device === "cdrom" ? i18n("CD-ROM") : i18n("Disk")) + " · " + modelData.target
+                                        elide: Text.ElideRight
+                                    }
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.source + " · " + modelData.bus
+                                        opacity: 0.7
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                Controls.Button {
+                                    text: i18n("Detach")
+                                    icon.name: "list-remove-symbolic"
+                                    onClicked: {
+                                        if (Karton.detachDisk(root.domain, modelData.target, false)) {
+                                            root.refresh();
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                    Controls.Button {
-                        Layout.alignment: Qt.AlignRight
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
-                        text: i18n("Manage Disks…")
-                        icon.name: "drive-harddisk-symbolic"
-                        onClicked: storageDialog.open()
+
+                    FormCard.FormCard {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+
+                        FormCard.FormSpinBoxDelegate {
+                            id: newDiskSize
+                            label: i18n("New disk size (GB)")
+                            from: 1
+                            to: 2048
+                            value: 8
+                            Layout.fillWidth: true
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormComboBoxDelegate {
+                            id: newDiskFormat
+                            text: i18n("Format:")
+                            model: ["qcow2", "raw", "vmdk"]
+                            Layout.fillWidth: true
+                        }
+                        Controls.Button {
+                            Layout.alignment: Qt.AlignRight
+                            text: i18n("Create disk")
+                            icon.name: "list-add-symbolic"
+                            onClicked: {
+                                if (Karton.addDisk(root.domain, newDiskSize.value, newDiskFormat.currentText)) {
+                                    root.refresh();
+                                }
+                            }
+                        }
+                    }
+
+                    FormCard.FormCard {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+
+                        FormCard.FormTextFieldDelegate {
+                            id: imagePathField
+                            label: i18n("Disk image path:")
+                            Layout.fillWidth: true
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            Controls.Button {
+                                text: i18n("Browse…")
+                                icon.name: "document-open-symbolic"
+                                onClicked: imageFileDialog.open()
+                            }
+                            Controls.Button {
+                                Layout.fillWidth: true
+                                text: i18n("Attach image")
+                                icon.name: "list-add-symbolic"
+                                enabled: imagePathField.text.trim().length > 0
+                                onClicked: {
+                                    if (Karton.attachDiskImage(root.domain, imagePathField.text.trim(), "qcow2")) {
+                                        imagePathField.text = "";
+                                        root.refresh();
+                                    }
+                                }
+                            }
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextFieldDelegate {
+                            id: isoPathField
+                            label: i18n("ISO image path:")
+                            Layout.fillWidth: true
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.largeSpacing
+                            Layout.rightMargin: Kirigami.Units.largeSpacing
+                            Controls.Button {
+                                text: i18n("Browse…")
+                                icon.name: "document-open-symbolic"
+                                onClicked: isoFileDialog.open()
+                            }
+                            Controls.Button {
+                                Layout.fillWidth: true
+                                text: i18n("Attach ISO")
+                                icon.name: "media-optical-symbolic"
+                                enabled: isoPathField.text.trim().length > 0
+                                onClicked: {
+                                    if (Karton.attachIso(root.domain, isoPathField.text.trim())) {
+                                        isoPathField.text = "";
+                                        root.refresh();
+                                    }
+                                }
+                            }
+                        }
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -379,31 +505,151 @@ Kirigami.Dialog {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
+
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("Network interfaces")
+                        text: i18n("Libvirt networks")
                         font.bold: true
                     }
                     ListView {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 12
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 9
+                        clip: true
+                        model: root.networks
+                        spacing: Kirigami.Units.smallSpacing
+                        delegate: Controls.ItemDelegate {
+                            width: ListView.view.width
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.name
+                                        elide: Text.ElideRight
+                                    }
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: (modelData.active ? i18n("active") : i18n("inactive"))
+                                              + " · " + modelData.forward
+                                              + (modelData.bridge.length > 0 ? " · " + modelData.bridge : "")
+                                        opacity: 0.7
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                Controls.Button {
+                                    text: modelData.active ? i18n("Stop") : i18n("Start")
+                                    icon.name: modelData.active ? "media-playback-stop-symbolic" : "media-playback-start-symbolic"
+                                    onClicked: {
+                                        if (modelData.active) {
+                                            Karton.stopNetwork(modelData.name);
+                                        } else {
+                                            Karton.startNetwork(modelData.name);
+                                        }
+                                        root.refresh();
+                                    }
+                                }
+                                Controls.CheckBox {
+                                    text: i18n("Autostart")
+                                    checked: modelData.autostart
+                                    onToggled: {
+                                        Karton.setNetworkAutostart(modelData.name, checked);
+                                        root.refresh();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        Controls.TextField {
+                            id: newNetworkField
+                            Layout.fillWidth: true
+                            placeholderText: i18n("New NAT network name")
+                        }
+                        Controls.Button {
+                            text: i18n("Create NAT")
+                            icon.name: "list-add-symbolic"
+                            enabled: newNetworkField.text.trim().length > 0
+                            onClicked: {
+                                if (Karton.createNatNetwork(newNetworkField.text.trim())) {
+                                    newNetworkField.text = "";
+                                    root.refresh();
+                                }
+                            }
+                        }
+                    }
+
+                    Controls.Label {
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        text: i18n("VM interfaces")
+                        font.bold: true
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 8
                         clip: true
                         model: root.interfaces
                         spacing: Kirigami.Units.smallSpacing
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
-                            text: (modelData.source.length > 0 ? modelData.source : modelData.type)
-                                  + (modelData.mac.length > 0 ? " · " + modelData.mac : "")
-                                  + (modelData.model.length > 0 ? " · " + modelData.model : "")
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: (modelData.source.length > 0 ? modelData.source : modelData.type)
+                                        elide: Text.ElideRight
+                                    }
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.mac + (modelData.model.length > 0 ? " · " + modelData.model : "")
+                                        opacity: 0.7
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                Controls.Button {
+                                    text: i18n("Detach")
+                                    icon.name: "list-remove-symbolic"
+                                    enabled: modelData.mac.length > 0
+                                    onClicked: {
+                                        if (Karton.detachNetwork(root.domain, modelData.mac)) {
+                                            root.refresh();
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                    Controls.Button {
-                        Layout.alignment: Qt.AlignRight
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
-                        text: i18n("Manage Networks…")
-                        icon.name: "network-wired-symbolic"
-                        onClicked: networksDialog.open()
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        Controls.ComboBox {
+                            id: attachNetworkCombo
+                            Layout.fillWidth: true
+                            model: root.networks.map(function(network) { return network.name; })
+                        }
+                        Controls.ComboBox {
+                            id: attachModelCombo
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+                            model: ["virtio", "e1000"]
+                        }
+                        Controls.Button {
+                            text: i18n("Attach")
+                            icon.name: "list-add-symbolic"
+                            enabled: attachNetworkCombo.count > 0
+                            onClicked: {
+                                if (Karton.attachNetwork(root.domain, attachNetworkCombo.currentText, attachModelCombo.currentText)) {
+                                    root.refresh();
+                                }
+                            }
+                        }
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -466,6 +712,7 @@ Kirigami.Dialog {
                 contentWidth: availableWidth
                 ColumnLayout {
                     width: parent.width
+
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
                         text: i18n("USB devices")
@@ -477,21 +724,47 @@ Kirigami.Dialog {
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 6
                         clip: true
                         model: root.usbDevices
+                        spacing: Kirigami.Units.smallSpacing
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
-                            text: modelData.vendor + ":" + modelData.product
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.vendor + ":" + modelData.product
+                                    elide: Text.ElideRight
+                                }
+                                Controls.Button {
+                                    text: i18n("Detach")
+                                    icon.name: "list-remove-symbolic"
+                                    onClicked: {
+                                        if (Karton.detachUsbDevice(root.domain, modelData.vendor, modelData.product, modelData.bus, modelData.device)) {
+                                            root.refresh();
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                    Controls.Button {
-                        Layout.alignment: Qt.AlignRight
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
-                        text: i18n("Manage USB Devices…")
-                        icon.name: "drive-removable-media-usb-symbolic"
-                        onClicked: usbDialog.open()
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        Controls.Label {
+                            Layout.fillWidth: true
+                            text: i18n("USB passthrough is a runtime operation.")
+                            opacity: 0.7
+                            wrapMode: Text.WordWrap
+                        }
+                        Controls.Button {
+                            text: i18n("Manage USB Devices…")
+                            icon.name: "drive-removable-media-usb-symbolic"
+                            onClicked: usbDialog.open()
+                        }
                     }
+
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("PCI devices")
+                        text: i18n("Attached PCI devices")
                         font.bold: true
                     }
                     ListView {
@@ -500,34 +773,85 @@ Kirigami.Dialog {
                         Layout.preferredHeight: Kirigami.Units.gridUnit * 6
                         clip: true
                         model: root.pciDevices
+                        spacing: Kirigami.Units.smallSpacing
                         delegate: Controls.ItemDelegate {
                             width: ListView.view.width
-                            text: modelData.label
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.address
+                                    elide: Text.ElideRight
+                                }
+                                Controls.Button {
+                                    text: i18n("Detach")
+                                    icon.name: "list-remove-symbolic"
+                                    onClicked: {
+                                        if (Karton.detachPciDevice(root.domain, modelData.pciDomain, modelData.bus, modelData.slot, modelData.function)) {
+                                            root.refresh();
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                    Controls.Button {
-                        Layout.alignment: Qt.AlignRight
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
-                        text: i18n("Manage PCI Devices…")
-                        icon.name: "computer-symbolic"
-                        onClicked: pciDialog.open()
+
+                    Controls.Label {
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        text: i18n("Available PCI devices")
+                        font.bold: true
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 9
+                        clip: true
+                        model: root.pciHostDevices
+                        spacing: Kirigami.Units.smallSpacing
+                        delegate: Controls.ItemDelegate {
+                            width: ListView.view.width
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.label
+                                        elide: Text.ElideRight
+                                    }
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.address
+                                              + (modelData.iommuGroup.length > 0 ? " · IOMMU " + modelData.iommuGroup : " · " + i18n("no IOMMU group"))
+                                        opacity: 0.7
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                Controls.Button {
+                                    text: i18n("Attach")
+                                    icon.name: "list-add-symbolic"
+                                    enabled: modelData.iommuGroup.length > 0
+                                    onClicked: {
+                                        if (Karton.attachPciDevice(root.domain, modelData.pciDomain, modelData.bus, modelData.slot, modelData.function)) {
+                                            root.refresh();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Controls.Label {
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        Layout.fillWidth: true
+                        text: i18n("Attaching a PCI device detaches it from the host. Devices without an IOMMU group cannot be attached.")
+                        opacity: 0.7
+                        wrapMode: Text.WordWrap
                     }
                     Item { Layout.fillHeight: true }
                 }
             }
         }
-    }
-
-    StorageDialog {
-        id: storageDialog
-        domain: root.domain
-        onClosed: root.refresh()
-    }
-
-    NetworksDialog {
-        id: networksDialog
-        domain: root.domain
-        onClosed: root.refresh()
     }
 
     UsbDevicesDialog {
@@ -536,9 +860,18 @@ Kirigami.Dialog {
         onClosed: root.refresh()
     }
 
-    PciDevicesDialog {
-        id: pciDialog
-        domain: root.domain
-        onClosed: root.refresh()
+    FileDialog {
+        id: imageFileDialog
+        title: i18n("Select a disk image")
+        nameFilters: [i18n("Disk images (*.qcow2 *.img *.raw *.vmdk)"), i18n("All files (*)")]
+        onAccepted: imagePathField.text = root.localPath(selectedFile)
     }
+
+    FileDialog {
+        id: isoFileDialog
+        title: i18n("Select an ISO image")
+        nameFilters: [i18n("ISO images (*.iso)"), i18n("All files (*)")]
+        onAccepted: isoPathField.text = root.localPath(selectedFile)
+    }
+
 }

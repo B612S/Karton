@@ -74,15 +74,26 @@ Kirigami.ScrollablePage {
     actions: [
         Kirigami.Action {
             icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
-            text: isRunning ? i18nc("verb, stop a VM", "Stop") : i18nc("verb, start a VM", "Start")
+            text: isRunning ? i18n("Shut Down") : i18nc("verb, start a VM", "Start")
             onTriggered: {
                 if (isRunning) {
                     if (Karton.stopDomain(domain)) {
-                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Stopping VM: %1!", domain.config.name));
+                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Shutting down VM: %1!", domain.config.name));
                     }
                 } else {
                     if (Karton.startDomain(domain)) {
                         applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", domain.config.name));
+                    }
+                }
+            }
+
+            Kirigami.Action {
+                text: i18n("Force Off")
+                icon.name: "process-stop-symbolic"
+                visible: isRunning
+                onTriggered: {
+                    if (Karton.forceStopDomain(domain)) {
+                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", domain.config.name));
                     }
                 }
             }
@@ -116,6 +127,17 @@ Kirigami.ScrollablePage {
                     applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Rebooting VM: %1!", domain.config.name));
                 }
             }
+
+            Kirigami.Action {
+                text: i18n("Reset")
+                icon.name: "system-reboot-symbolic"
+                visible: isRunning
+                onTriggered: {
+                    if (Karton.resetDomain(domain)) {
+                        applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Resetting VM: %1!", domain.config.name));
+                    }
+                }
+            }
         },
         Kirigami.Action {
             text: i18n("Save State")
@@ -136,22 +158,6 @@ Kirigami.ScrollablePage {
                     applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Deleted saved state for VM: %1", domain.config.name));
                 }
             }
-        },
-        Kirigami.Action {
-            text: i18nc("verb, stop a VM immediately", "Force Stop")
-            icon.name: "process-stop-symbolic"
-            visible: isRunning
-            onTriggered: {
-                if (Karton.forceStopDomain(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Force-stopping VM: %1!", domain.config.name));
-                }
-            }
-        },
-        Kirigami.Action {
-            text: i18n("Networks")
-            icon.name: "network-wired-symbolic"
-            shortcut: "Ctrl+Shift+N"
-            onTriggered: networksDialog.open()
         },
         Kirigami.Action {
             text: i18n("Snapshots")
@@ -200,11 +206,6 @@ Kirigami.ScrollablePage {
             }
         }
     ]
-
-    NetworksDialog {
-        id: networksDialog
-        domain: root.domain
-    }
 
     SnapshotsDialog {
         id: snapshotsDialog
