@@ -120,6 +120,8 @@ target_sources(karton
     core/os/osinfoconfig.cpp
     core/domain/domainxmlreader.cpp
     core/util/commandrunner.cpp
+    core/util/xmlhighlighter.cpp
+    core/util/xmlhighlighter.h
     core/util/evdev_to_xtkbd_map.c
     core/util/evdev_to_xtkbd_map.h
     core/util/devicepixelratiohelper.cpp

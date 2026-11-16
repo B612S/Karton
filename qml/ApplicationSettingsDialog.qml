@@ -14,7 +14,8 @@ Kirigami.Dialog {
     property int categoryIndex: 0
     readonly property var categories: [
         { label: i18n("Application") },
-        { label: i18n("Libvirt Networks") }
+        { label: i18n("Libvirt Networks") },
+        { label: i18n("About") }
     ]
 
     modal: true
@@ -142,7 +143,9 @@ Kirigami.Dialog {
                         spacing: 16
 
                         Controls.Label {
-                            text: root.categoryIndex === 0 ? i18n("Application") : i18n("Libvirt Networks")
+                            text: root.categoryIndex === 0 ? i18n("Application")
+                                : root.categoryIndex === 1 ? i18n("Libvirt Networks")
+                                : i18n("About")
                             font.pixelSize: 20
                             font.weight: Font.Bold
                             Layout.fillWidth: true
@@ -239,6 +242,16 @@ Kirigami.Dialog {
                                                 root.refreshNetworks();
                                             }
                                         }
+                                        Controls.Button {
+                                            text: i18n("Delete")
+                                            icon.name: "edit-delete-symbolic"
+                                            enabled: !modelData.active
+                                            onClicked: {
+                                                if (Karton.deleteNetwork(modelData.name)) {
+                                                    root.refreshNetworks();
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -269,6 +282,49 @@ Kirigami.Dialog {
                                 opacity: 0.65
                                 font.pixelSize: 12
                                 text: i18n("These networks are shared by all virtual machines.")
+                            }
+                        }
+
+                        ColumnLayout {
+                            visible: root.categoryIndex === 2
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            Controls.Label {
+                                text: i18n("Karton")
+                                font.pixelSize: 22
+                                font.weight: Font.Bold
+                                Layout.fillWidth: true
+                            }
+                            Controls.Label {
+                                text: i18n("Virtual Machine Manager")
+                                font.pixelSize: 14
+                                opacity: 0.7
+                                Layout.fillWidth: true
+                            }
+                            Controls.Label {
+                                text: i18n("Version %1", Qt.application.version)
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                            }
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                opacity: 0.7
+                                text: i18n("A libvirt-based virtual machine manager for KDE, built with Qt and Kirigami.")
+                            }
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                textFormat: Text.RichText
+                                text: "<a href=\"https://github.com/B612S/karton\">GitHub repository</a> · <a href=\"https://kde.org\">KDE</a>"
+                                onLinkActivated: link => Qt.openUrlExternally(link)
+                            }
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                opacity: 0.55
+                                font.pixelSize: 12
+                                text: i18n("GPL-3.0-or-later · © Karton contributors")
                             }
                         }
                     }

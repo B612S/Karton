@@ -46,6 +46,7 @@ static QSGRendererInterface::GraphicsApi preferredGraphicsApi()
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+    app.setApplicationVersion(QStringLiteral(KARTON_VERSION_STRING));
     KirigamiAppDefaults::apply(&app);
 
     const QSGRendererInterface::GraphicsApi graphicsApi = preferredGraphicsApi();

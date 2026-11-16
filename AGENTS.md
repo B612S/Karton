@@ -45,6 +45,7 @@ development or testing must pass `-c <same URI>` (usually
 | `core/viewer/glscanoutrenderer.*`, `core/viewer/primarysurfacerenderer.*`, `core/viewer/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
 | `core/libvirt/libvirtmonitor.*`, `core/libvirt/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `core/util/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
+| `core/util/xmlhighlighter.*` | Theme-coloured XML syntax highlighter for the VM XML editor. |
 | `qml/` | Kirigami QML pages and dialogs. |
 | `tests/` | Opt-in QtTest unit tests; never linked into the application. |
 | `src/` | Reserved for makepkg's `$srcdir`; it is not used for source files. |
@@ -202,7 +203,8 @@ When testing destructive operations, prefer domains whose names start with
   flight; do not close them optimistically after calling `Karton`.
 - `ApplicationSettingsDialog.qml` is the window-attached Luma-style global
   settings overlay. Its Application page edits the libvirt connection URI; its
-  Libvirt Networks page manages host networks (start/stop, autostart, NAT).
+  Libvirt Networks page manages host networks (start/stop, autostart, NAT and
+  delete); its About page shows the application version and links.
 - Libvirt network management lives on `Karton` (`networks()`, `startNetwork()`,
   `stopNetwork()`, `createNatNetwork()`, `attachNetwork()`, `detachNetwork()`)
   and is exposed inline by the Network page of `qml/SettingsDialog.qml`. The
@@ -316,8 +318,10 @@ When testing destructive operations, prefer domains whose names start with
   path. Disks expose advanced options (read-only, shareable, serial, cache and
   discard). It reads `Karton::domainHardwareInfo()` and writes firmware, boot
   order, video, sound, TPM and description through `editDomainHardware()`.
-  "Add Hardware" navigates to the relevant Settings page. There are no separate
-  Storage/Networks/PCI/USB menu actions.
+  "Add Hardware" navigates to the relevant Settings page. The XML page is
+  read-only by default with an Edit switch; it uses `XmlHighlighter` for
+  theme-coloured XML syntax highlighting and saves through `saveDomainXml()`.
+  There are no separate Storage/Networks/PCI/USB menu actions.
 - New domains use user-mode networking with a `virtio` (default) or `e1000`
   interface, or no network at all. The model is stored in
   `DomainConfig::networkModel` and read back from the domain XML.

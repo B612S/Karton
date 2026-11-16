@@ -1039,6 +1039,41 @@ void Karton::saveDomainDisplayResolution(const Domain *domain, int width, int he
     }
 }
 
+QString Karton::domainXml(const Domain *domain) const
+{
+    if (!domain || !domain->domainPtr()) {
+        return {};
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return {};
+    }
+    const QString result = QString::fromUtf8(xml);
+    free(xml);
+    return result;
+}
+
+bool Karton::saveDomainXml(const Domain *domain, const QString &xml)
+{
+    if (!domain || !m_conn || xml.trimmed().isEmpty()) {
+        return false;
+    }
+    virDomainPtr redefined = virDomainDefineXML(m_conn, xml.toUtf8().constData());
+    if (!redefined) {
+        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
+                                   "Failed to save XML for domain %1: %2",
+                                   domain->config()->name(),
+                                   QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    virDomainFree(redefined);
+    refreshDomainList();
+    return true;
+}
+
 QString Karton::domainOsName(const Domain *domain) const
 {
     if (!domain) {
@@ -1451,6 +1486,32 @@ static QString interfaceXmlForMac(virDomainPtr domain, const QString &mac, unsig
 
     free(xml);
     return deviceXml;
+}
+
+bool Karton::deleteNetwork(const QString &name)
+{
+    if (!m_conn || name.isEmpty()) {
+        return false;
+    }
+    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    if (!network) {
+        Q_EMIT errorOccurred(i18nc("%1 is a network name", "Network %1 was not found.", name));
+        return false;
+    }
+    const int active = virNetworkIsActive(network);
+    if (active == 1) {
+        virNetworkDestroy(network);
+    }
+    const bool ok = virNetworkUndefine(network) == 0;
+    if (!ok) {
+        Q_EMIT errorOccurred(
+            i18nc("%1 is a network name, %2 is the error message", "Failed to delete network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage())));
+    }
+    virNetworkFree(network);
+    if (ok) {
+        Q_EMIT networksChanged();
+    }
+    return ok;
 }
 
 bool Karton::attachNetwork(const Domain *domain, const QString &network, const QString &model)

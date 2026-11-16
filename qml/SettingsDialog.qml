@@ -34,6 +34,8 @@ Kirigami.Dialog {
     property var pciHostDevices: []
     property var usbHostDevices: []
     property var performance: ({})
+    property bool xmlDirty: false
+    property bool xmlLoading: false
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
@@ -85,6 +87,13 @@ Kirigami.Dialog {
         tpmEnabledCheck.checked = hardware.tpmEnabled === true;
         tpmModelCombo.currentIndex = Math.max(0, ["tpm-crb", "tpm-tis"].indexOf(hardware.tpmModel));
         tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
+        if (!root.xmlDirty) {
+            root.xmlLoading = true;
+            xmlEditor.text = Karton.domainXml(domain);
+            root.xmlLoading = false;
+            root.xmlDirty = false;
+            xmlEditSwitch.checked = false;
+        }
         const resolution = Karton.domainDisplayResolution(domain);
         let resolutionIndex = 0;
         for (let i = 0; i < displayResolutions.length - 1; ++i) {
@@ -318,7 +327,8 @@ Kirigami.Dialog {
                     {label: i18n("PCI")},
                     {label: i18n("TPM")},
                     {label: i18n("OS Information")},
-                    {label: i18n("Performance")}
+                    {label: i18n("Performance")},
+                    {label: i18n("XML")}
                 ]
 
                 delegate: Rectangle {
@@ -1575,6 +1585,83 @@ Kirigami.Dialog {
                     Item { Layout.fillHeight: true }
                 }
             }
+
+            // XML
+            Controls.ScrollView {
+                Layout.fillHeight: true
+                implicitHeight: 0
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 12
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Controls.Label {
+                            text: i18n("Domain XML")
+                            font.pixelSize: 15
+                            font.weight: Font.Bold
+                            Layout.fillWidth: true
+                        }
+                        Controls.Label {
+                            text: i18n("Edit")
+                            font.pixelSize: 13
+                        }
+                        Controls.Switch {
+                            id: xmlEditSwitch
+                        }
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        opacity: 0.65
+                        font.pixelSize: 12
+                        text: i18n("Read-only by default. Enable editing only when you need to change the domain XML directly.")
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        implicitHeight: Kirigami.Units.gridUnit * 24
+                        radius: 6
+                        color: Kirigami.Theme.backgroundColor
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+
+                        Controls.TextArea {
+                            id: xmlEditor
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            readOnly: !xmlEditSwitch.checked
+                            wrapMode: TextEdit.NoWrap
+                            selectByMouse: true
+                            font.family: "monospace"
+                            font.pixelSize: 12
+                            color: Kirigami.Theme.textColor
+                            background: null
+                            onTextChanged: {
+                                if (!root.xmlLoading) {
+                                    root.xmlDirty = true;
+                                }
+                            }
+
+                            XmlHighlighter {
+                                textDocument: xmlEditor.textDocument
+                            }
+                        }
+                    }
+                    Controls.Button {
+                        text: i18n("Apply XML")
+                        icon.name: "dialog-ok-symbolic"
+                        enabled: xmlEditSwitch.checked && root.xmlDirty
+                        Layout.alignment: Qt.AlignRight
+                        onClicked: {
+                            if (Karton.saveDomainXml(root.domain, xmlEditor.text)) {
+                                root.xmlDirty = false;
+                                root.refresh();
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1601,6 +1688,7 @@ Kirigami.Dialog {
                 onClicked: root.close()
             }
         }
+    }
     }
     }
 
@@ -1671,7 +1759,6 @@ Kirigami.Dialog {
             root.contentItem.forceActiveFocus();
         }
     }
-    }
 
     FileDialog {
         id: imageFileDialog
@@ -1694,5 +1781,7 @@ Kirigami.Dialog {
             }
         }
     }
+
+}
 
 }

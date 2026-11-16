@@ -99,6 +99,8 @@ public Q_SLOTS:
     Q_INVOKABLE void saveViewerWindowSize(const Domain *domain, int width, int height);
     Q_INVOKABLE QVariantMap domainDisplayResolution(const Domain *domain) const;
     Q_INVOKABLE void saveDomainDisplayResolution(const Domain *domain, int width, int height);
+    Q_INVOKABLE QString domainXml(const Domain *domain) const;
+    Q_INVOKABLE bool saveDomainXml(const Domain *domain, const QString &xml);
     Q_INVOKABLE QVariantMap domainHardwareInfo(const Domain *domain) const;
     Q_INVOKABLE bool editDomainHardware(const Domain *domain, const QVariantMap &settings);
     Q_INVOKABLE bool refreshDomainPreview(const Domain *domain);
@@ -118,6 +120,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool stopNetwork(const QString &name);
     Q_INVOKABLE bool setNetworkAutostart(const QString &name, bool autostart);
     Q_INVOKABLE bool createNatNetwork(const QString &name);
+    Q_INVOKABLE bool deleteNetwork(const QString &name);
     Q_INVOKABLE QVariantList domainInterfaces(const Domain *domain) const;
     Q_INVOKABLE bool attachNetwork(const Domain *domain, const QString &network, const QString &model);
     Q_INVOKABLE bool detachNetwork(const Domain *domain, const QString &mac);
