@@ -1784,15 +1784,6 @@ Kirigami.Dialog {
     }
 
     Connections {
-        target: Karton
-        function onErrorOccurred(errorMessage) {
-            if (applicationWindow()) {
-                applicationWindow().showPassiveNotification(errorMessage, "long");
-            }
-        }
-    }
-
-    Connections {
         target: categoryList
         function onCurrentIndexChanged() {
             if (!root.domain || root.xmlDirty) {

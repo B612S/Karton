@@ -115,9 +115,6 @@ Kirigami.Dialog {
         function onErrorOccurred(errorMessage) {
             root.message = errorMessage;
             root.messageIsError = true;
-            if (applicationWindow()) {
-                applicationWindow().showPassiveNotification(errorMessage, "long");
-            }
         }
     }
 
