@@ -1625,29 +1625,36 @@ Kirigami.Dialog {
                         border.width: 1
                         border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
-                        Controls.TextArea {
-                            id: xmlEditor
+                        Controls.ScrollView {
+                            id: xmlScroll
                             anchors.fill: parent
                             anchors.margins: 8
-                            text: root.xmlContent
-                            readOnly: !xmlEditSwitch.checked
-                            wrapMode: TextEdit.NoWrap
-                            textFormat: TextEdit.PlainText
-                            selectByMouse: true
-                            font.family: "monospace"
-                            font.pixelSize: 12
-                            color: Kirigami.Theme.textColor
-                            background: null
-                            onTextChanged: {
-                                // Do not mark the initial empty text or a
-                                // refresh-triggered update as a user edit.
-                                if (!root.xmlLoading && xmlEditSwitch.checked) {
-                                    root.xmlDirty = true;
-                                }
-                            }
+                            clip: true
 
-                            XmlHighlighter {
-                                textDocument: xmlEditor.textDocument
+                            Controls.TextArea {
+                                id: xmlEditor
+                                width: Math.max(xmlScroll.availableWidth, implicitWidth)
+                                height: Math.max(xmlScroll.availableHeight, implicitHeight)
+                                text: root.xmlContent
+                                readOnly: !xmlEditSwitch.checked
+                                wrapMode: TextEdit.NoWrap
+                                textFormat: TextEdit.PlainText
+                                selectByMouse: true
+                                font.family: "monospace"
+                                font.pixelSize: 12
+                                color: Kirigami.Theme.textColor
+                                background: null
+                                onTextChanged: {
+                                    // Do not mark the initial empty text or a
+                                    // refresh-triggered update as a user edit.
+                                    if (!root.xmlLoading && xmlEditSwitch.checked) {
+                                        root.xmlDirty = true;
+                                    }
+                                }
+
+                                XmlHighlighter {
+                                    textDocument: xmlEditor.textDocument
+                                }
                             }
                         }
                     }
