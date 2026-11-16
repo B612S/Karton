@@ -38,6 +38,8 @@ class DomainViewer : public QQuickItem
     Q_PROPERTY(bool microphoneEnabled READ microphoneEnabled WRITE setMicrophoneEnabled NOTIFY microphoneEnabledChanged)
     Q_PROPERTY(bool spiceTlsEnabled READ spiceTlsEnabled WRITE setSpiceTlsEnabled NOTIFY spiceTlsEnabledChanged)
     Q_PROPERTY(QString spiceCaCertificate READ spiceCaCertificate WRITE setSpiceCaCertificate NOTIFY spiceCaCertificateChanged)
+    Q_PROPERTY(int clipboardTextMode READ clipboardTextMode WRITE setClipboardTextMode NOTIFY clipboardTextModeChanged)
+    Q_PROPERTY(int clipboardFilesMode READ clipboardFilesMode WRITE setClipboardFilesMode NOTIFY clipboardFilesModeChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -83,6 +85,16 @@ public:
         return m_spiceCaCertificate;
     }
     void setSpiceCaCertificate(const QString &path);
+    int clipboardTextMode() const
+    {
+        return m_clipboardTextMode;
+    }
+    void setClipboardTextMode(int mode);
+    int clipboardFilesMode() const
+    {
+        return m_clipboardFilesMode;
+    }
+    void setClipboardFilesMode(int mode);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
 
@@ -123,6 +135,8 @@ Q_SIGNALS:
     void microphoneEnabledChanged();
     void spiceTlsEnabledChanged();
     void spiceCaCertificateChanged();
+    void clipboardTextModeChanged();
+    void clipboardFilesModeChanged();
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
@@ -142,6 +156,10 @@ private:
     static void cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData);
     static void cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData);
     static void mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer userData);
+    static gboolean clipboardSelectionGrabCallback(SpiceMainChannel *channel, guint selection, guint32 *types, guint ntypes, gpointer userData);
+    static gboolean clipboardSelectionRequestCallback(SpiceMainChannel *channel, guint selection, guint32 type, gpointer userData);
+    static void clipboardSelectionCallback(SpiceMainChannel *channel, guint selection, guint32 type, gconstpointer data, guint size, gpointer userData);
+    void hostClipboardChanged();
     static void cursorHideCallback(SpiceCursorChannel *channel, gpointer userData);
     static void cursorResetCallback(SpiceCursorChannel *channel, gpointer userData);
     void clearCursor();
@@ -171,6 +189,8 @@ private:
     SpiceSession *m_session = nullptr;
     SpiceMainChannel *m_main_channel = nullptr;
     SpiceInputsChannel *m_inputs_channel = nullptr;
+    QMetaObject::Connection m_clipboardConnection;
+    bool m_settingClipboard = false;
 
     int m_current_button_mask = 0;
     bool m_pointerGrabbed = false;
@@ -194,6 +214,9 @@ private:
     bool m_recording = false;
     bool m_spiceTlsEnabled = true;
     QString m_spiceCaCertificate;
+    int m_clipboardTextMode = 3;
+    int m_clipboardFilesMode = 0;
+    QString m_lastGuestClipboardText;
     int m_spiceTlsPort = 0;
     QString m_spicePassword;
 

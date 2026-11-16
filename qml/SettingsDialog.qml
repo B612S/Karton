@@ -37,7 +37,7 @@ Kirigami.Dialog {
     property bool xmlDirty: false
     property bool xmlLoading: false
     property bool optionalUpdating: false
-    readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 10, 7, 8, 9, 15, 11, 12, 13, 14]
+    readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 10, 7, 8, 9, 15, 11, 12, 13, 16, 14]
     readonly property var categoryModel: [
         { label: i18n("Overview"), visible: true },
         { label: i18n("CPUs & Memory"), visible: true },
@@ -56,6 +56,7 @@ Kirigami.Dialog {
             return device.tag === "serial" || device.tag === "channel" || device.tag === "console";
         }) },
         { label: i18n("Other devices"), visible: true },
+        { label: i18n("Clipboard"), visible: true },
         { label: i18n("XML"), visible: true }
     ]
     property string xmlContent: ""
@@ -137,6 +138,8 @@ Kirigami.Dialog {
         shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
         shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));
         root.optionalUpdating = false;
+        clipboardTextCombo.currentIndex = Karton.clipboardTextMode();
+        clipboardFilesCombo.currentIndex = Karton.clipboardFilesMode();
         Qt.callLater(root.ensureVisibleCategory);
 
         const resolution = Karton.domainDisplayResolution(domain);
@@ -1807,6 +1810,7 @@ Kirigami.Dialog {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: 0
                 spacing: 12
 
                     RowLayout {
@@ -1919,6 +1923,12 @@ Kirigami.Dialog {
                         opacity: 0.65
                         font.pixelSize: 12
                     }
+                    Controls.Button {
+                        text: i18n("How to mount…")
+                        icon.name: "help-about-symbolic"
+                        Layout.alignment: Qt.AlignLeft
+                        onClicked: filesystemHelpDialog.open()
+                    }
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -1977,6 +1987,62 @@ Kirigami.Dialog {
                 }
             }
 
+            // Clipboard
+            ScrollableSettingsView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                implicitHeight: 0
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 16
+
+                    Controls.Label {
+                        text: i18n("Clipboard synchronization between this computer and the guest.")
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        opacity: 0.65
+                        font.pixelSize: 12
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+                        Controls.Label { text: i18n("Text"); Layout.fillWidth: true }
+                        Controls.ComboBox {
+                            id: clipboardTextCombo
+                            Layout.preferredWidth: 260
+                            model: [
+                                i18n("Disabled"),
+                                i18n("Host to guest"),
+                                i18n("Guest to host"),
+                                i18n("Bidirectional")
+                            ]
+                            onCurrentIndexChanged: Karton.saveClipboardTextMode(currentIndex)
+                        }
+                        Controls.Label { text: i18n("Files"); Layout.fillWidth: true }
+                        Controls.ComboBox {
+                            id: clipboardFilesCombo
+                            Layout.preferredWidth: 260
+                            model: [
+                                i18n("Disabled"),
+                                i18n("Host to guest"),
+                                i18n("Guest to host"),
+                                i18n("Bidirectional")
+                            ]
+                            onCurrentIndexChanged: Karton.saveClipboardFilesMode(currentIndex)
+                        }
+                    }
+                    Controls.Label {
+                        text: i18n("Text clipboard requires spice-vdagent in the guest. On Wayland the viewer window must have focus. File clipboard additionally requires guest support.")
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        opacity: 0.65
+                        font.pixelSize: 12
+                    }
+                }
+            }
+
     }
 
     }
@@ -1984,6 +2050,86 @@ Kirigami.Dialog {
 
     }
 
+    }
+
+    Kirigami.Dialog {
+        id: filesystemHelpDialog
+        title: i18n("Mounting Filesystem Shares")
+        modal: true
+        padding: Kirigami.Units.largeSpacing
+        preferredWidth: Kirigami.Units.gridUnit * 42
+
+        background: Rectangle {
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                           Kirigami.Theme.backgroundColor.g,
+                           Kirigami.Theme.backgroundColor.b, 0.95)
+            radius: 8
+            border.color: "transparent"
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            Controls.Label {
+                text: i18n("Use the mount tag from the Filesystem page as the name of the share.")
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+            }
+            Controls.Label {
+                text: i18n("Linux — 9p")
+                font.pixelSize: 15
+                font.weight: Font.Bold
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+            }
+            Controls.Label {
+                text: "sudo mkdir -p /mnt/share\nsudo mount -t 9p -o trans=virtio,version=9p2000.L share /mnt/share"
+                font.family: "monospace"
+                Layout.fillWidth: true
+                wrapMode: Text.WrapAnywhere
+            }
+            Controls.Label {
+                text: i18n("Linux — virtiofs")
+                font.pixelSize: 15
+                font.weight: Font.Bold
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+            }
+            Controls.Label {
+                text: "sudo mkdir -p /mnt/share\nsudo mount -t virtiofs share /mnt/share"
+                font.family: "monospace"
+                Layout.fillWidth: true
+                wrapMode: Text.WrapAnywhere
+            }
+            Controls.Label {
+                text: i18n("Windows")
+                font.pixelSize: 15
+                font.weight: Font.Bold
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+            }
+            Controls.Label {
+                text: i18n("9p is not supported natively. For virtiofs, install the VirtIO FS driver from virtio-win and WinFsp, then use the shared tag in the VirtIO FS client. Alternatively use a Windows/SMB share.")
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+            }
+            Controls.Label {
+                text: i18n("macOS and BSD variants need a guest driver for the selected filesystem type; 9p support depends on the guest kernel.")
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.65
+                font.pixelSize: 12
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Close")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: filesystemHelpDialog.close()
+            }
+        ]
     }
 
     Kirigami.Dialog {

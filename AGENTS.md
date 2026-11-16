@@ -338,12 +338,20 @@ Every settings page must look and behave the same:
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
   macOS and DOS), installed into hicolor. The VM page uses Luma-style
   transparent details rows and a rounded preview frame.
+- Clipboard synchronization uses the SPICE main channel and the guest agent.
+  Application Settings has separate text/file modes: 0 disabled, 1 host to
+  guest, 2 guest to host, 3 bidirectional (`clipboard/textMode` and
+  `clipboard/filesMode`). Text uses `main-clipboard-selection-*` and is
+  guarded against host/guest echo loops; Wayland requires the viewer window to
+  have focus. File clipboard depends on guest support and is not a substitute
+  for filesystem shares.
 - `SettingsDialog.qml` is a window-modal overlay dialog attached to the
   owning window. It is capped at 1000×680, has a shared page header, a fixed
   navigation column, one scrollable content page and a fixed footer, and never
   opens as an independent top-level window. Pages: Overview, CPUs & Memory,
   Boot Options, Disks, Network, Display, Sound, Input, USB, PCI, TPM,
-  Filesystem, Controllers, Serial & Console, Other devices and XML. Each page uses
+  Filesystem, Controllers, Serial & Console, Other devices, Clipboard and XML.
+  Each page uses
   Luma-style transparent rounded window, 200/160 px category sidebar with a
   translucent highlight and accent bar, 24 px content margins and two-column
   label/control rows. The Add/Save/Close actions are `customFooterActions` on

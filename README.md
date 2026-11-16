@@ -66,6 +66,7 @@ VM pages include:
 - Controllers
 - Serial & Console
 - Remaining XML devices
+- Clipboard
 - Domain XML editor
 
 The XML editor is read-only by default, has an explicit Edit switch, syntax
@@ -85,6 +86,34 @@ highlighting and scrolls independently of the page.
 TPM is configured on the VM's TPM Settings page. Watchdog, RNG, panic,
 VSOCK and shared memory (IVSHMEM) are enabled from the VM's Other devices page.
 Filesystem shares are added from Add Hardware and listed on the Filesystem page.
+Clipboard text and file synchronization modes are configured on the Clipboard
+page; text sync needs spice-vdagent in the guest.
+
+### Mounting filesystem shares
+
+Use the mount tag configured for the share (for example `share`).
+
+Linux with 9p:
+
+```sh
+sudo mkdir -p /mnt/share
+sudo mount -t 9p -o trans=virtio,version=9p2000.L share /mnt/share
+```
+
+Linux with virtiofs:
+
+```sh
+sudo mkdir -p /mnt/share
+sudo mount -t virtiofs share /mnt/share
+```
+
+To mount at boot, add an `/etc/fstab` entry with the matching filesystem
+type and the `_netdev` option.
+
+Windows has no native 9p support. For virtiofs, install the VirtIO FS driver
+from virtio-win and WinFsp, then use the mount tag in the VirtIO FS client.
+Alternatively use a Windows/SMB share. macOS and BSD guests need a matching
+guest driver; 9p support depends on the guest kernel.
 
 Global Application Settings provide:
 

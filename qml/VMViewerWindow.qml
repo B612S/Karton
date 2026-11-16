@@ -378,6 +378,8 @@ Kirigami.ApplicationWindow {
             domain: viewerWindow.domain
             spiceTlsEnabled: Karton.spiceTlsEnabled()
             spiceCaCertificate: Karton.spiceCaCertificate()
+            clipboardTextMode: Karton.clipboardTextMode()
+            clipboardFilesMode: Karton.clipboardFilesMode()
             visible: viewerWindow.isRunning
             enabled: viewerWindow.isRunning
 

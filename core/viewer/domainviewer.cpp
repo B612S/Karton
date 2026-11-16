@@ -6,11 +6,13 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 #include <spice-client.h>
+#include <spice/vd_agent.h>
 
 #include <cstdlib>
 
 #include <KLocalizedString>
 
+#include <QClipboard>
 #include <QCursor>
 #include <QDomDocument>
 #include <QDomElement>
@@ -291,6 +293,14 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         spice_channel_connect(channel);
         item->m_main_channel = SPICE_MAIN_CHANNEL(channel);
         g_signal_connect(channel, "main-agent-update", G_CALLBACK(mainAgentUpdateCallback), item);
+        g_signal_connect(channel, "main-clipboard-selection-grab", G_CALLBACK(clipboardSelectionGrabCallback), item);
+        g_signal_connect(channel, "main-clipboard-selection-request", G_CALLBACK(clipboardSelectionRequestCallback), item);
+        g_signal_connect(channel, "main-clipboard-selection", G_CALLBACK(clipboardSelectionCallback), item);
+        if (!item->m_clipboardConnection) {
+            item->m_clipboardConnection = QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, item, [item]() {
+                item->hostClipboardChanged();
+            });
+        }
         QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
@@ -327,6 +337,77 @@ void DomainViewer::mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer u
     // request even if the target size did not change in the meantime.
     item->m_lastDisplayResolution = QSize();
     item->updateDisplayResolution();
+}
+
+gboolean DomainViewer::clipboardSelectionGrabCallback(SpiceMainChannel *channel, guint selection, guint32 *types, guint ntypes, gpointer userData)
+{
+    Q_UNUSED(types);
+    Q_UNUSED(ntypes);
+    auto *item = static_cast<DomainViewer *>(userData);
+    if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
+        return TRUE;
+    }
+    // The guest has clipboard data. Ask for UTF-8 text; the reply is handled
+    // by clipboardSelectionCallback().
+    spice_main_channel_clipboard_selection_request(channel, selection, VD_AGENT_CLIPBOARD_UTF8_TEXT);
+    return TRUE;
+}
+
+gboolean DomainViewer::clipboardSelectionRequestCallback(SpiceMainChannel *channel, guint selection, guint32 type, gpointer userData)
+{
+    auto *item = static_cast<DomainViewer *>(userData);
+    if (item->m_clipboardTextMode != 1 && item->m_clipboardTextMode != 3) {
+        return FALSE;
+    }
+    if (type != VD_AGENT_CLIPBOARD_UTF8_TEXT) {
+        return FALSE;
+    }
+    const QByteArray text = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
+    spice_main_channel_clipboard_selection_notify(channel,
+                                                  selection,
+                                                  VD_AGENT_CLIPBOARD_UTF8_TEXT,
+                                                  reinterpret_cast<const guchar *>(text.constData()),
+                                                  static_cast<size_t>(text.size()));
+    return TRUE;
+}
+
+void DomainViewer::clipboardSelectionCallback(SpiceMainChannel *channel, guint selection, guint32 type, gconstpointer data, guint size, gpointer userData)
+{
+    Q_UNUSED(channel);
+    Q_UNUSED(selection);
+    if (type != VD_AGENT_CLIPBOARD_UTF8_TEXT || !data) {
+        return;
+    }
+    auto *item = static_cast<DomainViewer *>(userData);
+    if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
+        return;
+    }
+    const QString text = QString::fromUtf8(static_cast<const char *>(data), static_cast<int>(size));
+    item->m_lastGuestClipboardText = text;
+    item->m_settingClipboard = true;
+    QGuiApplication::clipboard()->setText(text, QClipboard::Clipboard);
+    item->m_settingClipboard = false;
+}
+
+void DomainViewer::hostClipboardChanged()
+{
+    if (!m_main_channel || m_settingClipboard) {
+        return;
+    }
+    if (m_clipboardTextMode != 1 && m_clipboardTextMode != 3) {
+        return;
+    }
+    const QString text = QGuiApplication::clipboard()->text(QClipboard::Clipboard);
+    if (!m_lastGuestClipboardText.isEmpty() && text == m_lastGuestClipboardText) {
+        m_lastGuestClipboardText.clear();
+        return;
+    }
+    if (text.isEmpty()) {
+        spice_main_channel_clipboard_selection_release(m_main_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD);
+        return;
+    }
+    guint32 types[] = {VD_AGENT_CLIPBOARD_UTF8_TEXT};
+    spice_main_channel_clipboard_selection_grab(m_main_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD, types, 1);
 }
 
 // ========================== Display rendering  ========================
@@ -811,6 +892,26 @@ void DomainViewer::setSpiceCaCertificate(const QString &path)
     }
     m_spiceCaCertificate = path;
     Q_EMIT spiceCaCertificateChanged();
+}
+
+void DomainViewer::setClipboardTextMode(int mode)
+{
+    mode = qBound(0, mode, 3);
+    if (m_clipboardTextMode == mode) {
+        return;
+    }
+    m_clipboardTextMode = mode;
+    Q_EMIT clipboardTextModeChanged();
+}
+
+void DomainViewer::setClipboardFilesMode(int mode)
+{
+    mode = qBound(0, mode, 3);
+    if (m_clipboardFilesMode == mode) {
+        return;
+    }
+    m_clipboardFilesMode = mode;
+    Q_EMIT clipboardFilesModeChanged();
 }
 
 void DomainViewer::record_start_callback(SpiceRecordChannel *channel, gint format, gint channels, gint rate, gpointer user_data)

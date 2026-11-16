@@ -1006,6 +1006,30 @@ void Karton::saveViewerWindowSize(const Domain *domain, int width, int height)
     settings.setValue(prefix + QStringLiteral("height"), height);
 }
 
+int Karton::clipboardTextMode() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return qBound(0, settings.value(QStringLiteral("clipboard/textMode"), 3).toInt(), 3);
+}
+
+void Karton::saveClipboardTextMode(int mode)
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("clipboard/textMode"), qBound(0, mode, 3));
+}
+
+int Karton::clipboardFilesMode() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return qBound(0, settings.value(QStringLiteral("clipboard/filesMode"), 0).toInt(), 3);
+}
+
+void Karton::saveClipboardFilesMode(int mode)
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("clipboard/filesMode"), qBound(0, mode, 3));
+}
+
 bool Karton::spiceTlsEnabled() const
 {
     QSettings settings(kartonConfigPath(), QSettings::IniFormat);
