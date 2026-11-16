@@ -14,7 +14,8 @@ This project is still in early development and will likely break existing virtua
 - Displays list of existing VMs
 - VM lifecycle: start, stop, pause/resume, reboot, force stop and open the console
 - SPICE viewer with pointer/keyboard capture, a large initial window, guest
-  resolution auto-fitting and USB passthrough in the viewer menu
+  resolution auto-fitting, live VM previews and a categorized viewer menu
+  (display, devices and machine actions including VM settings)
 - Double-click a VM in the list to open its viewer directly
 - Managed save: store a running VM's state on disk and restore it on the next start
 - Live CPU and memory usage on the VM page

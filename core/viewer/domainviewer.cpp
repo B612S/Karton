@@ -380,11 +380,19 @@ void DomainViewer::cursorHideCallback(SpiceCursorChannel *channel, gpointer user
 
     auto *item = static_cast<DomainViewer *>(userData);
     qCDebug(KARTON_DEBUG) << "SPICE cursor-hide";
+    bool pointerInside = false;
     {
         QMutexLocker locker(&item->m_cursorMutex);
-        item->m_cursorVisible = false;
+        pointerInside = item->m_pointerInside;
+        if (!pointerInside) {
+            item->m_cursorVisible = false;
+        }
     }
-    if (!item->m_pointerGrabbed) {
+    if (pointerInside) {
+        // Keep the last guest cursor while the pointer is over the display;
+        // otherwise the host arrow flashes in during guest window dragging.
+        item->setCursor(Qt::BlankCursor);
+    } else if (!item->m_pointerGrabbed) {
         item->unsetCursor();
     }
     item->update();
@@ -407,7 +415,12 @@ void DomainViewer::clearCursor()
         m_cursorTextureDirty = true;
         m_hasCursorPaintPosition = false;
     }
-    if (!m_pointerGrabbed) {
+    bool pointerInside = false;
+    {
+        QMutexLocker locker(&m_cursorMutex);
+        pointerInside = m_pointerInside;
+    }
+    if (!m_pointerGrabbed && !pointerInside) {
         unsetCursor();
     }
     update();
@@ -432,8 +445,9 @@ void DomainViewer::updateDisplayResolution()
     // The SPICE agent resizes the guest desktop to the monitor configuration.
     // update=TRUE lets spice-gtk debounce resize storms while the user drags
     // the window, and send the final configuration to the agent.
-    int targetWidth = qMax(640, qRound(width()));
-    int targetHeight = qMax(480, qRound(height()));
+    const qreal dpr = window() ? window()->devicePixelRatio() : 1.0;
+    int targetWidth = qMax(640, qRound(width() * dpr));
+    int targetHeight = qMax(480, qRound(height() * dpr));
     targetWidth &= ~1;
     targetHeight &= ~1;
 
@@ -442,8 +456,23 @@ void DomainViewer::updateDisplayResolution()
         return;
     }
     m_lastDisplayResolution = target;
+    // Some agents only react when the display is explicitly enabled and the
+    // monitor configuration is sent immediately; update=TRUE alone can leave
+    // the request waiting for the next agent event.
+    spice_main_channel_update_display_enabled(m_main_channel, 0, TRUE, TRUE);
     spice_main_channel_update_display(m_main_channel, 0, 0, 0, targetWidth, targetHeight, TRUE);
+    gboolean agentConnected = FALSE;
+    g_object_get(m_main_channel, "agent-connected", &agentConnected, nullptr);
+    if (agentConnected) {
+        spice_main_channel_send_monitor_config(m_main_channel);
+    }
     qCInfo(KARTON_DEBUG) << "Requested guest display resolution:" << target;
+}
+
+void DomainViewer::fitGuestToWindow()
+{
+    m_lastDisplayResolution = QSize();
+    updateDisplayResolution();
 }
 
 // triggered by update()
@@ -698,7 +727,16 @@ void DomainViewer::releasePointerGrab()
         window()->setMouseGrabEnabled(false);
         window()->setKeyboardGrabEnabled(false);
     }
-    unsetCursor();
+    bool keepBlank = false;
+    {
+        QMutexLocker locker(&m_cursorMutex);
+        keepBlank = m_pointerInside && m_cursorVisible;
+    }
+    if (keepBlank) {
+        setCursor(Qt::BlankCursor);
+    } else {
+        unsetCursor();
+    }
     Q_EMIT pointerGrabbedChanged();
 }
 
@@ -881,6 +919,37 @@ void DomainViewer::mouseMoveEvent(QMouseEvent *event)
 
     updatePointer(event->position(), buttonMask);
     event->accept();
+}
+
+void DomainViewer::hoverEnterEvent(QHoverEvent *event)
+{
+    bool haveCursor = false;
+    {
+        QMutexLocker locker(&m_cursorMutex);
+        m_pointerInside = true;
+        if (!m_cursorImage.isNull()) {
+            m_cursorVisible = true;
+            haveCursor = true;
+        }
+    }
+    if (haveCursor) {
+        setCursor(Qt::BlankCursor);
+    }
+    QQuickItem::hoverEnterEvent(event);
+}
+
+void DomainViewer::hoverLeaveEvent(QHoverEvent *event)
+{
+    {
+        QMutexLocker locker(&m_cursorMutex);
+        m_pointerInside = false;
+        m_cursorVisible = false;
+    }
+    if (!m_pointerGrabbed) {
+        unsetCursor();
+    }
+    update();
+    QQuickItem::hoverLeaveEvent(event);
 }
 
 void DomainViewer::hoverMoveEvent(QHoverEvent *event)

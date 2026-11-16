@@ -59,35 +59,6 @@ Kirigami.ApplicationWindow {
 
         actions: [
             Kirigami.Action {
-                text: i18n("Menu")
-                icon.name: "application-menu-symbolic"
-
-                Kirigami.Action {
-                    text: i18n("Actual Size")
-                    icon.name: "zoom-original-symbolic"
-                    onTriggered: {
-                        viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
-                        viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
-                    }
-                }
-                Kirigami.Action {
-                    text: i18n("Fit to Window")
-                    icon.name: "zoom-fit-best-symbolic"
-                    onTriggered: viewerWindow.showMaximized()
-                }
-                Kirigami.Action {
-                    text: i18n("Fit Guest to Window")
-                    icon.name: "transform-scale-symbolic"
-                    onTriggered: domainViewer.updateDisplayResolution()
-                }
-                Kirigami.Action {
-                    text: i18n("USB Devices")
-                    icon.name: "drive-removable-media-usb-symbolic"
-                    shortcut: "Ctrl+Shift+U"
-                    onTriggered: usbDialog.open()
-                }
-            },
-            Kirigami.Action {
                 icon.name: "view-fullscreen-symbolic"
                 onTriggered: {
                     if (viewerWindow.visibility === Window.FullScreen) {
@@ -96,8 +67,82 @@ Kirigami.ApplicationWindow {
                         viewerWindow.showFullScreen();
                     }
                 }
+            },
+            Kirigami.Action {
+                icon.name: "view-more-symbolic"
+                onTriggered: {
+                    domainViewer.releasePointerGrab();
+                    viewerMenu.popup();
+                }
             }
         ]
+
+        Controls.Menu {
+            id: viewerMenu
+
+            Controls.MenuItem {
+                text: i18n("Display")
+                enabled: false
+                font.bold: true
+            }
+            Controls.MenuItem {
+                text: i18n("Actual Size")
+                icon.name: "zoom-original-symbolic"
+                onTriggered: {
+                    viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
+                    viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
+                }
+            }
+            Controls.MenuItem {
+                text: i18n("Fit to Window")
+                icon.name: "zoom-fit-best-symbolic"
+                onTriggered: viewerWindow.showMaximized()
+            }
+            Controls.MenuItem {
+                text: i18n("Fit Guest to Window")
+                icon.name: "transform-scale-symbolic"
+                onTriggered: domainViewer.fitGuestToWindow()
+            }
+            Controls.MenuSeparator {}
+
+            Controls.MenuItem {
+                text: i18n("Devices")
+                enabled: false
+                font.bold: true
+            }
+            Controls.MenuItem {
+                text: i18n("USB Devices")
+                icon.name: "drive-removable-media-usb-symbolic"
+                onTriggered: usbDialog.open()
+            }
+            Controls.MenuItem {
+                text: i18n("Storage")
+                icon.name: "drive-harddisk-symbolic"
+                onTriggered: storageDialog.open()
+            }
+            Controls.MenuItem {
+                text: i18n("Networks")
+                icon.name: "network-wired-symbolic"
+                onTriggered: networksDialog.open()
+            }
+            Controls.MenuSeparator {}
+
+            Controls.MenuItem {
+                text: i18n("Machine")
+                enabled: false
+                font.bold: true
+            }
+            Controls.MenuItem {
+                text: i18n("VM Settings")
+                icon.name: "settings-configure-symbolic"
+                onTriggered: configurationDialog.open()
+            }
+            Controls.MenuItem {
+                text: i18n("Snapshots")
+                icon.name: "camera-photo-symbolic"
+                onTriggered: snapshotsDialog.open()
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -145,6 +190,26 @@ Kirigami.ApplicationWindow {
 
         UsbDevicesDialog {
             id: usbDialog
+            domain: viewerWindow.domain
+        }
+
+        ConfigurationDialog {
+            id: configurationDialog
+            domain: viewerWindow.domain
+        }
+
+        SnapshotsDialog {
+            id: snapshotsDialog
+            domain: viewerWindow.domain
+        }
+
+        StorageDialog {
+            id: storageDialog
+            domain: viewerWindow.domain
+        }
+
+        NetworksDialog {
+            id: networksDialog
             domain: viewerWindow.domain
         }
     }

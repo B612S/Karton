@@ -71,6 +71,8 @@ public:
     void hoverMoveEvent(QHoverEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void hoverEnterEvent(QHoverEvent *event) override;
+    void hoverLeaveEvent(QHoverEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -78,6 +80,7 @@ public:
 
     Q_INVOKABLE void saveFrameToDomain();
     Q_INVOKABLE void updateDisplayResolution();
+    Q_INVOKABLE void fitGuestToWindow();
 
 Q_SIGNALS:
     void domainChanged();
@@ -148,6 +151,7 @@ private:
     bool m_cursorTextureDirty = true;
     QPointF m_cursorPaintPosition;
     bool m_hasCursorPaintPosition = false;
+    bool m_pointerInside = false;
     QSize m_lastDisplayResolution;
 
     QSGNode *m_displayNode = nullptr;

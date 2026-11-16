@@ -13,6 +13,7 @@
 #include <QDomElement>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkInterface>
@@ -573,6 +574,53 @@ bool Karton::deleteSavedState(const Domain *domain)
 
     refreshDomain(domainPtr);
     qCInfo(KARTON_DEBUG) << "Successfully deleted the saved state of domain:" << domain->config()->name();
+    return true;
+}
+
+bool Karton::refreshDomainPreview(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr() || !m_conn) {
+        return false;
+    }
+
+    virStreamPtr stream = virStreamNew(m_conn, 0);
+    if (!stream) {
+        return false;
+    }
+
+    char *mimeType = virDomainScreenshot(domain->domainPtr(), stream, 0, 0);
+    if (!mimeType) {
+        virStreamFree(stream);
+        return false;
+    }
+    free(mimeType);
+
+    QByteArray imageData;
+    char buffer[64 * 1024];
+    bool ok = true;
+    while (true) {
+        const int bytesRead = virStreamRecv(stream, buffer, sizeof(buffer));
+        if (bytesRead == 0) {
+            break;
+        }
+        if (bytesRead < 0) {
+            ok = false;
+            break;
+        }
+        imageData.append(buffer, bytesRead);
+    }
+    virStreamFree(stream);
+
+    if (!ok || imageData.isEmpty()) {
+        return false;
+    }
+
+    const QImage image = QImage::fromData(imageData);
+    if (image.isNull()) {
+        return false;
+    }
+
+    const_cast<Domain *>(domain)->savePreviewFrame(image);
     return true;
 }
 

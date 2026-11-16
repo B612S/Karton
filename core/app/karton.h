@@ -72,6 +72,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool saveDomainState(const Domain *domain);
     Q_INVOKABLE bool deleteSavedState(const Domain *domain);
     Q_INVOKABLE QVariantMap domainStats(const Domain *domain);
+    Q_INVOKABLE bool refreshDomainPreview(const Domain *domain);
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);

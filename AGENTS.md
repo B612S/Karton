@@ -275,6 +275,10 @@ When testing destructive operations, prefer domains whose names start with
   `DomainConfig::networkModel` and read back from the domain XML.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
+  `VMPage.qml` polls `Karton::refreshDomainPreview()` every 3 seconds while the
+  VM is running and visible; it captures the live framebuffer through
+  `virDomainScreenshot()` and writes it to that path, so the preview shows the
+  current guest display instead of the frame saved when the viewer last closed.
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
   overlay, above the display node; the local cursor is hidden while the remote
   cursor is visible. There is one display node per renderer and one root node
@@ -287,20 +291,26 @@ When testing destructive operations, prefer domains whose names start with
   `xcb` and `wayland`; subtracting it only on Wayland made keys map to unrelated
   PC XT scancodes under XWayland.
 - `DomainViewer::updateDisplayResolution()` calls
-  `spice_main_channel_update_display()` with the current item size on window
-  resize and when the SPICE agent connects. The guest adapts its resolution
-  through the agent (spice-vdagent / Windows guest tools); without an agent the
-  request is a no-op. It is also exposed as "Fit Guest to Window" in the viewer
-  menu.
+  `spice_main_channel_update_display()` with the current item size in device
+  pixels on window resize and when the SPICE agent connects; it enables display
+  0 and sends the monitor configuration immediately when the agent is present.
+  The guest adapts its resolution through the agent (spice-vdagent / Windows
+  guest tools); without an agent the request is a no-op. The menu action
+  `fitGuestToWindow()` forces a fresh request even if the target size did not
+  change.
 - Pointer motion calls `QQuickItem::update()` so the local SPICE cursor overlay
   is repainted on every motion event; without it the cursor looked laggy even
-  though input was sent at full rate.
+  though input was sent at full rate. While the pointer is inside the display,
+  a guest `cursor-hide` keeps the last guest cursor and leaves the host cursor
+  blank, so dragging a guest window does not flash the host arrow.
 - `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar only keeps the
-  overflow menu and fullscreen button visible; Actual Size, Fit to Window, Fit
-  Guest to Window and USB Devices live in the menu. There is no explicit
-  grab/release-pointer action: clicking the display grabs the pointer and Esc
-  releases it. A double-click on a VM list row opens that VM's viewer (a
-  stopped VM is started first). UI icons use the monochrome `*-symbolic`
+  fullscreen button and a three-dot menu on the right. The menu is a
+  `Controls.Menu` with Display/Devices/Machine sections: Actual Size, Fit to
+  Window, Fit Guest to Window, USB Devices, Storage, Networks, VM Settings and
+  Snapshots. Opening the menu releases the pointer grab first. There is no
+  explicit grab/release-pointer action: clicking the display grabs the pointer
+  and Esc releases it. A double-click on a VM list row opens that VM's viewer
+  (a stopped VM is started first). UI icons use the monochrome `*-symbolic`
   variants.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.

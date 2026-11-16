@@ -54,6 +54,19 @@ Kirigami.ScrollablePage {
         }
     }
 
+    Timer {
+        id: previewTimer
+        interval: 3000
+        repeat: true
+        running: root.isRunning && root.visible
+        triggeredOnStart: true
+        onTriggered: {
+            if (root.domain) {
+                Karton.refreshDomainPreview(root.domain);
+            }
+        }
+    }
+
     actions: [
         Kirigami.Action {
             icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
