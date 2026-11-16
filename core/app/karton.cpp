@@ -1403,6 +1403,58 @@ bool Karton::setXmlDevice(const Domain *domain, const QString &tag, const QStrin
     return true;
 }
 
+bool Karton::replaceXmlDevice(const Domain *domain, int index, const QString &xml)
+{
+    if (!domain || !domain->domainPtr() || !m_conn || index < 0 || xml.trimmed().isEmpty()) {
+        return false;
+    }
+    char *xmlDesc = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xmlDesc) {
+        xmlDesc = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xmlDesc) {
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xmlDesc))) {
+        free(xmlDesc);
+        return false;
+    }
+    free(xmlDesc);
+
+    QDomDocument deviceDocument;
+    if (!deviceDocument.setContent(xml)) {
+        Q_EMIT errorOccurred(i18n("Invalid device XML."));
+        return false;
+    }
+    QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
+    if (devices.isNull()) {
+        return false;
+    }
+    QDomElement target;
+    int current = 0;
+    for (QDomElement candidate = devices.firstChildElement(); !candidate.isNull(); candidate = candidate.nextSiblingElement()) {
+        if (current == index) {
+            target = candidate;
+            break;
+        }
+        ++current;
+    }
+    if (target.isNull()) {
+        return false;
+    }
+    devices.replaceChild(document.importNode(deviceDocument.documentElement(), true), target);
+
+    virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    if (!redefined) {
+        Q_EMIT errorOccurred(i18nc("%1 is the error message", "Failed to update device: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    virDomainFree(redefined);
+    refreshDomainList();
+    return true;
+}
+
 QVariantList Karton::domainXmlDevices(const Domain *domain) const
 {
     QVariantList result;

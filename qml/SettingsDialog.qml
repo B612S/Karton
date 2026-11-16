@@ -38,6 +38,26 @@ Kirigami.Dialog {
     property bool xmlLoading: false
     property bool optionalUpdating: false
     readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 10, 7, 8, 9, 15, 11, 12, 13, 14]
+    readonly property var categoryModel: [
+        { label: i18n("Overview"), visible: true },
+        { label: i18n("CPUs & Memory"), visible: true },
+        { label: i18n("Boot Options"), visible: true },
+        { label: i18n("Disks"), visible: true },
+        { label: i18n("Network"), visible: true },
+        { label: i18n("Display"), visible: true },
+        { label: i18n("Sound"), visible: true },
+        { label: i18n("Input"), visible: root.inputDevices.length > 0 },
+        { label: i18n("USB"), visible: root.usbDevices.length > 0 },
+        { label: i18n("PCI"), visible: root.pciDevices.length > 0 },
+        { label: i18n("TPM"), visible: true },
+        { label: i18n("Filesystem"), visible: root.xmlDevices.some(function(device) { return device.tag === "filesystem"; }) },
+        { label: i18n("Controllers"), visible: root.xmlDevices.some(function(device) { return device.tag === "controller"; }) },
+        { label: i18n("Serial & Console"), visible: root.xmlDevices.some(function(device) {
+            return device.tag === "serial" || device.tag === "channel" || device.tag === "console";
+        }) },
+        { label: i18n("Other devices"), visible: true },
+        { label: i18n("XML"), visible: true }
+    ]
     property string xmlContent: ""
     property string xmlLastValid: ""
     property var xmlDevices: []
@@ -117,6 +137,7 @@ Kirigami.Dialog {
         shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
         shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));
         root.optionalUpdating = false;
+        Qt.callLater(root.ensureVisibleCategory);
 
         const resolution = Karton.domainDisplayResolution(domain);
         let resolutionIndex = 0;
@@ -154,6 +175,16 @@ Kirigami.Dialog {
             }
         }
         return device.vendor + ":" + device.product;
+    }
+
+    function ensureVisibleCategory() {
+        if (categoryList.currentIndex < 0 || categoryList.currentIndex >= root.categoryModel.length) {
+            categoryList.currentIndex = 0;
+            return;
+        }
+        if (!root.categoryModel[categoryList.currentIndex].visible) {
+            categoryList.currentIndex = 0;
+        }
     }
 
     function deviceByTag(tag) {
@@ -224,6 +255,16 @@ Kirigami.Dialog {
             return "<a href=\"" + escaped + "\">" + escaped + "</a>";
         }
         return root.xmlEscape(value);
+    }
+
+    function openFilesystemEditor(device) {
+        filesystemEditDialog.deviceIndex = device.index;
+        filesystemEditDialog.shareSource = device.source;
+        filesystemEditDialog.shareTarget = device.target;
+        filesystemEditDialog.shareDriver = device.driver;
+        filesystemEditDialog.shareAccess = device.accessmode;
+        filesystemEditDialog.shareReadonly = device.readonly;
+        filesystemEditDialog.open();
     }
 
     function pciDeviceLabel(address) {
@@ -422,31 +463,15 @@ Kirigami.Dialog {
                 id: categoryList
                 anchors.fill: parent
                 anchors.margins: 12
-                spacing: 4
+                spacing: 0
                 currentIndex: 0
 
-                model: [
-                    {label: i18n("Overview")},
-                    {label: i18n("CPUs & Memory")},
-                    {label: i18n("Boot Options")},
-                    {label: i18n("Disks")},
-                    {label: i18n("Network")},
-                    {label: i18n("Display")},
-                    {label: i18n("Sound")},
-                    {label: i18n("Input")},
-                    {label: i18n("USB")},
-                    {label: i18n("PCI")},
-                    {label: i18n("TPM")},
-                    {label: i18n("Filesystem")},
-                    {label: i18n("Controllers")},
-                    {label: i18n("Serial & Console")},
-                    {label: i18n("Other devices")},
-                    {label: i18n("XML")}
-                ]
+                model: root.categoryModel
                 delegate: Rectangle {
                     id: categoryButton
                     width: ListView.view.width
-                    height: 36
+                    height: modelData.visible ? 36 : 0
+                    visible: modelData.visible
                     radius: 4
                     activeFocusOnTab: true
                     border.width: activeFocus ? 1 : 0
@@ -1925,6 +1950,11 @@ Kirigami.Dialog {
                                     }
                                 }
                                 Controls.Button {
+                                    text: i18n("Edit")
+                                    icon.name: "document-edit-symbolic"
+                                    onClicked: root.openFilesystemEditor(modelData)
+                                }
+                                Controls.Button {
                                     text: i18n("Detach")
                                     icon.name: "list-remove-symbolic"
                                     onClicked: {
@@ -1952,6 +1982,105 @@ Kirigami.Dialog {
 
     }
 
+    }
+
+    Kirigami.Dialog {
+        id: filesystemEditDialog
+        title: i18n("Edit Filesystem Share")
+        modal: true
+        padding: Kirigami.Units.largeSpacing
+        preferredWidth: Kirigami.Units.gridUnit * 32
+        property int deviceIndex: -1
+        property string shareSource: ""
+        property string shareTarget: ""
+        property string shareDriver: ""
+        property string shareAccess: ""
+        property bool shareReadonly: false
+
+        background: Rectangle {
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                           Kirigami.Theme.backgroundColor.g,
+                           Kirigami.Theme.backgroundColor.b, 0.95)
+            radius: 8
+            border.color: "transparent"
+        }
+
+        onOpened: {
+            fsEditSource.text = shareSource;
+            fsEditTarget.text = shareTarget;
+            fsEditDriver.currentIndex = Math.max(0, ["9p", "virtiofs"].indexOf(shareDriver));
+            fsEditAccess.currentIndex = Math.max(0, ["passthrough", "mapped", "squash"].indexOf(shareAccess));
+            fsEditReadonly.checked = shareReadonly;
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 12
+
+            GridLayout {
+                columns: 2
+                columnSpacing: 12
+                rowSpacing: 12
+                Layout.fillWidth: true
+                Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
+                Controls.ComboBox {
+                    id: fsEditDriver
+                    Layout.preferredWidth: 220
+                    model: ["9p", "virtiofs"]
+                }
+                Controls.Label { text: i18n("Source path"); Layout.fillWidth: true }
+                Controls.TextField {
+                    id: fsEditSource
+                    Layout.preferredWidth: 220
+                }
+                Controls.Label { text: i18n("Name / mount tag"); Layout.fillWidth: true }
+                Controls.TextField {
+                    id: fsEditTarget
+                    Layout.preferredWidth: 220
+                }
+                Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
+                Controls.ComboBox {
+                    id: fsEditAccess
+                    Layout.preferredWidth: 220
+                    model: ["passthrough", "mapped", "squash"]
+                }
+                Controls.Label { text: i18n("Read-only"); Layout.fillWidth: true }
+                Controls.CheckBox {
+                    id: fsEditReadonly
+                    Layout.alignment: Qt.AlignRight
+                }
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: filesystemEditDialog.close()
+            },
+            Kirigami.Action {
+                text: i18n("Save")
+                icon.name: "dialog-ok-symbolic"
+                enabled: fsEditSource.text.trim().length > 0
+                onTriggered: {
+                    const target = fsEditTarget.text.trim().length > 0 ? fsEditTarget.text.trim() : "share";
+                    let xml = "<filesystem type='mount' accessmode='" + fsEditAccess.currentText + "'>";
+                    xml += "<source dir='" + root.xmlEscape(fsEditSource.text.trim()) + "'/>";
+                    xml += "<target dir='" + root.xmlEscape(target) + "'/>";
+                    if (fsEditDriver.currentText === "virtiofs") {
+                        xml += "<driver type='virtiofs'/>";
+                    }
+                    if (fsEditReadonly.checked) {
+                        xml += "<readonly/>";
+                    }
+                    xml += "</filesystem>";
+                    if (Karton.replaceXmlDevice(root.domain, filesystemEditDialog.deviceIndex, xml)) {
+                        filesystemEditDialog.close();
+                        root.refresh();
+                    }
+                }
+            }
+        ]
     }
 
     AddHardwareDialog {
