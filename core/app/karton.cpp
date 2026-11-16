@@ -598,6 +598,15 @@ bool Karton::deleteSavedState(const Domain *domain)
     return true;
 }
 
+void Karton::setGuestAgentWarningDismissed(bool dismissed)
+{
+    if (m_guestAgentWarningDismissed == dismissed) {
+        return;
+    }
+    m_guestAgentWarningDismissed = dismissed;
+    Q_EMIT guestAgentWarningDismissedChanged();
+}
+
 void Karton::viewerOpened()
 {
     ++m_viewerCount;

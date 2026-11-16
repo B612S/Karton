@@ -31,6 +31,7 @@ class Karton : public QObject
     Q_PROPERTY(bool connected READ connected CONSTANT)
     Q_PROPERTY(QString connectionUri READ connectionUri CONSTANT)
     Q_PROPERTY(int viewerCount READ viewerCount NOTIFY viewerCountChanged)
+    Q_PROPERTY(bool guestAgentWarningDismissed READ guestAgentWarningDismissed WRITE setGuestAgentWarningDismissed NOTIFY guestAgentWarningDismissedChanged)
 
 public:
     // Deliberately not default-constructible: Qt then uses create() for the
@@ -50,6 +51,11 @@ public:
     {
         return m_viewerCount;
     }
+    [[nodiscard]] bool guestAgentWarningDismissed() const
+    {
+        return m_guestAgentWarningDismissed;
+    }
+    void setGuestAgentWarningDismissed(bool dismissed);
 
     QVector<Domain *> domains();
     void refreshDomain(const virDomainPtr domainPtr);
@@ -68,6 +74,7 @@ Q_SIGNALS:
     void domainEdited(bool success, const QString &name);
     void domainCloned(bool success, const QString &sourceName, const QString &newName);
     void viewerCountChanged();
+    void guestAgentWarningDismissedChanged();
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
@@ -145,6 +152,7 @@ private:
     };
     QHash<QString, CpuSample> m_cpuSamples;
     int m_viewerCount = 0;
+    bool m_guestAgentWarningDismissed = false;
     QHash<QString, QPointer<QObject>> m_viewers;
     bool m_previewCapturing = false;
 

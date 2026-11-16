@@ -31,6 +31,23 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    function fitWindowToGuest() {
+        if (domainViewer.agentConnected || domainViewer.implicitWidth <= 0 || domainViewer.implicitHeight <= 0 || !viewerWindow.visible) {
+            return;
+        }
+        const aspect = domainViewer.implicitWidth / domainViewer.implicitHeight;
+        const chrome = Math.max(0, viewerWindow.height - domainViewer.height);
+        const maxContentHeight = Screen.height * 0.85 - chrome;
+        let contentWidth = viewerWindow.width;
+        let contentHeight = contentWidth / aspect;
+        if (contentHeight > maxContentHeight) {
+            contentHeight = maxContentHeight;
+            contentWidth = contentHeight * aspect;
+        }
+        viewerWindow.width = Math.round(contentWidth);
+        viewerWindow.height = Math.round(contentHeight + chrome);
+    }
+
     Component.onCompleted: {
         registerViewer();
         wasRunning = isRunning;
@@ -52,6 +69,12 @@ Kirigami.ApplicationWindow {
             Qt.callLater(function() {
                 domainViewer.forceActiveFocus();
             });
+        }
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            Qt.callLater(fitWindowToGuest);
         }
     }
 
@@ -100,6 +123,19 @@ Kirigami.ApplicationWindow {
 
         onWidthChanged: if (domainViewer) domainViewer.updateDisplayResolution()
         onHeightChanged: if (domainViewer) domainViewer.updateDisplayResolution()
+
+        // If the guest agent is absent, the guest cannot resize itself. Match
+        // the window to the guest frame once so the display is not letterboxed
+        // by black bars just because the window happened to open at 16:9.
+        Connections {
+            target: domainViewer
+            function onImplicitWidthChanged() {
+                viewerWindow.fitWindowToGuest();
+            }
+            function onImplicitHeightChanged() {
+                viewerWindow.fitWindowToGuest();
+            }
+        }
 
         // Keep the main page preview in sync with what is currently on screen
         // without taking a QEMU screenshot (which would pause the guest).
@@ -257,9 +293,16 @@ Kirigami.ApplicationWindow {
             anchors.top: parent.top
             anchors.topMargin: Kirigami.Units.largeSpacing
             width: Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 40)
-            visible: viewerWindow.isRunning && !domainViewer.agentConnected && domainViewer.errorMessage.length === 0
+            visible: viewerWindow.isRunning && !domainViewer.agentConnected
+                && !Karton.guestAgentWarningDismissed && domainViewer.errorMessage.length === 0
             text: i18n("Guest agent is not connected. Automatic resize requires spice-vdagent in the guest.")
             type: Kirigami.MessageType.Warning
+            showCloseButton: true
+            onVisibleChanged: {
+                if (!visible && viewerWindow.isRunning && !domainViewer.agentConnected) {
+                    Karton.guestAgentWarningDismissed = true;
+                }
+            }
         }
 
         Kirigami.Icon {
