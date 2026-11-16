@@ -1901,17 +1901,24 @@ Kirigami.Dialog {
             }
             // Filesystem
             ScrollableSettingsView {
+                Layout.fillWidth: true
                 Layout.fillHeight: true
                 implicitHeight: 0
                 ColumnLayout {
                     width: parent.width
                     spacing: 16
 
+                    Controls.Label {
+                        text: i18n("Share a host directory with this VM using 9p or virtiofs.")
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        opacity: 0.65
+                        font.pixelSize: 12
+                    }
                     Controls.CheckBox {
                         id: filesystemCheck
                         text: i18n("Enable filesystem sharing")
                         Layout.fillWidth: true
-                        enabled: filesystemSourceField.text.trim().length > 0 || checked
                         onToggled: root.updateOptionalDevice("filesystem", checked, root.filesystemXml())
                     }
                     GridLayout {
