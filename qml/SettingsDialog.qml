@@ -222,6 +222,17 @@ Kirigami.Dialog {
         return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
     }
 
+    function osIdMarkup(value) {
+        if (!value) {
+            return "";
+        }
+        if (value.indexOf("http://") === 0 || value.indexOf("https://") === 0) {
+            const escaped = root.xmlEscape(value);
+            return "<a href=\"" + escaped + "\">" + escaped + "</a>";
+        }
+        return root.xmlEscape(value);
+    }
+
     function filesystemXml() {
         const source = filesystemSourceField.text.trim();
         const target = filesystemTargetField.text.trim().length > 0 ? filesystemTargetField.text.trim() : "share";
@@ -674,11 +685,13 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
                         Controls.Label {
-                            text: root.domain ? root.domain.config.osId : ""
+                            text: root.osIdMarkup(root.domain ? root.domain.config.osId : "")
+                            textFormat: Text.RichText
                             opacity: 0.7
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                             elide: Text.ElideRight
+                            onLinkActivated: Qt.openUrlExternally(link)
                         }
                         Controls.Label {
                             text: i18n("Short OS ID")
