@@ -9,7 +9,7 @@ Guidance for AI coding agents working on Karton.
 
 ## What Karton is
 
-Karton is a Libvirt-based virtual machine manager for KDE. It is a C++20 / Qt 6 /
+Karton is a Libvirt-based virtual machine manager for KDE. It is a C++23 / Qt 6 /
 KF6 application with a Kirigami UI. It lists and manages local libvirt domains,
 defines new domains from OS installation media, and embeds a SPICE display for
 the VM console.
@@ -66,7 +66,7 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 
 ## Build
 
-Required: CMake >= 3.20, a C++20 compiler, Qt 6, KF6 (Kirigami, I18n,
+Required: CMake >= 3.20, a C++23 compiler, Qt 6, KF6 (Kirigami, I18n,
 CoreAddons, QQC2DesktopStyle, IconThemes), Kirigami Addons >= 1.11, libvirt,
 libosinfo, GLib, spice-client-glib, Vulkan (default scene graph and SPICE
 scanout import), OpenGL/EGL (fallback renderer), and Extra CMake Modules (ECM)
@@ -147,7 +147,7 @@ When testing destructive operations, prefer domains whose names start with
 
 ## Code conventions
 
-- C++20, Qt 6 / KF6 APIs. Prefer Qt/KF6 classes and `QStringLiteral` over
+- C++23, Qt 6 / KF6 APIs. Prefer Qt/KF6 classes and `QStringLiteral` over
   `const char *` where practical.
 - Every source file starts with SPDX headers. Most C++/QML sources are
   `GPL-3.0-or-later`; CMake files are `BSD-2-Clause`; documentation is
