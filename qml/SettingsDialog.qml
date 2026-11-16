@@ -36,8 +36,10 @@ Kirigami.Dialog {
     title: domain ? i18n("Settings — %1", domain.config.name) : i18n("Settings")
     padding: 0
     modal: true
-    preferredWidth: Kirigami.Units.gridUnit * 54
-    preferredHeight: Kirigami.Units.gridUnit * 34
+
+    readonly property var screenInfo: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
+    preferredWidth: screenInfo ? Math.min(Kirigami.Units.gridUnit * 46, screenInfo.width * 0.78) : Kirigami.Units.gridUnit * 46
+    preferredHeight: screenInfo ? Math.min(Kirigami.Units.gridUnit * 26, screenInfo.height * 0.78) : Kirigami.Units.gridUnit * 26
 
     function refresh() {
         if (!domain) {
@@ -231,7 +233,7 @@ Kirigami.Dialog {
 
         ListView {
             id: categoryList
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
             Layout.fillHeight: true
             currentIndex: 0
 
@@ -459,6 +461,7 @@ Kirigami.Dialog {
                             id: newDiskFormat
                             text: i18n("Format:")
                             model: ["qcow2", "raw", "vmdk"]
+                            currentIndex: 0
                             Layout.fillWidth: true
                         }
                         Controls.Button {
@@ -487,6 +490,7 @@ Kirigami.Dialog {
                             Layout.leftMargin: Kirigami.Units.largeSpacing
                             Layout.rightMargin: Kirigami.Units.largeSpacing
                             Controls.Button {
+                                Layout.fillWidth: true
                                 text: i18n("Browse…")
                                 icon.name: "document-open-symbolic"
                                 onClicked: imageFileDialog.open()
@@ -515,6 +519,7 @@ Kirigami.Dialog {
                             Layout.leftMargin: Kirigami.Units.largeSpacing
                             Layout.rightMargin: Kirigami.Units.largeSpacing
                             Controls.Button {
+                                Layout.fillWidth: true
                                 text: i18n("Browse…")
                                 icon.name: "document-open-symbolic"
                                 onClicked: isoFileDialog.open()
@@ -546,7 +551,7 @@ Kirigami.Dialog {
                         FormCard.FormComboBoxDelegate {
                             id: diskTargetCombo
                             text: i18n("Disk:")
-                            model: root.disks.map(function(disk) { return disk.target; })
+                            model: root.disks.filter(function(disk) { return disk.device === "disk"; }).map(function(disk) { return disk.target; })
                             Layout.fillWidth: true
                             onCurrentTextChanged: root.refreshDiskAdvanced()
                         }
