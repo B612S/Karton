@@ -136,6 +136,21 @@ Kirigami.Dialog {
         return device.vendor + ":" + device.product;
     }
 
+    function hasXmlDevice(tag) {
+        for (let i = 0; i < xmlDevices.length; ++i) {
+            if (xmlDevices[i].tag === tag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function addXmlDevice(xml) {
+        if (Karton.attachXmlDevice(root.domain, xml)) {
+            root.refresh();
+        }
+    }
+
     function pciDeviceLabel(address) {
         for (let i = 0; i < pciHostDevices.length; ++i) {
             if (pciHostDevices[i].address === address) {
@@ -1544,6 +1559,30 @@ Kirigami.Dialog {
                     opacity: 0.65
                     font.pixelSize: 12
                     text: i18n("Additional devices declared in the domain XML, such as RNG, balloon, watchdog, panic, shared memory, IOMMU, vsock, filesystem and redirection devices.")
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Controls.Button {
+                        text: i18n("Add watchdog")
+                        enabled: !root.hasXmlDevice("watchdog")
+                        onClicked: root.addXmlDevice("<watchdog model='i6300esb' action='reset'/>")
+                    }
+                    Controls.Button {
+                        text: i18n("Add RNG")
+                        enabled: !root.hasXmlDevice("rng")
+                        onClicked: root.addXmlDevice("<rng model='virtio'><backend model='random'>/dev/urandom</backend></rng>")
+                    }
+                    Controls.Button {
+                        text: i18n("Add panic")
+                        enabled: !root.hasXmlDevice("panic")
+                        onClicked: root.addXmlDevice("<panic model='isa'/>")
+                    }
+                    Controls.Button {
+                        text: i18n("Add VSOCK")
+                        enabled: !root.hasXmlDevice("vsock")
+                        onClicked: root.addXmlDevice("<vsock model='virtio'><cid auto='yes'/></vsock>")
+                    }
                 }
                 ListView {
                     Layout.fillWidth: true

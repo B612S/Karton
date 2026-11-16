@@ -39,9 +39,7 @@ Kirigami.Dialog {
         { label: i18n("Channel") },
         { label: i18n("USB Host Device") },
         { label: i18n("PCI Host Device") },
-        { label: i18n("Redirection") },
-        { label: i18n("Watchdog") },
-        { label: i18n("RNG") }
+        { label: i18n("Redirection") }
     ]
 
     background: Rectangle {
@@ -78,8 +76,6 @@ Kirigami.Dialog {
         case 7: return 7;  // USB
         case 8: return 8;  // PCI
         case 9: return 15; // Redirection -> Other
-        case 10: return 15; // Watchdog
-        case 11: return 15; // RNG
         default: return 0;
         }
     }
@@ -541,34 +537,6 @@ Kirigami.Dialog {
                                     icon.name: "list-add-symbolic"
                                     Layout.alignment: Qt.AlignLeft
                                     onClicked: root.addXml("<redirdev bus='usb' type='spicevmc'/>")
-                                }
-                            }
-
-                            // Watchdog
-                            ColumnLayout {
-                                visible: root.categoryIndex === 10
-                                Layout.fillWidth: true
-                                spacing: 12
-                                Controls.Label { text: i18n("Watchdog device"); Layout.fillWidth: true }
-                                Controls.Button {
-                                    text: i18n("Add watchdog")
-                                    icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
-                                    onClicked: root.addXml("<watchdog model='i6300esb' action='reset'/>")
-                                }
-                            }
-
-                            // RNG
-                            ColumnLayout {
-                                visible: root.categoryIndex === 11
-                                Layout.fillWidth: true
-                                spacing: 12
-                                Controls.Label { text: i18n("Random number generator"); Layout.fillWidth: true }
-                                Controls.Button {
-                                    text: i18n("Add RNG")
-                                    icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
-                                    onClicked: root.addXml("<rng model='virtio'><backend model='random'>/dev/urandom</backend></rng>")
                                 }
                             }
 

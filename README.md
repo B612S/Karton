@@ -80,9 +80,10 @@ highlighting and scrolls independently of the page.
 - USB and PCI passthrough;
 - controllers, serial ports and consoles;
 - VirtIO channels;
-- USB redirection, watchdog and RNG.
+- USB redirection.
 
-TPM is configured on the VM's TPM Settings page.
+TPM is configured on the VM's TPM Settings page. Watchdog, RNG, panic and
+VSOCK are enabled from the VM's Other devices page.
 
 Global Application Settings provide:
 

@@ -336,8 +336,7 @@ When testing destructive operations, prefer domains whose names start with
   order, video, sound, TPM and description through `editDomainHardware()`.
   The footer button "Add…" opens the grouped `AddHardwareDialog.qml` wizard,
   which is the only place where devices are added: storage, network, input,
-  controller, serial, console, channel, USB/PCI passthrough, redirection,
-  watchdog and RNG. Its forms use the same two-column label/control rows
+  controller, serial, console, channel, USB/PCI passthrough and redirection. Its forms use the same two-column label/control rows
   as the settings pages, and its content scrolls with the mouse wheel/touchpad. Settings pages list and edit attached devices but do
   not duplicate add controls. Input devices (`<input>`) have their own page,
   and Controllers, Serial & Console and Other devices pages surface the
