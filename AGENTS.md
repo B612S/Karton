@@ -345,7 +345,10 @@ Every settings page must look and behave the same:
   Display, Sound, USB, PCI, TPM, OS Information and Performance. Each page uses
   Luma-style transparent rounded window, 200/160 px category sidebar with a
   translucent highlight and accent bar, 24 px content margins and two-column
-  label/control rows. Disks are grouped into attached devices, create, attach
+  label/control rows. The Add/Save/Close actions are `customFooterActions` on
+  the dialog itself, outside the scrollable page, so they stay visible. The
+  selected sidebar category maps to its StackLayout page through
+  `root.categoryPages`; keep that array in sync when reordering pages. Disks are grouped into attached devices, create, attach
   media and advanced options. Other Karton dialogs share the same translucent
   rounded background. Disks, networks, USB and PCI devices are managed inline
   (lists, add/attach/detach controls) instead of separate dialogs. Settings USB
