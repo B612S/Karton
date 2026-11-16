@@ -137,9 +137,9 @@ Kirigami.Dialog {
         shmemNameField.text = shmem ? shmem.name : "karton";
         shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
         shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));
-        root.optionalUpdating = false;
         clipboardTextCombo.currentIndex = Karton.clipboardTextMode();
         clipboardFilesCombo.currentIndex = Karton.clipboardFilesMode();
+        root.optionalUpdating = false;
         Qt.callLater(root.ensureVisibleCategory);
 
         const resolution = Karton.domainDisplayResolution(domain);
@@ -2018,7 +2018,11 @@ Kirigami.Dialog {
                                 i18n("Guest to host"),
                                 i18n("Bidirectional")
                             ]
-                            onCurrentIndexChanged: Karton.saveClipboardTextMode(currentIndex)
+                            onCurrentIndexChanged: {
+                                if (!root.optionalUpdating) {
+                                    Karton.saveClipboardTextMode(currentIndex);
+                                }
+                            }
                         }
                         Controls.Label { text: i18n("Files"); Layout.fillWidth: true }
                         Controls.ComboBox {
@@ -2030,7 +2034,11 @@ Kirigami.Dialog {
                                 i18n("Guest to host"),
                                 i18n("Bidirectional")
                             ]
-                            onCurrentIndexChanged: Karton.saveClipboardFilesMode(currentIndex)
+                            onCurrentIndexChanged: {
+                                if (!root.optionalUpdating) {
+                                    Karton.saveClipboardFilesMode(currentIndex);
+                                }
+                            }
                         }
                     }
                     Controls.Label {
