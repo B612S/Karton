@@ -37,6 +37,7 @@ Kirigami.Dialog {
     property bool xmlDirty: false
     property bool xmlLoading: false
     property bool optionalUpdating: false
+    readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 12, 7, 8, 9, 17, 13, 14, 15, 10, 11, 16]
     property string xmlContent: ""
     property string xmlLastValid: ""
     property var xmlDevices: []
@@ -455,8 +456,6 @@ Kirigami.Dialog {
                     {label: i18n("Performance")},
                     {label: i18n("XML")}
                 ]
-                readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 12, 7, 8, 9, 17, 13, 14, 15, 10, 11, 16]
-
                 delegate: Rectangle {
                     id: categoryButton
                     width: ListView.view.width
