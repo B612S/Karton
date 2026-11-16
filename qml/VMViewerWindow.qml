@@ -400,6 +400,7 @@ Kirigami.ApplicationWindow {
         SettingsDialog {
             id: settingsDialog
             domain: viewerWindow.domain
+            parentWindow: viewerWindow
         }
 
         SnapshotsDialog {

@@ -14,11 +14,13 @@ Kirigami.ApplicationWindow {
     id: root
 
     visible: false
-    modality: Qt.ApplicationModal
+    transientParent: parentWindow
+    modality: Qt.WindowModal
     flags: Qt.Dialog | Qt.FramelessWindowHint
     color: "transparent"
 
     property Domain domain: null
+    property var parentWindow: null
     property bool saving: false
     property string pendingName: ""
     property var hardware: ({})
@@ -47,8 +49,8 @@ Kirigami.ApplicationWindow {
     height: adaptiveHeight
     minimumWidth: Math.min(720, width)
     minimumHeight: Math.min(480, height)
-    x: screenInfo ? Math.round((screenInfo.width - width) / 2) : 0
-    y: screenInfo ? Math.round((screenInfo.height - height) / 2) : 0
+    x: parentWindow ? Math.round(parentWindow.x + (parentWindow.width - width) / 2) : (screenInfo ? Math.round((screenInfo.width - width) / 2) : 0)
+    y: parentWindow ? Math.round(parentWindow.y + (parentWindow.height - height) / 2) : (screenInfo ? Math.round((screenInfo.height - height) / 2) : 0)
 
     function refresh() {
         if (!domain) {

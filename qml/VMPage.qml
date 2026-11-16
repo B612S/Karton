@@ -443,6 +443,7 @@ Kirigami.ScrollablePage {
     SettingsDialog {
         id: settingsDialog
         domain: root.domain
+        parentWindow: applicationWindow()
     }
 
     Kirigami.Dialog {
