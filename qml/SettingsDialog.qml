@@ -1898,7 +1898,6 @@ Kirigami.Dialog {
                         }
                     }
                 }
-            }
             // Filesystem
             ScrollableSettingsView {
                 Layout.fillWidth: true
@@ -1979,6 +1978,7 @@ Kirigami.Dialog {
                         }
                     }
                 }
+            }
             }
 
         }
