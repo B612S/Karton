@@ -286,7 +286,8 @@ When testing destructive operations, prefer domains whose names start with
 - Window sizes are persisted in the same `karton.conf`: one main-window size and
   a separate viewer size keyed by each VM UUID, saved after resize and on close.
   The Display settings page also stores an optional fixed guest resolution per
-  VM (`display/<uuid>/width|height`). When set, the viewer requests that exact
+  VM (`display/<uuid>/width|height`), with presets and a Custom width/height
+  pair. When set, the viewer requests that exact
   SPICE resolution, scales the content to fit the screen, and locks the window
   size; Auto restores normal auto-resize.
 - The VM list uses `Karton::domainOsIcon()`/`domainOsName()` and flat

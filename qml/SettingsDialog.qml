@@ -45,7 +45,8 @@ Kirigami.ApplicationWindow {
         { label: "1600 × 900", width: 1600, height: 900 },
         { label: "1920 × 1080", width: 1920, height: 1080 },
         { label: "2560 × 1440", width: 2560, height: 1440 },
-        { label: "3840 × 2160", width: 3840, height: 2160 }
+        { label: "3840 × 2160", width: 3840, height: 2160 },
+        { label: i18n("Custom…"), width: -1, height: -1 }
     ]
 
     title: domain ? i18n("Settings — %1", domain.config.name) : i18n("Settings")
@@ -94,12 +95,17 @@ Kirigami.ApplicationWindow {
         tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
         const resolution = Karton.domainDisplayResolution(domain);
         let resolutionIndex = 0;
-        for (let i = 0; i < displayResolutions.length; ++i) {
+        for (let i = 0; i < displayResolutions.length - 1; ++i) {
             if (displayResolutions[i].width === (resolution.width || 0)
                 && displayResolutions[i].height === (resolution.height || 0)) {
                 resolutionIndex = i;
                 break;
             }
+        }
+        if (resolution.width > 0 && resolution.height > 0 && resolutionIndex === 0) {
+            resolutionIndex = displayResolutions.length - 1;
+            displayCustomWidth.value = resolution.width;
+            displayCustomHeight.value = resolution.height;
         }
         displayResolutionCombo.currentIndex = resolutionIndex;
     }
@@ -162,8 +168,17 @@ Kirigami.ApplicationWindow {
             return;
         }
 
-        const resolution = displayResolutions[displayResolutionCombo.currentIndex];
-        Karton.saveDomainDisplayResolution(domain, resolution.width, resolution.height);
+        let resolutionWidth = 0;
+        let resolutionHeight = 0;
+        if (displayResolutionCombo.currentIndex === displayResolutions.length - 1) {
+            resolutionWidth = displayCustomWidth.value;
+            resolutionHeight = displayCustomHeight.value;
+        } else {
+            const resolution = displayResolutions[displayResolutionCombo.currentIndex];
+            resolutionWidth = resolution.width;
+            resolutionHeight = resolution.height;
+        }
+        Karton.saveDomainDisplayResolution(domain, resolutionWidth, resolutionHeight);
 
         const name = nameField.text.trim();
         const changed = name !== domain.config.name
@@ -1146,6 +1161,40 @@ Kirigami.ApplicationWindow {
                             id: displayResolutionCombo
                             model: root.displayResolutions
                             textRole: "label"
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
+                            text: i18n("Width")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.SpinBox {
+                            id: displayCustomWidth
+                            visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
+                            from: 320
+                            to: 7680
+                            stepSize: 2
+                            value: 1920
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
+                            text: i18n("Height")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.SpinBox {
+                            id: displayCustomHeight
+                            visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
+                            from: 240
+                            to: 4320
+                            stepSize: 2
+                            value: 1080
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                         }
