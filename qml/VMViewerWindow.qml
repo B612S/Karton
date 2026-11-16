@@ -26,6 +26,39 @@ Kirigami.ApplicationWindow {
     property alias domainViewerItem: domainViewer
     property int fixedContentWidth: 0
     property int fixedContentHeight: 0
+    readonly property bool isFullScreen: visibility === Window.FullScreen
+    readonly property int compactToolbarHeight: Math.round(Kirigami.Units.gridUnit * 1.55)
+    property bool fullScreenToolbarVisible: true
+    property bool toolbarHovered: false
+    property real fullScreenToolbarOpacity: (isFullScreen && !fullScreenToolbarVisible) ? 0 : 1
+
+    Behavior on fullScreenToolbarOpacity {
+        NumberAnimation {
+            duration: 180
+            easing.type: Easing.InOutQuad
+        }
+    }
+
+    Timer {
+        id: toolbarHideTimer
+        interval: 1400
+        onTriggered: {
+            if (viewerWindow.isFullScreen && !viewerWindow.toolbarHovered
+                    && !powerMenu.opened && !rebootMenu.opened && !viewerMenu.opened) {
+                viewerWindow.fullScreenToolbarVisible = false;
+            }
+        }
+    }
+
+    onVisibilityChanged: {
+        if (isFullScreen) {
+            fullScreenToolbarVisible = true;
+            toolbarHideTimer.restart();
+        } else {
+            fullScreenToolbarVisible = true;
+            toolbarHideTimer.stop();
+        }
+    }
 
     function registerViewer() {
         if (!viewerRegistered) {
@@ -176,9 +209,33 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    pageStack.globalToolBar.opacity: fullScreenToolbarOpacity
+    pageStack.globalToolBar.enabled: !isFullScreen || fullScreenToolbarVisible
+    pageStack.globalToolBar.height: isFullScreen ? compactToolbarHeight : pageStack.globalToolBar.implicitHeight
+    pageStack.globalToolBar.background: Rectangle {
+        color: Qt.rgba(0, 0, 0, 0.22)
+    }
+
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
         padding: 0
+
+        HoverHandler {
+            id: toolbarHover
+            onPointChanged: {
+                if (!viewerWindow.isFullScreen) {
+                    return;
+                }
+                const nearTop = point.position.y <= viewerWindow.compactToolbarHeight + 12;
+                viewerWindow.toolbarHovered = nearTop;
+                if (nearTop) {
+                    viewerWindow.fullScreenToolbarVisible = true;
+                    toolbarHideTimer.stop();
+                } else {
+                    toolbarHideTimer.restart();
+                }
+            }
+        }
 
         onWidthChanged: if (domainViewer) domainViewer.updateDisplayResolution()
         onHeightChanged: if (domainViewer) domainViewer.updateDisplayResolution()
