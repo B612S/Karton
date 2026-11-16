@@ -220,6 +220,9 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
         padding: 0
+        globalToolBarItem.opacity: viewerWindow.fullScreenToolbarOpacity
+        globalToolBarItem.enabled: !viewerWindow.isFullScreen || viewerWindow.fullScreenToolbarVisible
+        globalToolBarItem.background.color: Qt.rgba(0, 0, 0, 0.30)
 
         HoverHandler {
             id: toolbarHover
