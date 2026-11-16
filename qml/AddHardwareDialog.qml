@@ -41,8 +41,7 @@ Kirigami.Dialog {
         { label: i18n("PCI Host Device") },
         { label: i18n("Redirection") },
         { label: i18n("Watchdog") },
-        { label: i18n("RNG") },
-        { label: i18n("TPM") }
+        { label: i18n("RNG") }
     ]
 
     background: Rectangle {
@@ -81,7 +80,6 @@ Kirigami.Dialog {
         case 9: return 15; // Redirection -> Other
         case 10: return 15; // Watchdog
         case 11: return 15; // RNG
-        case 12: return 9; // TPM
         default: return 0;
         }
     }
@@ -571,31 +569,6 @@ Kirigami.Dialog {
                                     icon.name: "list-add-symbolic"
                                     Layout.alignment: Qt.AlignLeft
                                     onClicked: root.addXml("<rng model='virtio'><backend model='random'>/dev/urandom</backend></rng>")
-                                }
-                            }
-
-                            // TPM
-                            ColumnLayout {
-                                visible: root.categoryIndex === 12
-                                Layout.fillWidth: true
-                                spacing: 12
-                                Controls.Label {
-                                    text: i18n("Add a TPM 2.0 device")
-                                    Layout.fillWidth: true
-                                }
-                                Controls.Button {
-                                    text: i18n("Add TPM")
-                                    icon.name: "security-high-symbolic"
-                                    Layout.alignment: Qt.AlignRight
-                                    onClicked: {
-                                        const hardware = Karton.domainHardwareInfo(root.domain);
-                                        hardware.tpmEnabled = true;
-                                        hardware.tpmModel = "tpm-crb";
-                                        hardware.tpmVersion = "2.0";
-                                        if (Karton.editDomainHardware(root.domain, hardware)) {
-                                            root.added();
-                                        }
-                                    }
                                 }
                             }
 

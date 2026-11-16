@@ -97,6 +97,10 @@ public Q_SLOTS:
     Q_INVOKABLE void saveMainWindowSize(int width, int height);
     Q_INVOKABLE QVariantMap viewerWindowSize(const Domain *domain) const;
     Q_INVOKABLE void saveViewerWindowSize(const Domain *domain, int width, int height);
+    Q_INVOKABLE bool spiceTlsEnabled() const;
+    Q_INVOKABLE void saveSpiceTlsEnabled(bool enabled);
+    Q_INVOKABLE QString spiceCaCertificate() const;
+    Q_INVOKABLE void saveSpiceCaCertificate(const QString &path);
     Q_INVOKABLE bool audioPlaybackEnabled(const Domain *domain) const;
     Q_INVOKABLE void saveAudioPlaybackEnabled(const Domain *domain, bool enabled);
     Q_INVOKABLE bool microphoneEnabled(const Domain *domain) const;

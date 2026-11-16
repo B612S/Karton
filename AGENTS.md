@@ -251,7 +251,12 @@ When testing destructive operations, prefer domains whose names start with
   `qemu-img create` and attached as virtio devices; ISO images are attached as
   read-only SATA cdroms. The page uses FileDialog pickers for images/ISOs.
 - The viewer discovers the SPICE URI from the domain XML
-  (`virDomainGetXMLDesc()`), not by spawning `virsh`. If an external `virsh`
+  (`virDomainGetXMLDesc()`), not by spawning `virsh`. Application Settings has a
+  global SPICE TLS preference (`spice/tls`, default enabled) and a CA
+  certificate path (`spice/caCertificate`). When the domain exposes `tlsPort`,
+  the viewer connects with `tls_port`, sets SpiceSession `tls-port`, `ca-file`
+  and the graphics password, and falls back to the plain port when TLS is
+  disabled. If an external `virsh`
   call is ever needed, pass `-c <the same URI>` to match the application's
   active connection.
 - Karton stores its own data inside domain XML metadata:
@@ -332,7 +337,7 @@ When testing destructive operations, prefer domains whose names start with
   The footer button "Add…" opens the grouped `AddHardwareDialog.qml` wizard,
   which is the only place where devices are added: storage, network, input,
   controller, serial, console, channel, USB/PCI passthrough, redirection,
-  watchdog, RNG and TPM. Its forms use the same two-column label/control rows
+  watchdog and RNG. Its forms use the same two-column label/control rows
   as the settings pages, and its content scrolls with the mouse wheel/touchpad. Settings pages list and edit attached devices but do
   not duplicate add controls. Input devices (`<input>`) have their own page,
   and Controllers, Serial & Console and Other devices pages surface the

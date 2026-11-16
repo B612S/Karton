@@ -127,6 +127,8 @@ bool DomainViewer::setupSpiceSession()
 
     QString uri;
     bool glEnabled = false;
+    m_spiceTlsPort = 0;
+    m_spicePassword.clear();
 
     const QDomNodeList graphicsNodes = document.elementsByTagName(QStringLiteral("graphics"));
     for (int i = 0; i < graphicsNodes.count(); ++i) {
@@ -161,7 +163,13 @@ bool DomainViewer::setupSpiceSession()
                 host = QStringLiteral("127.0.0.1");
             }
             const QString port = graphics.attribute(QStringLiteral("port"));
-            if (!port.isEmpty() && port != QStringLiteral("-1")) {
+            const QString tlsPort = graphics.attribute(QStringLiteral("tlsPort"));
+            const bool useTls = m_spiceTlsEnabled && !tlsPort.isEmpty() && tlsPort != QStringLiteral("-1");
+            if (useTls) {
+                m_spiceTlsPort = tlsPort.toInt();
+                m_spicePassword = graphics.attribute(QStringLiteral("passwd"));
+                uri = QStringLiteral("spice://%1?tls_port=%2").arg(host, tlsPort);
+            } else if (!port.isEmpty() && port != QStringLiteral("-1")) {
                 uri = QStringLiteral("spice://%1:%2").arg(host, port);
             }
         }
@@ -213,6 +221,15 @@ bool DomainViewer::connectToSpice()
 
     qCInfo(KARTON_DEBUG) << "Connecting to URI! -" << m_spiceUri;
     g_object_set(m_session, "uri", m_spiceUri.toUtf8().constData(), NULL);
+    if (m_spiceTlsPort > 0) {
+        g_object_set(m_session, "tls-port", m_spiceTlsPort, NULL);
+    }
+    if (!m_spiceCaCertificate.isEmpty()) {
+        g_object_set(m_session, "ca-file", m_spiceCaCertificate.toUtf8().constData(), NULL);
+    }
+    if (!m_spicePassword.isEmpty()) {
+        g_object_set(m_session, "password", m_spicePassword.toUtf8().constData(), NULL);
+    }
 
     g_signal_connect(m_session, "channel-new", G_CALLBACK(DomainViewer::channel_new_callback), this);
 
@@ -776,6 +793,24 @@ void DomainViewer::setMicrophoneEnabled(bool enabled)
         stopRecording();
     }
     Q_EMIT microphoneEnabledChanged();
+}
+
+void DomainViewer::setSpiceTlsEnabled(bool enabled)
+{
+    if (m_spiceTlsEnabled == enabled) {
+        return;
+    }
+    m_spiceTlsEnabled = enabled;
+    Q_EMIT spiceTlsEnabledChanged();
+}
+
+void DomainViewer::setSpiceCaCertificate(const QString &path)
+{
+    if (m_spiceCaCertificate == path) {
+        return;
+    }
+    m_spiceCaCertificate = path;
+    Q_EMIT spiceCaCertificateChanged();
 }
 
 void DomainViewer::record_start_callback(SpiceRecordChannel *channel, gint format, gint channels, gint rate, gpointer user_data)

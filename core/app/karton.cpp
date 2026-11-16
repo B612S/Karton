@@ -1006,6 +1006,30 @@ void Karton::saveViewerWindowSize(const Domain *domain, int width, int height)
     settings.setValue(prefix + QStringLiteral("height"), height);
 }
 
+bool Karton::spiceTlsEnabled() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return settings.value(QStringLiteral("spice/tls"), true).toBool();
+}
+
+void Karton::saveSpiceTlsEnabled(bool enabled)
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("spice/tls"), enabled);
+}
+
+QString Karton::spiceCaCertificate() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return settings.value(QStringLiteral("spice/caCertificate")).toString();
+}
+
+void Karton::saveSpiceCaCertificate(const QString &path)
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("spice/caCertificate"), path);
+}
+
 bool Karton::audioPlaybackEnabled(const Domain *domain) const
 {
     if (!domain) {

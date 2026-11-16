@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
@@ -34,6 +35,8 @@ Kirigami.Dialog {
 
     onOpened: {
         uriField.text = Karton.connectionUri;
+        spiceTlsCheck.checked = Karton.spiceTlsEnabled();
+        spiceCaField.text = Karton.spiceCaCertificate();
         refreshNetworks();
     }
 
@@ -186,6 +189,49 @@ Kirigami.Dialog {
                                     applicationWindow().showPassiveNotification(i18n("Restart Karton to apply the new connection."));
                                 }
                             }
+
+                            Controls.Label {
+                                text: i18n("SPICE TLS")
+                                font.pixelSize: 15
+                                font.weight: Font.Bold
+                                Layout.fillWidth: true
+                                Layout.topMargin: 8
+                            }
+                            Controls.CheckBox {
+                                id: spiceTlsCheck
+                                text: i18n("Use TLS when the VM provides a TLS port")
+                                Layout.fillWidth: true
+                                onToggled: {
+                                    Karton.saveSpiceTlsEnabled(checked);
+                                }
+                            }
+                            Controls.Label {
+                                text: i18n("CA certificate")
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Controls.TextField {
+                                    id: spiceCaField
+                                    Layout.fillWidth: true
+                                    placeholderText: i18n("Path to the CA certificate")
+                                    onEditingFinished: Karton.saveSpiceCaCertificate(text.trim())
+                                }
+                                Controls.Button {
+                                    text: i18n("Choose…")
+                                    icon.name: "document-open-symbolic"
+                                    onClicked: caFileDialog.open()
+                                }
+                            }
+                            Controls.Label {
+                                text: i18n("Used for SPICE TLS connections. The certificate must be trusted by the host and match the SPICE server certificate.")
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                opacity: 0.65
+                                font.pixelSize: 12
+                            }
                         }
 
                         ColumnLayout {
@@ -329,6 +375,16 @@ Kirigami.Dialog {
                     }
                 }
             }
+        }
+    }
+
+    FileDialog {
+        id: caFileDialog
+        title: i18n("Choose a CA certificate")
+        nameFilters: [i18n("Certificates (*.pem *.crt *.cer)"), i18n("All files (*)")]
+        onAccepted: {
+            spiceCaField.text = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
+            Karton.saveSpiceCaCertificate(spiceCaField.text);
         }
     }
 

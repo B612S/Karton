@@ -376,6 +376,8 @@ Kirigami.ApplicationWindow {
             height: width / frameAspect
 
             domain: viewerWindow.domain
+            spiceTlsEnabled: Karton.spiceTlsEnabled()
+            spiceCaCertificate: Karton.spiceCaCertificate()
             visible: viewerWindow.isRunning
             enabled: viewerWindow.isRunning
 

@@ -80,11 +80,14 @@ highlighting and scrolls independently of the page.
 - USB and PCI passthrough;
 - controllers, serial ports and consoles;
 - VirtIO channels;
-- USB redirection, watchdog, RNG and TPM.
+- USB redirection, watchdog and RNG.
+
+TPM is configured on the VM's TPM Settings page.
 
 Global Application Settings provide:
 
 - the libvirt connection URI;
+- SPICE TLS: prefer TLS when the VM exposes a TLS port, and the CA certificate path;
 - shared libvirt networks (start/stop, autostart, create NAT, delete);
 - About information.
 

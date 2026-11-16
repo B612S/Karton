@@ -36,6 +36,8 @@ class DomainViewer : public QQuickItem
     Q_PROPERTY(bool agentConnected READ agentConnected NOTIFY agentConnectedChanged)
     Q_PROPERTY(bool audioPlaybackEnabled READ audioPlaybackEnabled WRITE setAudioPlaybackEnabled NOTIFY audioPlaybackEnabledChanged)
     Q_PROPERTY(bool microphoneEnabled READ microphoneEnabled WRITE setMicrophoneEnabled NOTIFY microphoneEnabledChanged)
+    Q_PROPERTY(bool spiceTlsEnabled READ spiceTlsEnabled WRITE setSpiceTlsEnabled NOTIFY spiceTlsEnabledChanged)
+    Q_PROPERTY(QString spiceCaCertificate READ spiceCaCertificate WRITE setSpiceCaCertificate NOTIFY spiceCaCertificateChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -71,6 +73,16 @@ public:
         return m_microphoneEnabled;
     }
     void setMicrophoneEnabled(bool enabled);
+    bool spiceTlsEnabled() const
+    {
+        return m_spiceTlsEnabled;
+    }
+    void setSpiceTlsEnabled(bool enabled);
+    QString spiceCaCertificate() const
+    {
+        return m_spiceCaCertificate;
+    }
+    void setSpiceCaCertificate(const QString &path);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
 
@@ -109,6 +121,8 @@ Q_SIGNALS:
     void agentConnectedChanged();
     void audioPlaybackEnabledChanged();
     void microphoneEnabledChanged();
+    void spiceTlsEnabledChanged();
+    void spiceCaCertificateChanged();
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
@@ -178,6 +192,10 @@ private:
     bool m_audioPlaybackEnabled = true;
     bool m_microphoneEnabled = false;
     bool m_recording = false;
+    bool m_spiceTlsEnabled = true;
+    QString m_spiceCaCertificate;
+    int m_spiceTlsPort = 0;
+    QString m_spicePassword;
 
     QMutex m_cursorMutex;
     QImage m_cursorImage;
