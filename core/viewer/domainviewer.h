@@ -97,6 +97,7 @@ public:
     void setClipboardFilesMode(int mode);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
+    Q_INVOKABLE void syncHostClipboard();
 
     void componentComplete() override;
 

@@ -350,6 +350,7 @@ gboolean DomainViewer::clipboardSelectionGrabCallback(SpiceMainChannel *channel,
     if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
         return TRUE;
     }
+    qCInfo(KARTON_DEBUG) << "clipboard: guest has data, requesting text";
     // The guest has clipboard data. Ask for UTF-8 text; the reply is handled
     // by clipboardSelectionCallback().
     spice_main_channel_clipboard_selection_request(channel, selection, VD_AGENT_CLIPBOARD_UTF8_TEXT);
@@ -366,6 +367,7 @@ gboolean DomainViewer::clipboardSelectionRequestCallback(SpiceMainChannel *chann
         return FALSE;
     }
     const QByteArray text = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
+    qCInfo(KARTON_DEBUG) << "clipboard: guest requested text, sending" << text.size() << "bytes";
     spice_main_channel_clipboard_selection_notify(channel,
                                                   selection,
                                                   VD_AGENT_CLIPBOARD_UTF8_TEXT,
@@ -386,10 +388,17 @@ void DomainViewer::clipboardSelectionCallback(SpiceMainChannel *channel, guint s
         return;
     }
     const QString text = QString::fromUtf8(static_cast<const char *>(data), static_cast<int>(size));
+    qCInfo(KARTON_DEBUG) << "clipboard: received text from guest" << text.size() << "chars";
     item->m_lastGuestClipboardText = text;
     item->m_settingClipboard = true;
     QGuiApplication::clipboard()->setText(text, QClipboard::Clipboard);
     item->m_settingClipboard = false;
+}
+
+void DomainViewer::syncHostClipboard()
+{
+    // Give the host clipboard manager a moment to settle after focus changes.
+    QTimer::singleShot(100, this, &DomainViewer::hostClipboardChanged);
 }
 
 void DomainViewer::hostClipboardChanged()
@@ -401,6 +410,7 @@ void DomainViewer::hostClipboardChanged()
         return;
     }
     const QString text = QGuiApplication::clipboard()->text(QClipboard::Clipboard);
+    qCInfo(KARTON_DEBUG) << "clipboard: host changed, mode" << m_clipboardTextMode << "text" << text.size() << "chars";
     if (!m_lastGuestClipboardText.isEmpty() && text == m_lastGuestClipboardText) {
         m_lastGuestClipboardText.clear();
         return;
