@@ -20,6 +20,13 @@ Kirigami.Dialog {
     width: cardWidth
     height: cardHeight
     header: Item {}
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                       Kirigami.Theme.backgroundColor.g,
+                       Kirigami.Theme.backgroundColor.b, 0.98)
+        radius: 8
+        border.color: "transparent"
+    }
 
     property Domain domain: null
     property var parentWindow: null
@@ -137,8 +144,6 @@ Kirigami.Dialog {
         shmemNameField.text = shmem ? shmem.name : "karton";
         shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
         shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));
-        clipboardTextCombo.currentIndex = Karton.clipboardTextMode();
-        clipboardFilesCombo.currentIndex = Karton.clipboardFilesMode();
         root.optionalUpdating = false;
         Qt.callLater(root.ensureVisibleCategory);
 
@@ -413,15 +418,6 @@ Kirigami.Dialog {
     contentItem: Item {
         implicitWidth: root.cardWidth
         implicitHeight: root.cardHeight
-
-    Rectangle {
-        anchors.fill: parent
-        radius: 8
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.95)
-        border.color: "transparent"
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -2018,11 +2014,8 @@ Kirigami.Dialog {
                                 i18n("Guest to host"),
                                 i18n("Bidirectional")
                             ]
-                            onCurrentIndexChanged: {
-                                if (!root.optionalUpdating) {
-                                    Karton.saveClipboardTextMode(currentIndex);
-                                }
-                            }
+                            currentIndex: Karton.clipboardTextMode()
+                            onActivated: Karton.saveClipboardTextMode(index)
                         }
                         Controls.Label { text: i18n("Files"); Layout.fillWidth: true }
                         Controls.ComboBox {
@@ -2034,11 +2027,8 @@ Kirigami.Dialog {
                                 i18n("Guest to host"),
                                 i18n("Bidirectional")
                             ]
-                            onCurrentIndexChanged: {
-                                if (!root.optionalUpdating) {
-                                    Karton.saveClipboardFilesMode(currentIndex);
-                                }
-                            }
+                            currentIndex: Karton.clipboardFilesMode()
+                            onActivated: Karton.saveClipboardFilesMode(index)
                         }
                     }
                     Controls.Label {
