@@ -1631,29 +1631,29 @@ Kirigami.Dialog {
                     color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 }
 
-                Controls.CheckBox {
-                    id: watchdogCheck
-                    text: i18n("Watchdog")
-                    Layout.fillWidth: true
-                    onToggled: root.updateOptionalDevice("watchdog", checked, root.watchdogXml())
-                }
                 GridLayout {
-                    visible: watchdogCheck.checked
                     columns: 2
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Watchdog"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: watchdogCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("watchdog", checked, root.watchdogXml())
+                    }
+                    Controls.Label { text: i18n("Model"); visible: watchdogCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogModelCombo
+                        visible: watchdogCheck.checked
                         Layout.preferredWidth: 260
                         model: ["i6300esb", "ib700"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
-                    Controls.Label { text: i18n("Action"); Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Action"); visible: watchdogCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogActionCombo
+                        visible: watchdogCheck.checked
                         Layout.preferredWidth: 260
                         model: ["reset", "poweroff", "shutdown", "pause", "none"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
@@ -1661,22 +1661,21 @@ Kirigami.Dialog {
                 }
                 Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
 
-                Controls.CheckBox {
-                    id: rngCheck
-                    text: i18n("Random Number Generator")
-                    Layout.fillWidth: true
-                    onToggled: root.updateOptionalDevice("rng", checked, root.rngXml())
-                }
                 GridLayout {
-                    visible: rngCheck.checked
                     columns: 2
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Controls.Label { text: i18n("Backend"); Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Random Number Generator"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: rngCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("rng", checked, root.rngXml())
+                    }
+                    Controls.Label { text: i18n("Backend"); visible: rngCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: rngBackendCombo
+                        visible: rngCheck.checked
                         Layout.preferredWidth: 260
                         model: ["random", "egd"]
                         onCurrentIndexChanged: root.applyOptionalSettings("rng", root.rngXml())
@@ -1684,22 +1683,21 @@ Kirigami.Dialog {
                 }
                 Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
 
-                Controls.CheckBox {
-                    id: panicCheck
-                    text: i18n("Panic notifier")
-                    Layout.fillWidth: true
-                    onToggled: root.updateOptionalDevice("panic", checked, root.panicXml())
-                }
                 GridLayout {
-                    visible: panicCheck.checked
                     columns: 2
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Panic notifier"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: panicCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("panic", checked, root.panicXml())
+                    }
+                    Controls.Label { text: i18n("Model"); visible: panicCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: panicModelCombo
+                        visible: panicCheck.checked
                         Layout.preferredWidth: 260
                         model: ["isa", "pvpanic"]
                         onCurrentIndexChanged: root.applyOptionalSettings("panic", root.panicXml())
@@ -1707,59 +1705,73 @@ Kirigami.Dialog {
                 }
                 Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
 
-                Controls.CheckBox {
-                    id: vsockCheck
-                    text: i18n("VirtIO VSOCK")
-                    Layout.fillWidth: true
-                    onToggled: root.updateOptionalDevice("vsock", checked, "<vsock model='virtio'><cid auto='yes'/></vsock>")
-                }
-                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
-
-                Controls.CheckBox {
-                    id: shmemCheck
-                    text: i18n("Shared memory device (IVSHMEM)")
-                    Layout.fillWidth: true
-                    onToggled: root.updateOptionalDevice("shmem", checked, root.shmemXml())
-                }
                 GridLayout {
-                    visible: shmemCheck.checked
                     columns: 2
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Layout.leftMargin: 24
-                    Controls.Label { text: i18n("Name"); Layout.fillWidth: true }
+                    Controls.Label { text: i18n("VirtIO VSOCK"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: vsockCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("vsock", checked, "<vsock model='virtio'><cid auto='yes'/></vsock>")
+                    }
+                }
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
+
+                GridLayout {
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 16
+                    Layout.fillWidth: true
+                    Controls.Label { text: i18n("Shared memory device (IVSHMEM)"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: shmemCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: root.updateOptionalDevice("shmem", checked, root.shmemXml())
+                    }
+                    Controls.Label { text: i18n("Name"); visible: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.TextField {
                         id: shmemNameField
+                        visible: shmemCheck.checked
                         Layout.preferredWidth: 260
                         text: "karton"
                         onEditingFinished: root.applyOptionalSettings("shmem", root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Size (MiB)"); Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Size (MiB)"); visible: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.SpinBox {
                         id: shmemSizeSpin
+                        visible: shmemCheck.checked
                         from: 1
                         to: 4096
                         value: 64
                         Layout.preferredWidth: 260
                         onValueChanged: root.applyOptionalSettings("shmem", root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
+                    Controls.Label { text: i18n("Model"); visible: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: shmemModelCombo
+                        visible: shmemCheck.checked
                         Layout.preferredWidth: 260
                         model: ["ivshmem-plain", "ivshmem-doorbell"]
                         onCurrentIndexChanged: root.applyOptionalSettings("shmem", root.shmemXml())
                     }
                 }
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
 
-                Controls.CheckBox {
-                    id: memoryBackingCheck
-                    text: i18n("Shared memory backing (virtiofs)")
+                GridLayout {
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 16
                     Layout.fillWidth: true
-                    onToggled: {
-                        if (!root.optionalUpdating && Karton.setSharedMemoryBacking(root.domain, checked)) {
-                            root.refresh();
+                    Controls.Label { text: i18n("Shared memory backing (virtiofs)"); Layout.fillWidth: true }
+                    Controls.CheckBox {
+                        id: memoryBackingCheck
+                        Layout.alignment: Qt.AlignRight
+                        onToggled: {
+                            if (!root.optionalUpdating && Karton.setSharedMemoryBacking(root.domain, checked)) {
+                                root.refresh();
+                            }
                         }
                     }
                 }
@@ -1816,187 +1828,6 @@ Kirigami.Dialog {
                                 }
                             }
                         }
-                    }
-                }
-            }
-
-            // XML
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredWidth: 0
-                spacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Controls.Label {
-                            text: i18n("Domain XML")
-                            font.pixelSize: 15
-                            font.weight: Font.Bold
-                            Layout.fillWidth: true
-                        }
-                        Controls.Label {
-                            text: i18n("Edit")
-                            font.pixelSize: 13
-                        }
-                        Controls.Switch {
-                            id: xmlEditSwitch
-                            onCheckedChanged: {
-                                const savedX = xmlScroll.contentX;
-                                const savedY = xmlScroll.contentY;
-                                Qt.callLater(function() {
-                                    if (xmlScroll.contentItem) {
-                                        xmlScroll.contentItem.contentX = savedX;
-                                        xmlScroll.contentItem.contentY = savedY;
-                                    }
-                                });
-                            }
-                        }
-                    }
-                    Controls.Label {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        opacity: 0.65
-                        font.pixelSize: 12
-                        text: i18n("Read-only by default. Enable editing only when you need to change the domain XML directly.")
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        implicitHeight: Kirigami.Units.gridUnit * 24
-                        radius: 6
-                        color: Kirigami.Theme.backgroundColor
-                        border.width: 1
-                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-
-                        ScrollableSettingsView {
-                            id: xmlScroll
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            clip: true
-
-                            Controls.TextArea {
-                                id: xmlEditor
-                                width: parent.width
-                                height: Math.max(xmlScroll.height, implicitHeight)
-                                text: root.xmlContent
-                                readOnly: !xmlEditSwitch.checked
-                                wrapMode: TextEdit.NoWrap
-                                textFormat: TextEdit.PlainText
-                                selectByMouse: true
-                                font.family: "monospace"
-                                font.pixelSize: 12
-                                color: Kirigami.Theme.textColor
-                                background: null
-                                onTextChanged: {
-                                    // Do not mark the initial empty text or a
-                                    // refresh-triggered update as a user edit.
-                                    if (!root.xmlLoading && xmlEditSwitch.checked) {
-                                        root.xmlDirty = true;
-                                    }
-                                }
-
-                                XmlHighlighter {
-                                    textDocument: xmlEditor.textDocument
-                                }
-                            }
-                        }
-                    }
-                    Controls.Button {
-                        text: i18n("Apply XML")
-                        icon.name: "dialog-ok-symbolic"
-                        enabled: xmlEditSwitch.checked && root.xmlDirty
-                        Layout.alignment: Qt.AlignRight
-                        onClicked: {
-                            if (Karton.saveDomainXml(root.domain, xmlEditor.text)) {
-                                root.xmlDirty = false;
-                                root.refresh();
-                                root.xmlEditSwitch.checked = true;
-                            } else {
-                                // Keep the user in edit mode, but restore the
-                                // last configuration accepted by libvirt.
-                                root.loadXml(root.xmlLastValid);
-                                root.xmlEditSwitch.checked = true;
-                            }
-                        }
-                    }
-                }
-            // Filesystem
-            ScrollableSettingsView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                implicitHeight: 0
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 16
-
-                    Controls.Label {
-                        text: i18n("Shared folders are added from Add Hardware. Each share is mounted in the guest under its mount tag.")
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        opacity: 0.65
-                        font.pixelSize: 12
-                    }
-                    Controls.Button {
-                        text: i18n("How to mount…")
-                        icon.name: "help-about-symbolic"
-                        Layout.alignment: Qt.AlignLeft
-                        onClicked: filesystemHelpDialog.open()
-                    }
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 8, contentHeight)
-                        clip: true
-                        model: root.xmlDevices.filter(function(device) {
-                            return device.tag === "filesystem";
-                        })
-                        delegate: Controls.ItemDelegate {
-                            width: ListView.view.width
-                            focusPolicy: Qt.NoFocus
-                            contentItem: RowLayout {
-                                spacing: 8
-                                Kirigami.Icon {
-                                    source: "folder-symbolic"
-                                    implicitWidth: 20
-                                    implicitHeight: 20
-                                }
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    Controls.Label {
-                                        text: (modelData.target.length > 0 ? modelData.target : i18n("Filesystem")) + " · " + modelData.source
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-                                    Controls.Label {
-                                        text: (modelData.driver.length > 0 ? modelData.driver : "9p") + (modelData.readonly ? " · " + i18n("read-only") : "")
-                                        opacity: 0.65
-                                        font.pixelSize: 11
-                                    }
-                                }
-                                Controls.Button {
-                                    text: i18n("Edit")
-                                    icon.name: "document-edit-symbolic"
-                                    onClicked: root.openFilesystemEditor(modelData)
-                                }
-                                Controls.Button {
-                                    text: i18n("Detach")
-                                    icon.name: "list-remove-symbolic"
-                                    onClicked: {
-                                        if (Karton.detachXmlDevice(root.domain, modelData.index)) {
-                                            root.refresh();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Controls.Label {
-                        visible: root.xmlDevices.filter(function(device) { return device.tag === "filesystem"; }).length === 0
-                        text: i18n("No filesystem shares configured.")
-                        opacity: 0.65
-                        Layout.fillWidth: true
                     }
                 }
             }
