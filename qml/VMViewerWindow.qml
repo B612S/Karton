@@ -211,7 +211,14 @@ Kirigami.ApplicationWindow {
 
     pageStack.globalToolBar.opacity: fullScreenToolbarOpacity * (isFullScreen ? 0.82 : 1)
     pageStack.globalToolBar.enabled: !isFullScreen || fullScreenToolbarVisible
-    pageStack.globalToolBar.height: isFullScreen ? compactToolbarHeight : pageStack.globalToolBar.implicitHeight
+
+    Binding {
+        target: pageStack.globalToolBar
+        property: "preferredHeight"
+        value: viewerWindow.compactToolbarHeight
+        when: viewerWindow.isFullScreen
+        restoreMode: Binding.RestoreBindingOrValue
+    }
 
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
