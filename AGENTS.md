@@ -290,12 +290,14 @@ When testing destructive operations, prefer domains whose names start with
   `DomainConfig::networkModel` and read back from the domain XML.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
-  `VMPage.qml` polls `Karton::refreshDomainPreview()` every 5 seconds while the
-  VM is running and the page is visible. The capture is an asynchronous
-  `virsh screenshot` process through `CommandRunner`, so the GUI is never
-  blocked by libvirt's synchronous screenshot path. The resulting image is
-  loaded and written through `Domain::savePreviewFrame()`. This also works
-  while a viewer is open.
+  `VMPage.qml` polls `Karton::refreshDomainPreview()` every second while the
+  VM is running, the page is visible and no viewer is open (a viewer would make
+  QEMU screenshots pause the guest during interaction). The capture is an
+  asynchronous `virsh screenshot` process through `CommandRunner`, so the GUI
+  is never blocked by libvirt's synchronous screenshot path. Preview images are
+  scaled to 640 px and written atomically through `QSaveFile`; the QML uses two
+  stacked images and swaps the visible one only after the next frame is ready,
+  so updates do not blink.
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
   overlay, above the display node; the local cursor is hidden while the remote
   cursor is visible. There is one display node per renderer and one root node

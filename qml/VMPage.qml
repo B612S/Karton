@@ -56,13 +56,11 @@ Kirigami.ScrollablePage {
 
     Timer {
         id: previewTimer
-        interval: 5000
+        interval: 1000
         repeat: true
-        // virDomainScreenshot() is synchronous and briefly pauses the guest.
-        // Do not poll it while the viewer window is active (or any other
-        // window has focus), otherwise mouse input visibly stalls every few
-        // seconds during a live session.
-        running: root.isRunning && root.visible
+        // Do not capture while a SPICE viewer is open: the guest is already
+        // visible there and virsh screenshot briefly pauses QEMU.
+        running: root.isRunning && root.visible && Karton.viewerCount === 0
         triggeredOnStart: true
         onTriggered: {
             if (root.domain) {
@@ -231,17 +229,60 @@ Kirigami.ScrollablePage {
             color: "black"
             Layout.preferredHeight: Kirigami.Units.gridUnit * 16
 
+            // Two stacked images: the next frame is decoded while the old one
+            // is still visible, then they are swapped. Reloading a single Image
+            // source directly made the preview blink once per screenshot.
+            property bool frontVisible: true
+            property bool bothVisible: false
+
+            Timer {
+                id: previewFadeTimer
+                interval: 120
+                onTriggered: parent.bothVisible = false
+            }
+
             Image {
-                id: previewImage
+                id: previewFront
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                cache: false
+                smooth: true
+                opacity: parent.frontVisible || parent.bothVisible ? 1 : 0
                 source: domain ? "file://" + domain.config.screenshotPreviewPath : ""
 
-                Connections {
-                    target: domain
-                    function onPreviewChanged() {
-                        previewImage.source = "file://" + domain.config.screenshotPreviewPath + "?" + Date.now();
+                onStatusChanged: {
+                    if (status === Image.Ready && parent.frontVisible === false) {
+                        parent.bothVisible = true;
+                        parent.frontVisible = true;
+                        previewFadeTimer.restart();
                     }
+                }
+            }
+
+            Image {
+                id: previewBack
+                anchors.fill: parent
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                cache: false
+                smooth: true
+                opacity: !parent.frontVisible || parent.bothVisible ? 1 : 0
+
+                onStatusChanged: {
+                    if (status === Image.Ready && parent.frontVisible === true) {
+                        parent.bothVisible = true;
+                        parent.frontVisible = false;
+                        previewFadeTimer.restart();
+                    }
+                }
+            }
+
+            Connections {
+                target: domain
+                function onPreviewChanged() {
+                    const next = parent.frontVisible ? previewBack : previewFront;
+                    next.source = "file://" + domain.config.screenshotPreviewPath + "?" + Date.now();
                 }
             }
 

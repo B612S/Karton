@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QString>
 
 #include "domain/domainconfig.h"
@@ -119,7 +120,12 @@ void Domain::savePreviewFrame(QImage frame)
         return;
     }
 
-    if (!frame.save(previewPath)) {
+    if (frame.width() > 640) {
+        frame = frame.scaledToWidth(640, Qt::SmoothTransformation);
+    }
+
+    QSaveFile previewFile(previewPath);
+    if (!previewFile.open(QIODevice::WriteOnly) || !frame.save(&previewFile, "PNG") || !previewFile.commit()) {
         qCWarning(KARTON_DEBUG) << "Failed to save preview image:" << previewPath;
         return;
     }
