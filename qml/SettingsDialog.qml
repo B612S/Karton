@@ -36,6 +36,7 @@ Kirigami.Dialog {
     property var performance: ({})
     property bool xmlDirty: false
     property bool xmlLoading: false
+    property string xmlContent: ""
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
@@ -89,7 +90,7 @@ Kirigami.Dialog {
         tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
         if (!root.xmlDirty) {
             root.xmlLoading = true;
-            xmlEditor.text = Karton.domainXml(domain);
+            root.xmlContent = Karton.domainXml(domain);
             root.xmlLoading = false;
             root.xmlDirty = false;
             xmlEditSwitch.checked = false;
@@ -1587,13 +1588,10 @@ Kirigami.Dialog {
             }
 
             // XML
-            Controls.ScrollView {
+            ColumnLayout {
+                Layout.fillWidth: true
                 Layout.fillHeight: true
-                implicitHeight: 0
-                contentWidth: availableWidth
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 12
+                spacing: 12
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -1631,8 +1629,10 @@ Kirigami.Dialog {
                             id: xmlEditor
                             anchors.fill: parent
                             anchors.margins: 8
+                            text: root.xmlContent
                             readOnly: !xmlEditSwitch.checked
                             wrapMode: TextEdit.NoWrap
+                            textFormat: TextEdit.PlainText
                             selectByMouse: true
                             font.family: "monospace"
                             font.pixelSize: 12
@@ -1663,6 +1663,8 @@ Kirigami.Dialog {
                     }
                 }
             }
+        }
+    }
 
     Controls.ToolBar {
         Layout.fillWidth: true
@@ -1750,6 +1752,21 @@ Kirigami.Dialog {
     }
 
     Connections {
+        target: categoryList
+        function onCurrentIndexChanged() {
+            if (!root.domain || root.xmlDirty) {
+                return;
+            }
+            if (categoryList.currentIndex === categoryList.count - 1) {
+                root.xmlLoading = true;
+                root.xmlContent = Karton.domainXml(root.domain);
+                root.xmlLoading = false;
+                root.xmlEditSwitch.checked = false;
+            }
+        }
+    }
+
+    Connections {
         target: Karton
         function onClosePopupsRequested() {
             // ComboBox popups are separate Qt Quick popups; moving focus back
@@ -1779,10 +1796,4 @@ Kirigami.Dialog {
             }
         }
     }
-
-}
-
-}
-
-}
 }
