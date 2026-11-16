@@ -19,6 +19,7 @@
 #include <QDomElement>
 #include <QGuiApplication>
 #include <QMutexLocker>
+#include <QPixmap>
 #include <QQuickItemGrabResult>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -401,7 +402,7 @@ void DomainViewer::cursorSetCallback(SpiceCursorChannel *channel, gint width, gi
         item->m_cursorVisible = true;
         item->m_cursorTextureDirty = true;
     }
-    item->setCursor(QCursor(Qt::BlankCursor));
+    item->applyGuestCursor();
     item->update();
 }
 
@@ -437,13 +438,32 @@ void DomainViewer::cursorHideCallback(SpiceCursorChannel *channel, gpointer user
     if (pointerInside && haveCursor) {
         // Keep the last guest cursor while the pointer is over the display;
         // otherwise the host arrow flashes in during guest window dragging.
-        item->setCursor(Qt::BlankCursor);
+        item->applyGuestCursor();
     } else if (!item->m_pointerGrabbed) {
         // No guest cursor is available (for example after clearing it while
         // entering fullscreen). Do not leave the host cursor blank.
         item->unsetCursor();
     }
     item->update();
+}
+
+void DomainViewer::applyGuestCursor()
+{
+    QImage image;
+    QPoint hotspot;
+    {
+        QMutexLocker locker(&m_cursorMutex);
+        image = m_cursorImage;
+        hotspot = m_cursorHotspot;
+    }
+    if (image.isNull()) {
+        unsetCursor();
+        return;
+    }
+    // Use the guest cursor as the actual host cursor as well. The scene-graph
+    // overlay can be unavailable on some compositors/scene-graph resets; the
+    // host cursor keeps the pointer visible in that case.
+    setCursor(QCursor(QPixmap::fromImage(image), hotspot.x(), hotspot.y()));
 }
 
 void DomainViewer::cursorResetCallback(SpiceCursorChannel *channel, gpointer userData)
@@ -595,73 +615,15 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         m_displayNode = nullptr;
     }
 
-    QImage cursorImage;
-    QPoint cursorPosition;
-    QPoint hotspot;
-    bool cursorVisible = false;
-    bool textureDirty = false;
-    QPointF cursorPaintPosition;
-    bool hasCursorPaintPosition = false;
-    {
-        QMutexLocker locker(&m_cursorMutex);
-        cursorImage = m_cursorImage;
-        cursorPosition = m_cursorPosition;
-        hotspot = m_cursorHotspot;
-        cursorVisible = m_cursorVisible;
-        textureDirty = m_cursorTextureDirty;
-        m_cursorTextureDirty = false;
-        cursorPaintPosition = m_cursorPaintPosition;
-        hasCursorPaintPosition = m_hasCursorPaintPosition;
-    }
-
-    if (!cursorVisible || cursorImage.isNull()) {
-        if (m_cursorNode) {
-            root->removeChildNode(m_cursorNode);
-            delete m_cursorNode;
-            m_cursorNode = nullptr;
-        }
-        return root;
-    }
-
-    if (!m_cursorNode) {
-        m_cursorNode = new QSGSimpleTextureNode;
-        m_cursorNode->setOwnsTexture(true);
-        root->appendChildNode(m_cursorNode);
-    } else {
-        // Keep the cursor above the display node.
+    // The guest cursor is installed as the actual host cursor in
+    // applyGuestCursor(). Do not also paint a scene-graph cursor: in client
+    // mouse mode SPICE sends no cursor position, so the overlay would be
+    // stranded at a stale position while the host cursor follows the pointer.
+    if (m_cursorNode) {
         root->removeChildNode(m_cursorNode);
-        root->appendChildNode(m_cursorNode);
+        delete m_cursorNode;
+        m_cursorNode = nullptr;
     }
-
-    if (textureDirty || !m_cursorNode->texture()) {
-        QSGTexture *texture = window()->createTextureFromImage(cursorImage);
-        if (!texture) {
-            root->removeChildNode(m_cursorNode);
-            delete m_cursorNode;
-            m_cursorNode = nullptr;
-            return root;
-        }
-        m_cursorNode->setTexture(texture);
-    }
-
-    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
-    const qreal scaleX = (frameSize.width() > 0 && width() > 0) ? width() / frameSize.width() : 1.0;
-    const qreal scaleY = (frameSize.height() > 0 && height() > 0) ? height() / frameSize.height() : 1.0;
-
-    // SPICE only sends cursor-move in server mouse mode. In client mode there
-    // is no cursor-move at all, so fall back to the local pointer position (or
-    // the center of the frame) instead of leaving the cursor in the top-left
-    // corner.
-    if (hasCursorPaintPosition) {
-        cursorPosition = cursorPaintPosition.toPoint();
-    } else if (cursorPosition.isNull() && frameSize.isValid()) {
-        cursorPosition = QPoint(frameSize.width() / 2, frameSize.height() / 2);
-    }
-
-    const qreal x = (cursorPosition.x() - hotspot.x()) * scaleX;
-    const qreal y = (cursorPosition.y() - hotspot.y()) * scaleY;
-    m_cursorNode->setRect(QRectF(x, y, cursorImage.width() * scaleX, cursorImage.height() * scaleY));
-    m_cursorNode->setFiltering(QSGTexture::Linear);
 
     return root;
 }
@@ -1197,7 +1159,9 @@ void DomainViewer::hoverEnterEvent(QHoverEvent *event)
         }
     }
     if (haveCursor) {
-        setCursor(Qt::BlankCursor);
+        applyGuestCursor();
+    } else if (!m_pointerGrabbed) {
+        unsetCursor();
     }
     QQuickItem::hoverEnterEvent(event);
 }

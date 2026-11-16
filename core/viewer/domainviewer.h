@@ -144,6 +144,7 @@ Q_SIGNALS:
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
     void updateLivePreview();
+    void applyGuestCursor();
 
 private:
     enum class RenderMode {
