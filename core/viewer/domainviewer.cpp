@@ -367,7 +367,9 @@ gboolean DomainViewer::clipboardSelectionRequestCallback(SpiceMainChannel *chann
         return FALSE;
     }
     const QByteArray text = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
-    qCInfo(KARTON_DEBUG) << "clipboard: guest requested text, sending" << text.size() << "bytes, selection" << selection;
+    qCInfo(KARTON_DEBUG) << "clipboard: guest requested text, sending" << text.size() << "bytes, selection" << selection << "by-demand"
+                         << spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD_BY_DEMAND) << "selection-cap"
+                         << spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD_SELECTION);
     // Let the main channel finish processing the request before answering;
     // calling notify synchronously from the signal handler can race the
     // clipboard request on the guest side.
