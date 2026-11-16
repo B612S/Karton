@@ -366,6 +366,7 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
     }
 
     connect(m_renderer.get(), &SpiceDisplayRenderer::frameReady, this, &QQuickItem::update);
+    connect(m_renderer.get(), &SpiceDisplayRenderer::frameReady, this, &DomainViewer::updateLivePreview);
     connect(m_renderer.get(), &SpiceDisplayRenderer::frameSizeChanged, this, &DomainViewer::handleRendererFrameSizeChanged);
     connect(m_renderer.get(), &SpiceDisplayRenderer::errorOccurred, this, [this](const QString &message) {
         setErrorMessage(message);
@@ -469,6 +470,18 @@ void DomainViewer::clearCursor()
         unsetCursor();
     }
     update();
+}
+
+void DomainViewer::updateLivePreview()
+{
+    if (!m_domain || !m_renderer || (m_livePreviewTimer.isValid() && m_livePreviewTimer.elapsed() < 200)) {
+        return;
+    }
+    m_livePreviewTimer.restart();
+    const QImage frame = m_renderer->currentFrame();
+    if (!frame.isNull()) {
+        m_domain->updateLivePreviewFrame(frame);
+    }
 }
 
 void DomainViewer::handleRendererFrameSizeChanged()

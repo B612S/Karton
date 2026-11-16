@@ -9,6 +9,7 @@
 #include <QAudioFormat>
 #include <QAudioSink>
 #include <QAudioSource>
+#include <QElapsedTimer>
 #include <QIODevice>
 #include <QImage>
 #include <QMutex>
@@ -142,6 +143,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
+    void updateLivePreview();
 
 private:
     enum class RenderMode {
@@ -232,6 +234,7 @@ private:
     QSGNode *m_displayNode = nullptr;
     QSGSimpleTextureNode *m_cursorNode = nullptr;
     bool m_previewGrabPending = false;
+    QElapsedTimer m_livePreviewTimer;
 
     static constexpr quint32 x11_wayland_evdev_offset = 8;
     // difference of 8 between x11 wayland.

@@ -114,6 +114,19 @@ QString Domain::uuidString(virDomainPtr domainPtr)
     return QString::fromUtf8(uuid.data());
 }
 
+void Domain::updateLivePreviewFrame(QImage frame)
+{
+    if (frame.isNull()) {
+        return;
+    }
+    if (frame.width() > 640) {
+        frame = frame.scaledToWidth(640, Qt::SmoothTransformation);
+    }
+    m_previewFrame = std::move(frame);
+    Q_EMIT previewFrameChanged();
+    Q_EMIT previewChanged();
+}
+
 void Domain::savePreviewFrame(QImage frame)
 {
     qCDebug(KARTON_DEBUG) << "Saving preview to:" << m_config->screenshotPreviewPath();
