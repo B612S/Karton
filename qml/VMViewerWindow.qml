@@ -164,9 +164,6 @@ Kirigami.ApplicationWindow {
             Karton.unregisterViewer(viewerWindow);
             Karton.viewerClosed();
         }
-        if (viewerWindow.isRunning) {
-            domainViewer.saveFrameToDomain();
-        }
         domainViewer.disconnectFromSpice();
         close.accepted = true;
         // The window is created dynamically from VMPage and has no parent.
@@ -289,25 +286,106 @@ Kirigami.ApplicationWindow {
                     font.bold: true
                 }
 
-                Repeater {
-                    model: viewerPage.actions
+                Row {
+                    spacing: 2
 
-                    Controls.ToolButton {
-                        id: actionButton
-                        action: modelData
+                    Controls.Button {
+                        id: powerButton
+                        text: viewerWindow.isRunning ? i18n("Shut Down") : i18n("Start")
+                        icon.name: viewerWindow.isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
                         flat: true
                         hoverEnabled: true
-                        Layout.preferredHeight: 40
-                        Layout.alignment: Qt.AlignVCenter
-                        display: modelData.displayHint === Kirigami.DisplayHint.IconOnly
-                                 ? Controls.AbstractButton.IconOnly
-                                 : Controls.AbstractButton.TextBesideIcon
-
+                        width: 120
+                        height: 40
+                        onClicked: {
+                            if (viewerWindow.isRunning) {
+                                Karton.stopDomain(viewerWindow.domain);
+                            } else if (Karton.startDomain(viewerWindow.domain)) {
+                                viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", viewerWindow.domain.config.name));
+                            }
+                        }
                         background: Rectangle {
                             radius: 8
-                            color: actionButton.down
-                                   ? Qt.rgba(1, 1, 1, 0.22)
-                                   : actionButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                            color: powerButton.down ? Qt.rgba(1, 1, 1, 0.22) : powerButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        }
+                    }
+
+                    Controls.Button {
+                        id: pauseButton
+                        visible: viewerWindow.isRunning
+                        text: viewerWindow.domain && viewerWindow.domain.isPaused ? i18n("Resume") : i18n("Pause")
+                        icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+                        flat: true
+                        hoverEnabled: true
+                        width: 100
+                        height: 40
+                        onClicked: {
+                            if (viewerWindow.domain.isPaused) {
+                                Karton.resumeDomain(viewerWindow.domain);
+                            } else {
+                                Karton.pauseDomain(viewerWindow.domain);
+                            }
+                        }
+                        background: Rectangle {
+                            radius: 8
+                            color: pauseButton.down ? Qt.rgba(1, 1, 1, 0.22) : pauseButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        }
+                    }
+
+                    Controls.Button {
+                        id: rebootButton
+                        visible: viewerWindow.isRunning
+                        text: i18n("Reboot")
+                        icon.name: "system-reboot-symbolic"
+                        flat: true
+                        hoverEnabled: true
+                        width: 100
+                        height: 40
+                        onClicked: Karton.rebootDomain(viewerWindow.domain)
+                        background: Rectangle {
+                            radius: 8
+                            color: rebootButton.down ? Qt.rgba(1, 1, 1, 0.22) : rebootButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        }
+                    }
+
+                    Controls.Button {
+                        id: fullscreenButton
+                        text: ""
+                        icon.name: "view-fullscreen-symbolic"
+                        flat: true
+                        hoverEnabled: true
+                        width: 40
+                        height: 40
+                        display: Controls.AbstractButton.IconOnly
+                        onClicked: {
+                            if (viewerWindow.visibility === Window.FullScreen) {
+                                viewerWindow.showNormal();
+                            } else {
+                                viewerWindow.showFullScreen();
+                            }
+                        }
+                        background: Rectangle {
+                            radius: 8
+                            color: fullscreenButton.down ? Qt.rgba(1, 1, 1, 0.22) : fullscreenButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        }
+                    }
+
+                    Controls.Button {
+                        id: moreButton
+                        text: i18n("More")
+                        icon.name: "view-more-symbolic"
+                        flat: true
+                        hoverEnabled: true
+                        width: 40
+                        height: 40
+                        display: Controls.AbstractButton.IconOnly
+                        onClicked: {
+                            domainViewer.releasePointerGrab();
+                            viewerMenu.popup();
+                        }
+                        background: Rectangle {
+                            radius: 8
+                            color: moreButton.down ? Qt.rgba(1, 1, 1, 0.22) : moreButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
                         }
                     }
                 }
