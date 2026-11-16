@@ -11,6 +11,8 @@ Kirigami.ApplicationWindow {
     width: Kirigami.Units.gridUnit * 50
     height: Kirigami.Units.gridUnit * 35
 
+    property bool sizeRestored: false
+
     readonly property real wideScreenThreshold: Kirigami.Units.gridUnit * 40
     readonly property bool isWidescreen: (root.width >= wideScreenThreshold) && root.wideScreen // prevent being widescreen at first launch
 
@@ -20,4 +22,24 @@ Kirigami.ApplicationWindow {
     title: i18nc("@title:window", "Karton Virtual Machine Manager")
 
     pageStack.initialPage: VMListPage { }
+
+    Component.onCompleted: {
+        const saved = Karton.mainWindowSize();
+        if (saved.width > 0 && saved.height > 0) {
+            width = Math.max(Kirigami.Units.gridUnit * 30, Math.min(saved.width, Screen.width * 0.95));
+            height = Math.max(Kirigami.Units.gridUnit * 20, Math.min(saved.height, Screen.height * 0.95));
+        }
+        sizeRestored = true;
+    }
+
+    onWidthChanged: if (sizeRestored) mainSizeTimer.restart()
+    onHeightChanged: if (sizeRestored) mainSizeTimer.restart()
+    onClosing: Karton.saveMainWindowSize(width, height)
+
+    Timer {
+        id: mainSizeTimer
+        interval: 500
+        repeat: false
+        onTriggered: Karton.saveMainWindowSize(root.width, root.height)
+    }
 }

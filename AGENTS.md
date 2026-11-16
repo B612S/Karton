@@ -21,7 +21,8 @@ in the empty-state message and can be overridden in the Connection Settings
 dialog (requires a restart) or with the `KARTON_LIBVIRT_URI` environment
 variable, which takes precedence. A stored URI is used first; if it has no
 domains and is one of the two local URIs, the other one is tried. The URI is
-stored in QSettings under `connection/uri`. Any `virsh` command used during
+stored in QSettings under `connection/uri` in
+`$XDG_CONFIG_HOME/karton/karton.conf`. Any `virsh` command used during
 development or testing must pass `-c <same URI>` (usually
 `-c qemu:///system`).
 
@@ -282,6 +283,8 @@ When testing destructive operations, prefer domains whose names start with
   resources (memory/storage/format) and system (firmware/network/CPU/
   acceleration). Keep the content of each step short; the previous single long
   form triggered a `Kirigami.Dialog` binding loop on `y`.
+- Window sizes are persisted in the same `karton.conf`: one main-window size and
+  a separate viewer size keyed by each VM UUID, saved after resize and on close.
 - The VM list uses `Karton::domainOsIcon()`/`domainOsName()` and flat
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
   macOS and DOS), installed into hicolor. The VM page uses Luma-style

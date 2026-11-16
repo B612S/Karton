@@ -93,6 +93,10 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantMap domainStats(const Domain *domain);
     Q_INVOKABLE QString domainOsIcon(const Domain *domain) const;
     Q_INVOKABLE QString domainOsName(const Domain *domain) const;
+    Q_INVOKABLE QVariantMap mainWindowSize() const;
+    Q_INVOKABLE void saveMainWindowSize(int width, int height);
+    Q_INVOKABLE QVariantMap viewerWindowSize(const Domain *domain) const;
+    Q_INVOKABLE void saveViewerWindowSize(const Domain *domain, int width, int height);
     Q_INVOKABLE QVariantMap domainHardwareInfo(const Domain *domain) const;
     Q_INVOKABLE bool editDomainHardware(const Domain *domain, const QVariantMap &settings);
     Q_INVOKABLE bool refreshDomainPreview(const Domain *domain);

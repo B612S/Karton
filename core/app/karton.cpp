@@ -39,6 +39,21 @@
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
 
+namespace
+{
+QString kartonConfigPath()
+{
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/karton");
+    QDir().mkpath(directory);
+    const QString path = directory + QStringLiteral("/karton.conf");
+    const QString legacyPath = directory + QStringLiteral("/karton.ini");
+    if (!QFile::exists(path) && QFile::exists(legacyPath)) {
+        QFile::copy(legacyPath, path);
+    }
+    return path;
+}
+} // namespace
+
 Karton::Karton(QObject *parent)
     : QObject(parent)
     , m_conn(nullptr)
@@ -79,14 +94,14 @@ QString Karton::connectionUri() const
         return QString::fromUtf8(environmentUri);
     }
 
-    QSettings settings;
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
     const QString storedUri = settings.value(QStringLiteral("connection/uri")).toString();
     return storedUri.isEmpty() ? QStringLiteral("qemu:///system") : storedUri;
 }
 
 void Karton::saveConnectionUri(const QString &uri)
 {
-    QSettings settings;
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
     settings.setValue(QStringLiteral("connection/uri"), uri.trimmed());
 }
 
@@ -126,7 +141,7 @@ bool Karton::init()
     if (!environmentUri.isEmpty()) {
         candidates.append(QString::fromUtf8(environmentUri));
     } else {
-        QSettings settings;
+        QSettings settings(kartonConfigPath(), QSettings::IniFormat);
         const QString storedUri = settings.value(QStringLiteral("connection/uri")).toString();
         if (!storedUri.isEmpty()) {
             candidates.append(storedUri);
@@ -938,6 +953,57 @@ QString Karton::domainOsIcon(const Domain *domain) const
         return QStringLiteral("computer-symbolic");
     }
     return OsIconMapper::iconName(domain->config()->shortOsId(), domain->config()->osId());
+}
+
+QVariantMap Karton::mainWindowSize() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    QVariantMap size;
+    const int width = settings.value(QStringLiteral("window/mainWidth"), 0).toInt();
+    const int height = settings.value(QStringLiteral("window/mainHeight"), 0).toInt();
+    if (width > 0 && height > 0) {
+        size.insert(QStringLiteral("width"), width);
+        size.insert(QStringLiteral("height"), height);
+    }
+    return size;
+}
+
+void Karton::saveMainWindowSize(int width, int height)
+{
+    if (width < 320 || height < 240) {
+        return;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("window/mainWidth"), width);
+    settings.setValue(QStringLiteral("window/mainHeight"), height);
+}
+
+QVariantMap Karton::viewerWindowSize(const Domain *domain) const
+{
+    QVariantMap size;
+    if (!domain) {
+        return size;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString prefix = QStringLiteral("window/viewer/%1/").arg(domain->config()->uuid());
+    const int width = settings.value(prefix + QStringLiteral("width"), 0).toInt();
+    const int height = settings.value(prefix + QStringLiteral("height"), 0).toInt();
+    if (width > 0 && height > 0) {
+        size.insert(QStringLiteral("width"), width);
+        size.insert(QStringLiteral("height"), height);
+    }
+    return size;
+}
+
+void Karton::saveViewerWindowSize(const Domain *domain, int width, int height)
+{
+    if (!domain || width < 320 || height < 240) {
+        return;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString prefix = QStringLiteral("window/viewer/%1/").arg(domain->config()->uuid());
+    settings.setValue(prefix + QStringLiteral("width"), width);
+    settings.setValue(prefix + QStringLiteral("height"), height);
 }
 
 QString Karton::domainOsName(const Domain *domain) const

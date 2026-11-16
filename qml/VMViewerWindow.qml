@@ -22,6 +22,7 @@ Kirigami.ApplicationWindow {
     property bool viewerRegistered: false
     readonly property bool isRunning: domain ? domain.isActive : false
     property bool wasRunning: false
+    property bool sizeRestored: false
 
     function registerViewer() {
         if (!viewerRegistered) {
@@ -50,11 +51,20 @@ Kirigami.ApplicationWindow {
 
     Component.onCompleted: {
         registerViewer();
+        const savedSize = Karton.viewerWindowSize(domain);
+        if (savedSize.width > 0 && savedSize.height > 0) {
+            width = Math.max(320, Math.min(savedSize.width, Screen.width * 0.95));
+            height = Math.max(240, Math.min(savedSize.height, Screen.height * 0.95));
+        }
+        sizeRestored = true;
         wasRunning = isRunning;
         Qt.callLater(function() {
             domainViewer.forceActiveFocus();
         });
     }
+
+    onWidthChanged: if (sizeRestored) viewerSizeTimer.restart()
+    onHeightChanged: if (sizeRestored) viewerSizeTimer.restart()
 
     Component.onDestruction: {
         if (viewerRegistered) {
@@ -79,6 +89,7 @@ Kirigami.ApplicationWindow {
     }
 
     onClosing: (close) => {
+        Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height);
         if (viewerRegistered) {
             viewerRegistered = false;
             Karton.unregisterViewer(viewerWindow);
@@ -94,6 +105,13 @@ Kirigami.ApplicationWindow {
         Qt.callLater(function() {
             viewerWindow.destroy();
         });
+    }
+
+    Timer {
+        id: viewerSizeTimer
+        interval: 500
+        repeat: false
+        onTriggered: Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height)
     }
 
     Connections {
