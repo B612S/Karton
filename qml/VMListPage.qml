@@ -136,8 +136,7 @@ Kirigami.ScrollablePage {
                 spacing: Kirigami.Units.largeSpacing
 
                 Kirigami.Icon {
-                    source: "computer-symbolic"
-                    // TODO: Add OS icon -> eventually, have screencap of VM window
+                    source: domain ? Karton.domainOsIcon(domain) : "computer-symbolic"
                     Layout.fillHeight: true
                     Layout.maximumHeight: Kirigami.Units.iconSizes.huge
                     Layout.preferredWidth: height
@@ -153,7 +152,9 @@ Kirigami.ScrollablePage {
                     Controls.Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: domain.config.state + " | " + domain.config.shortOsId
+                        text: Karton.domainOsName(domain).length > 0
+                            ? domain.config.state + " | " + Karton.domainOsName(domain)
+                            : domain.config.state
                     }
                 }
             }

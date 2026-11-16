@@ -10,6 +10,7 @@ add_library(karton_testcore STATIC
     ${CMAKE_SOURCE_DIR}/core/domain/domainconfig.cpp
     ${CMAKE_SOURCE_DIR}/core/domain/domainxmlbuilder.cpp
     ${CMAKE_SOURCE_DIR}/core/domain/domainxmlreader.cpp
+    ${CMAKE_SOURCE_DIR}/core/os/osiconmapper.cpp
     ${CMAKE_SOURCE_DIR}/core/os/osinfoconfig.cpp
     ${CMAKE_SOURCE_DIR}/core/util/commandrunner.cpp
 )
@@ -47,6 +48,7 @@ set(KARTON_TEST_ENV
 set(KARTON_TESTS
     tst_domainxml
     tst_domainconfig
+    tst_osiconmapper
     tst_commandrunner
 )
 

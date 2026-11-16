@@ -66,6 +66,10 @@ install(FILES
     org.kde.karton.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
+install(DIRECTORY img/os/
+    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
+    FILES_MATCHING PATTERN "*.svg"
+)
 
 ecm_find_qmlmodule(org.kde.kirigami REQUIRED)
 
@@ -112,6 +116,7 @@ target_sources(karton
     core/viewer/previewitem.cpp
     core/viewer/previewitem.h
     core/domain/domainxmlbuilder.cpp
+    core/os/osiconmapper.cpp
     core/os/osinfoconfig.cpp
     core/domain/domainxmlreader.cpp
     core/util/commandrunner.cpp

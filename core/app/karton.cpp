@@ -37,6 +37,7 @@
 #include "karton_debug.h"
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
+#include "os/osiconmapper.h"
 
 Karton::Karton(QObject *parent)
     : QObject(parent)
@@ -929,6 +930,22 @@ bool Karton::refreshDomainPreview(const Domain *domain)
                                     }
                                 });
     return true;
+}
+
+QString Karton::domainOsIcon(const Domain *domain) const
+{
+    if (!domain) {
+        return QStringLiteral("computer-symbolic");
+    }
+    return OsIconMapper::iconName(domain->config()->shortOsId(), domain->config()->osId());
+}
+
+QString Karton::domainOsName(const Domain *domain) const
+{
+    if (!domain) {
+        return {};
+    }
+    return OsIconMapper::displayName(domain->config()->shortOsId(), domain->config()->osId());
 }
 
 QVariantMap Karton::domainStats(const Domain *domain)

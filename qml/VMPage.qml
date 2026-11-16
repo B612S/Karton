@@ -286,32 +286,87 @@ Kirigami.ScrollablePage {
                 onClicked: root.openViewerWindow()
             }
         }
-        FormCard.FormCard {
-            maximumWidth: parent.width - Kirigami.Units.gridUnit * 2
+        Controls.Label {
+            text: i18n("Details")
+            font.pixelSize: 15
+            font.weight: Font.Bold
+            Layout.fillWidth: true
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+        }
+        GridLayout {
+            columns: 2
+            columnSpacing: 16
+            rowSpacing: 16
+            Layout.fillWidth: true
 
-            FormCard.FormTextDelegate {
-                text: i18n("UUID")
-                description: domain ? domain.config.uuid : ""
+            Controls.Label { text: i18n("UUID"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label {
+                text: domain ? domain.config.uuid : ""
+                font.pixelSize: 14
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
             }
-            FormCard.FormDelegateSeparator {}
-            FormCard.FormTextDelegate {
-                text: i18n("State")
-                description: domain ? domain.config.state : ""
+            Controls.Label { text: i18n("State"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label {
+                text: domain ? domain.config.state : ""
+                font.pixelSize: 14
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                horizontalAlignment: Text.AlignRight
             }
-            FormCard.FormDelegateSeparator {}
-            FormCard.FormTextDelegate {
-                text: i18n("CPU Usage")
-                description: root.stats.cpuPercent !== undefined ? i18n("%1 %", root.stats.cpuPercent.toFixed(1)) : "—"
+            Controls.Label { text: i18n("CPU Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label {
+                text: root.stats.cpuPercent !== undefined ? i18n("%1 %", root.stats.cpuPercent.toFixed(1)) : "—"
+                font.pixelSize: 14
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                horizontalAlignment: Text.AlignRight
             }
-            FormCard.FormDelegateSeparator {}
-            FormCard.FormTextDelegate {
-                text: i18n("Maximum Memory (GB)")
-                description: domain ? domain.config.maxRam : ""
+            Controls.Label { text: i18n("CPUs"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label {
+                text: domain ? domain.config.cpus : ""
+                font.pixelSize: 14
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                horizontalAlignment: Text.AlignRight
             }
-            FormCard.FormDelegateSeparator {}
-            FormCard.FormTextDelegate {
-                text: i18n("Memory Usage")
-                description: {
+        }
+
+        Controls.Label {
+            text: i18n("Memory")
+            font.pixelSize: 15
+            font.weight: Font.Bold
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+        }
+        GridLayout {
+            columns: 2
+            columnSpacing: 16
+            rowSpacing: 16
+            Layout.fillWidth: true
+
+            Controls.Label { text: i18n("Maximum Memory (GB)"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label {
+                text: domain ? domain.config.maxRam : ""
+                font.pixelSize: 14
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                horizontalAlignment: Text.AlignRight
+            }
+            Controls.Label { text: i18n("Memory Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label {
+                text: {
                     if (!domain) {
                         return "";
                     }
@@ -320,29 +375,60 @@ Kirigami.ScrollablePage {
                     }
                     return domain.config.ramUsage + " GB";
                 }
+                font.pixelSize: 14
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                horizontalAlignment: Text.AlignRight
             }
-            FormCard.FormDelegateSeparator {}
-            FormCard.FormTextDelegate {
-                text: i18n("CPUs")
-                description: domain ? domain.config.cpus : ""
-            }
-            FormCard.FormDelegateSeparator {}
-            FormCard.FormTextDelegate {
-                text: i18n("Virtual Disk Path")
-                description: {
+        }
+
+        Controls.Label {
+            text: i18n("Storage")
+            font.pixelSize: 15
+            font.weight: Font.Bold
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+        }
+        GridLayout {
+            columns: 2
+            columnSpacing: 16
+            rowSpacing: 16
+            Layout.fillWidth: true
+
+            Controls.Label { text: i18n("Virtual Disk Path"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label {
+                text: {
                     if (!domain) {
                         return "";
                     }
                     const count = domain.config.virtualDiskPaths.length;
                     return count > 1 ? domain.config.virtualDiskPath + " (+" + (count - 1) + ")" : domain.config.virtualDiskPath;
                 }
+                font.pixelSize: 14
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideMiddle
             }
-            FormCard.FormDelegateSeparator {}
-            FormCard.FormTextDelegate {
-                text: i18n("ISO Disk Path")
-                description: domain ? domain.config.isoDiskPath : ""
-                trailing: Controls.Button {
-                    text: "Eject"
+            Controls.Label { text: i18n("ISO Disk Path"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            RowLayout {
+                Layout.preferredWidth: 280
+                Layout.alignment: Qt.AlignRight
+                spacing: 8
+                Controls.Label {
+                    Layout.fillWidth: true
+                    text: domain ? domain.config.isoDiskPath : ""
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideMiddle
+                }
+                Controls.Button {
+                    text: i18n("Eject")
                     icon.name: "media-eject-symbolic"
                     onClicked: {
                         if (Karton.ejectDisk(domain)) {

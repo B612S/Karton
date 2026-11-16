@@ -37,6 +37,8 @@ development or testing must pass `-c <same URI>` (usually
 | `core/domain/domainxmlbuilder.{h,cpp}` | Generates and edits libvirt domain XML. |
 | `core/domain/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
 | `core/os/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
+| `core/os/osiconmapper.{h,cpp}` | Maps libosinfo OS IDs to flat family icons and display names. |
+| `img/os/` | Bundled flat OS family icons installed into hicolor. |
 | `core/viewer/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
 | `core/viewer/previewitem.{h,cpp}` | Painted item that displays the latest in-memory preview frame. |
 | `core/viewer/glscanoutrenderer.*`, `core/viewer/primarysurfacerenderer.*`, `core/viewer/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
@@ -280,6 +282,10 @@ When testing destructive operations, prefer domains whose names start with
   resources (memory/storage/format) and system (firmware/network/CPU/
   acceleration). Keep the content of each step short; the previous single long
   form triggered a `Kirigami.Dialog` binding loop on `y`.
+- The VM list uses `Karton::domainOsIcon()`/`domainOsName()` and flat
+  `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
+  macOS and DOS), installed into hicolor. The VM page uses Luma-style
+  transparent details rows and a rounded preview frame.
 - `SettingsDialog.qml` is a standalone, screen-adaptive hardware settings
   window (1000×680 maximum, 72% of the screen, minimum 720×480) with a shared
   page header, a fixed navigation column, one scrollable content page and a
