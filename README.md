@@ -80,7 +80,8 @@ highlighting and scrolls independently of the page.
 - USB and PCI passthrough;
 - controllers, serial ports and consoles;
 - VirtIO channels;
-- USB redirection.
+- USB redirection;
+- shared memory (IVSHMEM) and filesystem shares (9p/virtiofs).
 
 TPM is configured on the VM's TPM Settings page. Watchdog, RNG, panic and
 VSOCK are enabled from the VM's Other devices page.

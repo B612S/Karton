@@ -110,6 +110,17 @@ Kirigami.Dialog {
         panicCheck.checked = root.hasXmlDevice("panic");
         panicModelCombo.currentIndex = Math.max(0, ["isa", "pvpanic"].indexOf(panicCheck.checked ? root.deviceByTag("panic").model : ""));
         vsockCheck.checked = root.hasXmlDevice("vsock");
+        const shmem = root.deviceByTag("shmem");
+        shmemCheck.checked = shmem !== null;
+        shmemNameField.text = shmem ? shmem.name : "karton";
+        shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
+        shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));
+        const filesystem = root.deviceByTag("filesystem");
+        filesystemCheck.checked = filesystem !== null;
+        filesystemSourceField.text = filesystem ? filesystem.source : "";
+        filesystemTargetField.text = filesystem && filesystem.target.length > 0 ? filesystem.target : "share";
+        filesystemAccessCombo.currentIndex = Math.max(0, ["passthrough", "mapped", "squash"].indexOf(filesystem ? filesystem.accessmode : ""));
+        filesystemDriverCombo.currentIndex = Math.max(0, ["9p", "virtiofs"].indexOf(filesystem && filesystem.driver.length > 0 ? filesystem.driver : "9p"));
         root.optionalUpdating = false;
 
         const resolution = Karton.domainDisplayResolution(domain);
@@ -197,6 +208,28 @@ Kirigami.Dialog {
 
     function panicXml() {
         return "<panic model='" + panicModelCombo.currentText + "'/>";
+    }
+
+    function shmemXml() {
+        const name = shmemNameField.text.trim().length > 0 ? shmemNameField.text.trim() : "karton";
+        const size = shmemSizeSpin.value * 1024 * 1024;
+        return "<shmem name='" + name + "' size='" + size + "'><model type='" + shmemModelCombo.currentText + "'/></shmem>";
+    }
+
+    function xmlEscape(value) {
+        return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+    }
+
+    function filesystemXml() {
+        const source = filesystemSourceField.text.trim();
+        const target = filesystemTargetField.text.trim().length > 0 ? filesystemTargetField.text.trim() : "share";
+        let xml = "<filesystem type='mount' accessmode='" + filesystemAccessCombo.currentText + "'>";
+        xml += "<source dir='" + xmlEscape(source) + "'/>";
+        xml += "<target dir='" + xmlEscape(target) + "'/>";
+        if (filesystemDriverCombo.currentText === "virtiofs") {
+            xml += "<driver type='virtiofs'/>";
+        }
+        return xml + "</filesystem>";
     }
 
     function pciDeviceLabel(address) {
@@ -604,17 +637,6 @@ Kirigami.Dialog {
                     width: parent.width
                     spacing: 16
 
-                    Controls.Label {
-                        text: i18n("CPUs & Memory")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
                     GridLayout {
                         columns: 2
                         columnSpacing: 16
@@ -995,17 +1017,6 @@ Kirigami.Dialog {
                     width: parent.width
                     spacing: 16
 
-                    Controls.Label {
-                        text: i18n("Display")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
                     GridLayout {
                         columns: 2
                         columnSpacing: 16
@@ -1107,17 +1118,6 @@ Kirigami.Dialog {
                     width: parent.width
                     spacing: 16
 
-                    Controls.Label {
-                        text: i18n("Sound")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
                     GridLayout {
                         columns: 2
                         columnSpacing: 16
@@ -1289,17 +1289,6 @@ Kirigami.Dialog {
                     width: parent.width
                     spacing: 16
 
-                    Controls.Label {
-                        text: i18n("TPM")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
                     GridLayout {
                         columns: 2
                         columnSpacing: 16
@@ -1360,17 +1349,6 @@ Kirigami.Dialog {
                     width: parent.width
                     spacing: 16
 
-                    Controls.Label {
-                        text: i18n("OS Information")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 16
@@ -1412,17 +1390,6 @@ Kirigami.Dialog {
                     width: parent.width
                     spacing: 16
 
-                    Controls.Label {
-                        text: i18n("Performance")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
                     GridLayout {
                         columns: 2
                         columnSpacing: 16
@@ -1501,13 +1468,7 @@ Kirigami.Dialog {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 12
-                Controls.Label {
-                    text: i18n("Controllers")
-                    font.pixelSize: 15
-                    font.weight: Font.Bold
-                    Layout.fillWidth: true
-                }
+                spacing: 16
                 ListView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -1546,13 +1507,7 @@ Kirigami.Dialog {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 12
-                Controls.Label {
-                    text: i18n("Serial & Console")
-                    font.pixelSize: 15
-                    font.weight: Font.Bold
-                    Layout.fillWidth: true
-                }
+                spacing: 16
                 ListView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -1618,20 +1573,20 @@ Kirigami.Dialog {
                     visible: watchdogCheck.checked
                     columns: 2
                     columnSpacing: 16
-                    rowSpacing: 8
+                    rowSpacing: 16
                     Layout.fillWidth: true
-                    Layout.leftMargin: 28
+                    Layout.leftMargin: 24
                     Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogModelCombo
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 260
                         model: ["i6300esb", "ib700"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
                     Controls.Label { text: i18n("Action"); Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogActionCombo
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 260
                         model: ["reset", "poweroff", "shutdown", "pause", "none"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
@@ -1648,13 +1603,13 @@ Kirigami.Dialog {
                     visible: rngCheck.checked
                     columns: 2
                     columnSpacing: 16
-                    rowSpacing: 8
+                    rowSpacing: 16
                     Layout.fillWidth: true
-                    Layout.leftMargin: 28
+                    Layout.leftMargin: 24
                     Controls.Label { text: i18n("Backend"); Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: rngBackendCombo
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 260
                         model: ["random", "egd"]
                         onCurrentIndexChanged: root.applyOptionalSettings("rng", root.rngXml())
                     }
@@ -1671,13 +1626,13 @@ Kirigami.Dialog {
                     visible: panicCheck.checked
                     columns: 2
                     columnSpacing: 16
-                    rowSpacing: 8
+                    rowSpacing: 16
                     Layout.fillWidth: true
-                    Layout.leftMargin: 28
+                    Layout.leftMargin: 24
                     Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: panicModelCombo
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 260
                         model: ["isa", "pvpanic"]
                         onCurrentIndexChanged: root.applyOptionalSettings("panic", root.panicXml())
                     }
@@ -1689,6 +1644,91 @@ Kirigami.Dialog {
                     text: i18n("VirtIO VSOCK")
                     Layout.fillWidth: true
                     onToggled: root.updateOptionalDevice("vsock", checked, "<vsock model='virtio'><cid auto='yes'/></vsock>")
+                }
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
+
+                Controls.CheckBox {
+                    id: shmemCheck
+                    text: i18n("Shared memory (IVSHMEM)")
+                    Layout.fillWidth: true
+                    onToggled: root.updateOptionalDevice("shmem", checked, root.shmemXml())
+                }
+                GridLayout {
+                    visible: shmemCheck.checked
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 16
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24
+                    Controls.Label { text: i18n("Name"); Layout.fillWidth: true }
+                    Controls.TextField {
+                        id: shmemNameField
+                        Layout.preferredWidth: 260
+                        text: "karton"
+                        onEditingFinished: root.applyOptionalSettings("shmem", root.shmemXml())
+                    }
+                    Controls.Label { text: i18n("Size (MiB)"); Layout.fillWidth: true }
+                    Controls.SpinBox {
+                        id: shmemSizeSpin
+                        from: 1
+                        to: 4096
+                        value: 64
+                        Layout.preferredWidth: 260
+                        onValueChanged: root.applyOptionalSettings("shmem", root.shmemXml())
+                    }
+                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
+                    Controls.ComboBox {
+                        id: shmemModelCombo
+                        Layout.preferredWidth: 260
+                        model: ["ivshmem-plain", "ivshmem-doorbell"]
+                        onCurrentIndexChanged: root.applyOptionalSettings("shmem", root.shmemXml())
+                    }
+                }
+
+                Kirigami.Separator { Layout.fillWidth: true; opacity: 0.35 }
+
+                Controls.CheckBox {
+                    id: filesystemCheck
+                    text: i18n("Filesystem share")
+                    Layout.fillWidth: true
+                    enabled: filesystemSourceField.text.trim().length > 0 || checked
+                    onToggled: root.updateOptionalDevice("filesystem", checked, root.filesystemXml())
+                }
+                GridLayout {
+                    visible: filesystemCheck.checked || filesystemSourceField.text.length > 0
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 16
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24
+                    Controls.Label { text: i18n("Source directory"); Layout.fillWidth: true }
+                    Controls.TextField {
+                        id: filesystemSourceField
+                        Layout.preferredWidth: 260
+                        placeholderText: "/home/user/Shared"
+                        onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                    }
+                    Controls.Label { text: i18n("Mount tag"); Layout.fillWidth: true }
+                    Controls.TextField {
+                        id: filesystemTargetField
+                        Layout.preferredWidth: 260
+                        text: "share"
+                        onEditingFinished: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                    }
+                    Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
+                    Controls.ComboBox {
+                        id: filesystemAccessCombo
+                        Layout.preferredWidth: 260
+                        model: ["passthrough", "mapped", "squash"]
+                        onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                    }
+                    Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
+                    Controls.ComboBox {
+                        id: filesystemDriverCombo
+                        Layout.preferredWidth: 260
+                        model: ["9p", "virtiofs"]
+                        onCurrentIndexChanged: root.applyOptionalSettings("filesystem", root.filesystemXml())
+                    }
                 }
 
                 Controls.Label {
@@ -1715,7 +1755,7 @@ Kirigami.Dialog {
                     Layout.fillHeight: true
                     clip: true
                     model: root.xmlDevices.filter(function(device) {
-                        return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console", "emulator", "graphics", "audio", "watchdog", "rng", "panic", "vsock"].indexOf(device.tag) === -1;
+                        return ["disk", "interface", "input", "video", "sound", "hostdev", "tpm", "controller", "serial", "channel", "console", "emulator", "graphics", "audio", "watchdog", "rng", "panic", "vsock", "shmem", "filesystem"].indexOf(device.tag) === -1;
                     })
                     delegate: Controls.ItemDelegate {
                         width: ListView.view.width

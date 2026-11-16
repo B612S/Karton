@@ -155,6 +155,26 @@ rm -f ~/.local/share/libvirt/images/agent-test.qcow2
 When testing destructive operations, prefer domains whose names start with
 `agent-` and never operate on the user's real VMs.
 
+## Settings layout conventions
+
+Every settings page must look and behave the same:
+
+- The page title is rendered once by `SettingsDialog.qml` from the category
+  list. Do not repeat it as a content heading.
+- Content is wrapped in `ScrollableSettingsView`; do not use a bare
+  `ColumnLayout` for a settings page.
+- Page spacing is 16 px. Sub-sections use a 15 px bold label, followed by a
+  `Kirigami.Separator` or a 1 px rule.
+- Controls use two-column `GridLayout` rows: label on the left with
+  `Layout.fillWidth`, control on the right with `Layout.preferredWidth: 260`.
+- Checkboxes belonging to a setting stay on the right of their label row.
+- Device lists fill the available width; avoid tiny fixed heights. Give them a
+  sensible minimum and let them grow with their content.
+- Optional/singleton devices are toggles in Settings, not Add Hardware
+  actions. Only multi-instance devices belong in `AddHardwareDialog.qml`.
+- New pages must be added to `ecm_target_qml_sources()` and must pass
+  `tst_qml_startup`; run `ctest` after every QML change.
+
 ## Code conventions
 
 - C++23, Qt 6 / KF6 APIs. Prefer Qt/KF6 classes and `QStringLiteral` over
