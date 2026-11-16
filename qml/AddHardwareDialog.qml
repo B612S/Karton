@@ -82,6 +82,16 @@ Kirigami.Dialog {
         return decodeURIComponent(path);
     }
 
+    Connections {
+        target: Karton
+        function onErrorOccurred(errorMessage) {
+            root.message = errorMessage;
+            if (applicationWindow()) {
+                applicationWindow().showPassiveNotification(errorMessage, "long");
+            }
+        }
+    }
+
     contentItem: Item {
         implicitWidth: root.width
         implicitHeight: root.height
