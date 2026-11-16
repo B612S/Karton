@@ -29,6 +29,7 @@ class Karton : public QObject
     QML_SINGLETON
     Q_PROPERTY(bool connected READ connected CONSTANT)
     Q_PROPERTY(QString connectionUri READ connectionUri CONSTANT)
+    Q_PROPERTY(int viewerCount READ viewerCount NOTIFY viewerCountChanged)
 
 public:
     // Deliberately not default-constructible: Qt then uses create() for the
@@ -44,6 +45,10 @@ public:
         return m_conn != nullptr;
     }
     [[nodiscard]] QString connectionUri() const;
+    [[nodiscard]] int viewerCount() const
+    {
+        return m_viewerCount;
+    }
 
     QVector<Domain *> domains();
     void refreshDomain(const virDomainPtr domainPtr);
@@ -61,6 +66,7 @@ Q_SIGNALS:
     void domainCreated(bool success, const QString &name);
     void domainEdited(bool success, const QString &name);
     void domainCloned(bool success, const QString &sourceName, const QString &newName);
+    void viewerCountChanged();
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
@@ -73,6 +79,8 @@ public Q_SLOTS:
     Q_INVOKABLE bool deleteSavedState(const Domain *domain);
     Q_INVOKABLE QVariantMap domainStats(const Domain *domain);
     Q_INVOKABLE bool refreshDomainPreview(const Domain *domain);
+    Q_INVOKABLE void viewerOpened();
+    Q_INVOKABLE void viewerClosed();
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
@@ -125,6 +133,7 @@ private:
         qint64 timestamp = 0;
     };
     QHash<QString, CpuSample> m_cpuSamples;
+    int m_viewerCount = 0;
 
     bool init();
 };

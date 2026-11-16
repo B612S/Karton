@@ -275,10 +275,13 @@ When testing destructive operations, prefer domains whose names start with
   `DomainConfig::networkModel` and read back from the domain XML.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
-  `VMPage.qml` polls `Karton::refreshDomainPreview()` every 3 seconds while the
-  VM is running and visible; it captures the live framebuffer through
-  `virDomainScreenshot()` and writes it to that path, so the preview shows the
-  current guest display instead of the frame saved when the viewer last closed.
+  `VMPage.qml` polls `Karton::refreshDomainPreview()` every 5 seconds while the
+  VM is running, the page is visible **and the main window is active**. The
+  capture uses the synchronous `virDomainScreenshot()`, which briefly pauses
+  the guest; polling it while the viewer is active made mouse input stall for
+  about a second every few seconds. The preview therefore shows the current
+  guest display only while no viewer is in front, instead of the frame saved
+  when the viewer last closed.
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
   overlay, above the display node; the local cursor is hidden while the remote
   cursor is visible. There is one display node per renderer and one root node
@@ -291,18 +294,26 @@ When testing destructive operations, prefer domains whose names start with
   `xcb` and `wayland`; subtracting it only on Wayland made keys map to unrelated
   PC XT scancodes under XWayland.
 - `DomainViewer::updateDisplayResolution()` calls
-  `spice_main_channel_update_display()` with the current item size in device
-  pixels on window resize and when the SPICE agent connects; it enables display
-  0 and sends the monitor configuration immediately when the agent is present.
-  The guest adapts its resolution through the agent (spice-vdagent / Windows
-  guest tools); without an agent the request is a no-op. The menu action
-  `fitGuestToWindow()` forces a fresh request even if the target size did not
-  change.
+  `spice_main_channel_update_display()` with the **page/content size** in device
+  pixels on page resize and when the SPICE agent connects; it enables display 0
+  and sends the monitor configuration immediately when the agent is present.
+  It deliberately does not use the aspect-fitted `DomainViewer` item size: the
+  item changes size when the guest resolution changes, which caused a resize
+  feedback loop while Windows was booting. The guest adapts its resolution
+  through the agent (spice-vdagent / Windows guest tools); without an agent the
+  request is a no-op. `fitGuestToWindow()` forces a fresh request even if the
+  target size did not change.
 - Pointer motion calls `QQuickItem::update()` so the local SPICE cursor overlay
   is repainted on every motion event; without it the cursor looked laggy even
   though input was sent at full rate. While the pointer is inside the display,
   a guest `cursor-hide` keeps the last guest cursor and leaves the host cursor
   blank, so dragging a guest window does not flash the host arrow.
+- `PrimarySurfaceRenderer` copies SPICE's primary framebuffer into an owned
+  `QImage`. The original buffer is unmapped by spice-gtk when the guest changes
+  resolution (notably while Windows boots); creating/using a texture from that
+  pointer on the render thread used to crash `QSGBatchRenderer::prepareRenderPass`.
+  `updatePaintNode()` must also clear its cached `m_displayNode`/`m_cursorNode`
+  pointers when Qt passes a null root after deleting the scene graph.
 - `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar only keeps the
   fullscreen button and a three-dot menu on the right. The menu is a
   `Controls.Menu` with Display/Devices/Machine sections: Actual Size, Fit to

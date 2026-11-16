@@ -30,14 +30,17 @@ private:
     static void
     display_primary_create_callback(SpiceChannel *channel, gint format, gint width, gint height, gint stride, gint shmid, gpointer imgdata, gpointer user_data);
     static void display_invalidate_callback(SpiceDisplayChannel *channel, gint x, gint y, gint width, gint height, gpointer user_data);
+    static void display_primary_destroy_callback(SpiceDisplayChannel *channel, gpointer user_data);
 
     SpiceDisplayChannel *m_channel = nullptr;
     gulong m_primaryCreateHandlerId = 0;
     gulong m_invalidateHandlerId = 0;
+    gulong m_primaryDestroyHandlerId = 0;
 
     int m_imageWidth = 0;
     int m_imageHeight = 0;
-    uchar *m_frameBuffer = nullptr;
+    const uchar *m_frameSource = nullptr;
+    int m_frameStride = 0;
     QImage m_frame;
     QMutex m_frameLock;
     bool m_frameUpdated = false;

@@ -577,6 +577,20 @@ bool Karton::deleteSavedState(const Domain *domain)
     return true;
 }
 
+void Karton::viewerOpened()
+{
+    ++m_viewerCount;
+    Q_EMIT viewerCountChanged();
+}
+
+void Karton::viewerClosed()
+{
+    if (m_viewerCount > 0) {
+        --m_viewerCount;
+    }
+    Q_EMIT viewerCountChanged();
+}
+
 bool Karton::refreshDomainPreview(const Domain *domain)
 {
     if (!domain || !domain->domainPtr() || !m_conn) {

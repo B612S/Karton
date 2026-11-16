@@ -47,9 +47,6 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     setAcceptedMouseButtons(Qt::AllButtons);
     setAcceptHoverEvents(true);
     setFlag(ItemIsFocusScope, true);
-
-    connect(this, &QQuickItem::widthChanged, this, &DomainViewer::updateDisplayResolution);
-    connect(this, &QQuickItem::heightChanged, this, &DomainViewer::updateDisplayResolution);
 }
 
 DomainViewer::~DomainViewer()
@@ -445,9 +442,16 @@ void DomainViewer::updateDisplayResolution()
     // The SPICE agent resizes the guest desktop to the monitor configuration.
     // update=TRUE lets spice-gtk debounce resize storms while the user drags
     // the window, and send the final configuration to the agent.
+    // Use the parent page size, not the aspect-fitted display item: the item
+    // shrinks/grows when the guest resolution changes, and using it here made
+    // the auto-fit request oscillate between two resolutions while Windows
+    // was booting.
+    QQuickItem *container = parentItem();
+    const qreal logicalWidth = container ? container->width() : width();
+    const qreal logicalHeight = container ? container->height() : height();
     const qreal dpr = window() ? window()->devicePixelRatio() : 1.0;
-    int targetWidth = qMax(640, qRound(width() * dpr));
-    int targetHeight = qMax(480, qRound(height() * dpr));
+    int targetWidth = qMax(640, qRound(logicalWidth * dpr));
+    int targetHeight = qMax(480, qRound(logicalHeight * dpr));
     targetWidth &= ~1;
     targetHeight &= ~1;
 
@@ -480,6 +484,12 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     QSGNode *root = oldNode;
     if (!root) {
+        // The scene graph owns the old node tree and may delete it when the
+        // window is hidden, resized or the graphics context is reset. The
+        // member pointers must not be reused after that, otherwise the next
+        // update appends a dangling node and crashes in QSGBatchRenderer.
+        m_displayNode = nullptr;
+        m_cursorNode = nullptr;
         root = new QSGNode;
     }
 

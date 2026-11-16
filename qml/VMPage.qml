@@ -56,9 +56,13 @@ Kirigami.ScrollablePage {
 
     Timer {
         id: previewTimer
-        interval: 3000
+        interval: 5000
         repeat: true
-        running: root.isRunning && root.visible
+        // virDomainScreenshot() is synchronous and briefly pauses the guest.
+        // Do not poll it while the viewer window is active (or any other
+        // window has focus), otherwise mouse input visibly stalls every few
+        // seconds during a live session.
+        running: root.isRunning && root.visible && applicationWindow().active && Karton.viewerCount === 0
         triggeredOnStart: true
         onTriggered: {
             if (root.domain) {

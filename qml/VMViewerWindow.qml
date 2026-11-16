@@ -19,10 +19,27 @@ Kirigami.ApplicationWindow {
     width: screenInfo ? Math.min(screenInfo.width, Math.max(Kirigami.Units.gridUnit * 60, Math.min(screenInfo.width * 0.85, Kirigami.Units.gridUnit * 120))) : Kirigami.Units.gridUnit * 70
     height: screenInfo ? Math.min(screenInfo.height, Math.max(Kirigami.Units.gridUnit * 40, Math.min(screenInfo.height * 0.85, Kirigami.Units.gridUnit * 72))) : Kirigami.Units.gridUnit * 45
 
+    property bool viewerRegistered: false
+
+    function registerViewer() {
+        if (!viewerRegistered) {
+            viewerRegistered = true;
+            Karton.viewerOpened();
+        }
+    }
+
     Component.onCompleted: {
+        registerViewer();
         Qt.callLater(function() {
             domainViewer.forceActiveFocus();
         });
+    }
+
+    Component.onDestruction: {
+        if (viewerRegistered) {
+            viewerRegistered = false;
+            Karton.viewerClosed();
+        }
     }
 
     onActiveChanged: {
@@ -34,6 +51,10 @@ Kirigami.ApplicationWindow {
     }
 
     onClosing: (close) => {
+        if (viewerRegistered) {
+            viewerRegistered = false;
+            Karton.viewerClosed();
+        }
         domainViewer.saveFrameToDomain();
         domainViewer.disconnectFromSpice();
         close.accepted = true;
@@ -56,6 +77,9 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: Kirigami.Page {
         title: viewerWindow.title
         padding: 0
+
+        onWidthChanged: if (domainViewer) domainViewer.updateDisplayResolution()
+        onHeightChanged: if (domainViewer) domainViewer.updateDisplayResolution()
 
         actions: [
             Kirigami.Action {
@@ -133,7 +157,7 @@ Kirigami.ApplicationWindow {
                 font.bold: true
             }
             Controls.MenuItem {
-                text: i18n("VM Settings")
+                text: i18n("Settings")
                 icon.name: "settings-configure-symbolic"
                 onTriggered: configurationDialog.open()
             }
