@@ -9,7 +9,6 @@
 #include <QAudioFormat>
 #include <QAudioSink>
 #include <QAudioSource>
-#include <QElapsedTimer>
 #include <QIODevice>
 #include <QImage>
 #include <QMutex>
@@ -98,7 +97,6 @@ public:
     void setClipboardFilesMode(int mode);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
-    Q_INVOKABLE void syncHostClipboard();
 
     void componentComplete() override;
 
@@ -120,7 +118,6 @@ public:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
-    void focusInEvent(QFocusEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
 
     Q_INVOKABLE void saveFrameToDomain();
@@ -220,7 +217,6 @@ private:
     int m_clipboardTextMode = 3;
     int m_clipboardFilesMode = 0;
     QString m_lastGuestClipboardText;
-    QElapsedTimer m_hostClipboardAge;
     int m_spiceTlsPort = 0;
     QString m_spicePassword;
 

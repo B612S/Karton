@@ -298,13 +298,10 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         g_signal_connect(channel, "main-clipboard-selection", G_CALLBACK(clipboardSelectionCallback), item);
         if (!item->m_clipboardConnection) {
             item->m_clipboardConnection = QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, item, [item]() {
-                item->syncHostClipboard();
+                item->hostClipboardChanged();
             });
         }
         QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
-        QTimer::singleShot(0, item, [item]() {
-            item->syncHostClipboard();
-        });
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
         spice_channel_connect(channel);
@@ -348,10 +345,6 @@ gboolean DomainViewer::clipboardSelectionGrabCallback(SpiceMainChannel *channel,
     Q_UNUSED(ntypes);
     auto *item = static_cast<DomainViewer *>(userData);
     if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
-        return TRUE;
-    }
-    if (item->m_hostClipboardAge.isValid() && item->m_hostClipboardAge.elapsed() < 750) {
-        qCInfo(KARTON_DEBUG) << "clipboard: ignoring stale guest grab after host copy";
         return TRUE;
     }
     qCInfo(KARTON_DEBUG) << "clipboard: guest has data, requesting text";
@@ -408,13 +401,6 @@ void DomainViewer::clipboardSelectionCallback(SpiceMainChannel *channel, guint s
     item->m_settingClipboard = false;
 }
 
-void DomainViewer::syncHostClipboard()
-{
-    // Coalesce clipboard and focus events into one read on the next event-loop
-    // turn, giving the Wayland clipboard offer time to become available.
-    QTimer::singleShot(0, this, &DomainViewer::hostClipboardChanged);
-}
-
 void DomainViewer::hostClipboardChanged()
 {
     if (!m_main_channel || m_settingClipboard) {
@@ -428,7 +414,6 @@ void DomainViewer::hostClipboardChanged()
     if (text.isEmpty()) {
         return;
     }
-    m_hostClipboardAge.start();
     if (!m_lastGuestClipboardText.isEmpty() && text == m_lastGuestClipboardText) {
         m_lastGuestClipboardText.clear();
         return;
@@ -1370,15 +1355,6 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
     spice_inputs_channel_button_release(m_inputs_channel, button, m_current_button_mask);
 
     event->accept();
-}
-
-void DomainViewer::focusInEvent(QFocusEvent *event)
-{
-    QQuickItem::focusInEvent(event);
-    // On Wayland the clipboard may only become readable when the viewer gains
-    // focus. Re-send the current host clipboard after returning from another
-    // application.
-    QTimer::singleShot(0, this, &DomainViewer::hostClipboardChanged);
 }
 
 void DomainViewer::focusOutEvent(QFocusEvent *event)
