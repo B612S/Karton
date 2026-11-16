@@ -24,6 +24,7 @@ Domain::Domain(QObject *parent)
     connect(m_config, &DomainConfig::stateChanged, this, &Domain::stateChanged);
     connect(m_config, &DomainConfig::ramUsageChanged, this, &Domain::ramUsageChanged);
     connect(m_config, &DomainConfig::autostartChanged, this, &Domain::autostartChanged);
+    m_previewFrame.load(m_config->screenshotPreviewPath());
 }
 
 Domain::Domain(const virDomainPtr domainPtr, DomainConfig *config, QObject *parent)
@@ -40,6 +41,7 @@ Domain::Domain(const virDomainPtr domainPtr, DomainConfig *config, QObject *pare
     connect(m_config, &DomainConfig::stateChanged, this, &Domain::stateChanged);
     connect(m_config, &DomainConfig::ramUsageChanged, this, &Domain::ramUsageChanged);
     connect(m_config, &DomainConfig::autostartChanged, this, &Domain::autostartChanged);
+    m_previewFrame.load(m_config->screenshotPreviewPath());
 }
 
 Domain::~Domain()
@@ -130,5 +132,7 @@ void Domain::savePreviewFrame(QImage frame)
         return;
     }
 
+    m_previewFrame = frame;
+    Q_EMIT previewFrameChanged();
     Q_EMIT previewChanged();
 }

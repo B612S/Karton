@@ -38,6 +38,7 @@ development or testing must pass `-c <same URI>` (usually
 | `core/domain/domainxmlreader.{h,cpp}` | Parses libvirt's domain XML for Karton metadata and disk paths. |
 | `core/os/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
 | `core/viewer/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
+| `core/viewer/previewitem.{h,cpp}` | Painted item that displays the latest in-memory preview frame. |
 | `core/viewer/glscanoutrenderer.*`, `core/viewer/primarysurfacerenderer.*`, `core/viewer/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
 | `core/libvirt/libvirtmonitor.*`, `core/libvirt/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `core/util/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
@@ -304,9 +305,10 @@ When testing destructive operations, prefer domains whose names start with
   QEMU screenshots pause the guest during interaction). The capture is an
   asynchronous `virsh screenshot` process through `CommandRunner`, so the GUI
   is never blocked by libvirt's synchronous screenshot path. Preview images are
-  scaled to 640 px and written atomically through `QSaveFile`; the QML uses two
-  stacked images and swaps the visible one only after the next frame is ready,
-  so updates do not blink.
+  scaled to 640 px and written atomically through `QSaveFile` for persistence;
+  `Domain::savePreviewFrame()` also keeps the new frame in memory and emits
+  `previewFrameChanged()`. `PreviewItem` paints that `QImage` directly, so the
+  QML never reloads a PNG while updating and the preview does not blink.
 - SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
   overlay, above the display node; the local cursor is hidden while the remote
   cursor is visible. There is one display node per renderer and one root node

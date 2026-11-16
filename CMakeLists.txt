@@ -109,6 +109,8 @@ target_sources(karton
     core/viewer/primarysurfacerenderer.cpp
     core/viewer/vulkanscanoutrenderer.cpp
     core/viewer/vulkanscanoutrenderer.h
+    core/viewer/previewitem.cpp
+    core/viewer/previewitem.h
     core/domain/domainxmlbuilder.cpp
     core/os/osinfoconfig.cpp
     core/domain/domainxmlreader.cpp

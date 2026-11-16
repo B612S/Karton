@@ -23,6 +23,7 @@ class Domain : public QObject
     Q_PROPERTY(int ramUsage READ ramUsage NOTIFY ramUsageChanged)
     Q_PROPERTY(bool autostart READ autostart NOTIFY autostartChanged)
     Q_PROPERTY(DomainConfig *config READ config CONSTANT)
+    Q_PROPERTY(QImage previewFrame READ previewFrame NOTIFY previewFrameChanged)
 
 Q_SIGNALS:
     void isActiveChanged(const bool active);
@@ -32,6 +33,7 @@ Q_SIGNALS:
     void ramUsageChanged(const int usage);
     void autostartChanged(const bool autostart);
     void previewChanged();
+    void previewFrameChanged();
 
 public:
     Domain(QObject *parent = nullptr);
@@ -48,6 +50,11 @@ public:
     [[nodiscard]] DomainConfig *config() const
     {
         return m_config;
+    }
+
+    [[nodiscard]] QImage previewFrame() const
+    {
+        return m_previewFrame;
     }
 
     [[nodiscard]] bool isActive() const
@@ -91,4 +98,5 @@ public:
 private:
     virDomainPtr m_domainPtr;
     DomainConfig *m_config;
+    QImage m_previewFrame;
 };

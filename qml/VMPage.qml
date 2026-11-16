@@ -229,61 +229,9 @@ Kirigami.ScrollablePage {
             color: "black"
             Layout.preferredHeight: Kirigami.Units.gridUnit * 16
 
-            // Two stacked images: the next frame is decoded while the old one
-            // is still visible, then they are swapped. Reloading a single Image
-            // source directly made the preview blink once per screenshot.
-            property bool frontVisible: true
-            property bool bothVisible: false
-
-            Timer {
-                id: previewFadeTimer
-                interval: 120
-                onTriggered: parent.bothVisible = false
-            }
-
-            Image {
-                id: previewFront
+            PreviewItem {
                 anchors.fill: parent
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-                cache: false
-                smooth: true
-                opacity: parent.frontVisible || parent.bothVisible ? 1 : 0
-                source: domain ? "file://" + domain.config.screenshotPreviewPath : ""
-
-                onStatusChanged: {
-                    if (status === Image.Ready && parent.frontVisible === false) {
-                        parent.bothVisible = true;
-                        parent.frontVisible = true;
-                        previewFadeTimer.restart();
-                    }
-                }
-            }
-
-            Image {
-                id: previewBack
-                anchors.fill: parent
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-                cache: false
-                smooth: true
-                opacity: !parent.frontVisible || parent.bothVisible ? 1 : 0
-
-                onStatusChanged: {
-                    if (status === Image.Ready && parent.frontVisible === true) {
-                        parent.bothVisible = true;
-                        parent.frontVisible = false;
-                        previewFadeTimer.restart();
-                    }
-                }
-            }
-
-            Connections {
-                target: domain
-                function onPreviewChanged() {
-                    const next = parent.frontVisible ? previewBack : previewFront;
-                    next.source = "file://" + domain.config.screenshotPreviewPath + "?" + Date.now();
-                }
+                image: domain ? domain.previewFrame : null
             }
 
             Rectangle {
