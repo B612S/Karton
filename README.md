@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 SPDX-FileCopyrightText: 2026 Karton contributors
 -->
 
-# Karton <img src="img/karton_logo.svg" alt="Karton">
+<h1><img src="img/karton_logo.svg" height="40" align="middle" alt="Karton"> Karton</h1>
 
 A libvirt-based virtual machine manager for KDE.
 
