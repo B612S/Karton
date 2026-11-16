@@ -677,6 +677,13 @@ void Karton::closeAllViewers()
     }
 }
 
+void Karton::destroyViewer(QObject *window)
+{
+    if (window) {
+        window->deleteLater();
+    }
+}
+
 void Karton::unregisterViewer(QObject *window)
 {
     for (auto it = m_viewers.begin(); it != m_viewers.end();) {

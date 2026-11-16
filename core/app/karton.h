@@ -140,6 +140,7 @@ public Q_SLOTS:
     Q_INVOKABLE void registerViewer(Domain *domain, QObject *window);
     Q_INVOKABLE void unregisterViewer(QObject *window);
     Q_INVOKABLE void closeAllViewers();
+    Q_INVOKABLE void destroyViewer(QObject *window);
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);

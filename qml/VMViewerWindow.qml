@@ -169,10 +169,11 @@ Kirigami.ApplicationWindow {
         }
         domainViewer.disconnectFromSpice();
         close.accepted = true;
-        // The window is created dynamically from VMPage and has no parent, so
-        // it has to be destroyed explicitly.
+        // The window is created dynamically from VMPage and has no parent.
+        // deleteLater() keeps the QWindow alive until the close event has
+        // fully unwound; destroying it directly aborts in QWaylandWindow.
         Qt.callLater(function() {
-            viewerWindow.destroy();
+            Karton.destroyViewer(viewerWindow);
         });
     }
 
