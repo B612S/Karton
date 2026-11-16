@@ -616,7 +616,7 @@ Kirigami.Dialog {
                                     Controls.TextField {
                                         id: fsTargetField
                                         Layout.preferredWidth: 220
-                                        placeholderText: "share"
+                                        text: "share"
                                     }
                                     Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
                                     Controls.ComboBox {

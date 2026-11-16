@@ -1892,12 +1892,6 @@ Kirigami.Dialog {
                         opacity: 0.65
                         font.pixelSize: 12
                     }
-                    Controls.Button {
-                        text: i18n("Add filesystem…")
-                        icon.name: "list-add-symbolic"
-                        Layout.alignment: Qt.AlignLeft
-                        onClicked: addHardwareDialog.openAt(10)
-                    }
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
