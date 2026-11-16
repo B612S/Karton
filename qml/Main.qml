@@ -36,8 +36,11 @@ Kirigami.ApplicationWindow {
     onHeightChanged: if (sizeRestored) mainSizeTimer.restart()
     onClosing: {
         Karton.saveMainWindowSize(width, height);
+        // Close the viewer windows and let Qt quit when the last top-level
+        // window is gone. Calling Qt.quit() here tears down the Wayland
+        // platform windows while they are still processing their close
+        // events, which aborts inside QWaylandWindow::reset().
         Karton.closeAllViewers();
-        Qt.quit();
     }
 
     Timer {
