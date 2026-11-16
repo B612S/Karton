@@ -19,6 +19,7 @@ class ClipboardManager : public QObject
 public:
     explicit ClipboardManager(QObject *parent = nullptr);
 
+    void prepare(SpiceSession *session);
     void attach(SpiceSession *session, SpiceMainChannel *channel);
     void detach();
 

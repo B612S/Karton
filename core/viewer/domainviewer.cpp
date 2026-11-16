@@ -222,6 +222,9 @@ bool DomainViewer::connectToSpice()
 
     disconnectFromSpice();
     m_session = spice_session_new();
+    if (m_clipboard) {
+        m_clipboard->prepare(m_session);
+    }
 
     qCInfo(KARTON_DEBUG) << "Connecting to URI! -" << m_spiceUri;
     g_object_set(m_session, "uri", m_spiceUri.toUtf8().constData(), NULL);
