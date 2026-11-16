@@ -347,6 +347,11 @@ gboolean DomainViewer::clipboardSelectionGrabCallback(SpiceMainChannel *channel,
     if (item->m_clipboardTextMode != 2 && item->m_clipboardTextMode != 3) {
         return TRUE;
     }
+    if (item->m_pendingHostGrab) {
+        qCInfo(KARTON_DEBUG) << "clipboard: guest grab ignored while host clipboard is pending";
+        item->m_pendingHostGrab = false;
+        return TRUE;
+    }
     qCInfo(KARTON_DEBUG) << "clipboard: guest has data, requesting text";
     // The guest has clipboard data. Ask for UTF-8 text; the reply is handled
     // by clipboardSelectionCallback().
@@ -364,6 +369,7 @@ gboolean DomainViewer::clipboardSelectionRequestCallback(SpiceMainChannel *chann
         return FALSE;
     }
     const QByteArray text = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
+    item->m_pendingHostGrab = false;
     qCInfo(KARTON_DEBUG) << "clipboard: guest requested text, sending" << text.size() << "bytes, selection" << selection << "by-demand"
                          << spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD_BY_DEMAND) << "selection-cap"
                          << spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD_SELECTION);
@@ -401,6 +407,13 @@ void DomainViewer::clipboardSelectionCallback(SpiceMainChannel *channel, guint s
     item->m_settingClipboard = false;
 }
 
+void DomainViewer::syncHostClipboard()
+{
+    if (m_main_channel) {
+        hostClipboardChanged();
+    }
+}
+
 void DomainViewer::hostClipboardChanged()
 {
     if (!m_main_channel || m_settingClipboard) {
@@ -419,6 +432,7 @@ void DomainViewer::hostClipboardChanged()
         return;
     }
     guint32 types[] = {VD_AGENT_CLIPBOARD_UTF8_TEXT};
+    m_pendingHostGrab = true;
     spice_main_channel_clipboard_selection_grab(m_main_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD, types, 1);
 }
 

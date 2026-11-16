@@ -110,6 +110,7 @@ Kirigami.ApplicationWindow {
         if (active) {
             Qt.callLater(function() {
                 domainViewer.forceActiveFocus();
+                domainViewer.syncHostClipboard();
             });
         }
     }

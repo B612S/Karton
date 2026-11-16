@@ -97,6 +97,7 @@ public:
     void setClipboardFilesMode(int mode);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
+    Q_INVOKABLE void syncHostClipboard();
 
     void componentComplete() override;
 
@@ -191,6 +192,7 @@ private:
     SpiceInputsChannel *m_inputs_channel = nullptr;
     QMetaObject::Connection m_clipboardConnection;
     bool m_settingClipboard = false;
+    bool m_pendingHostGrab = false;
 
     int m_current_button_mask = 0;
     bool m_pointerGrabbed = false;
