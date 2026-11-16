@@ -14,6 +14,10 @@ private Q_SLOTS:
     void asyncFailure();
     void asyncStartFailure();
     void blockingSuccessAndFailure();
+    void asyncDoesNotInterpretArgumentsAsShell();
+    void asyncReportsStderrOnFailure();
+    void blockingDoesNotReturnStdoutOnFailure();
+    void asyncEmptyOutput();
 };
 
 void CommandRunnerTest::asyncSuccess()
@@ -79,6 +83,70 @@ void CommandRunnerTest::blockingSuccessAndFailure()
     QVERIFY(!runner.runCommandAndWait(QStringLiteral("/definitely/not/a/real/program"), {}));
 }
 
+void CommandRunnerTest::asyncDoesNotInterpretArgumentsAsShell()
+{
+    CommandRunner runner;
+    bool called = false;
+    bool success = false;
+    QString output;
+
+    runner.runCommand(QStringLiteral("/bin/echo"), {QStringLiteral("a b"), QStringLiteral("*")}, [&](bool ok, const QString &text) {
+        called = true;
+        success = ok;
+        output = text;
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(called, 5000);
+    QVERIFY(success);
+    QCOMPARE(output.trimmed(), QStringLiteral("a b *"));
+}
+
+void CommandRunnerTest::asyncReportsStderrOnFailure()
+{
+    CommandRunner runner;
+    bool called = false;
+    bool success = true;
+    QString output;
+
+    runner.runCommand(QStringLiteral("/bin/sh"),
+                      {QStringLiteral("-c"), QStringLiteral("printf 'stdout'; printf 'stderr' >&2; exit 7")},
+                      [&](bool ok, const QString &text) {
+                          called = true;
+                          success = ok;
+                          output = text;
+                      });
+
+    QTRY_VERIFY_WITH_TIMEOUT(called, 5000);
+    QVERIFY(!success);
+    QCOMPARE(output, QStringLiteral("stderr"));
+}
+
+void CommandRunnerTest::blockingDoesNotReturnStdoutOnFailure()
+{
+    CommandRunner runner;
+    QString output;
+    QVERIFY(!runner.runCommandAndWait(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), QStringLiteral("printf 'stdout'; exit 9")}, &output));
+    QCOMPARE(output, QStringLiteral("stdout"));
+}
+
+void CommandRunnerTest::asyncEmptyOutput()
+{
+    CommandRunner runner;
+    bool called = false;
+    bool success = false;
+    QString output = QStringLiteral("not-empty");
+
+    runner.runCommand(QStringLiteral("/bin/true"), {}, [&](bool ok, const QString &text) {
+        called = true;
+        success = ok;
+        output = text;
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(called, 5000);
+    QVERIFY(success);
+    QVERIFY(output.isEmpty());
+}
+
 QTEST_GUILESS_MAIN(CommandRunnerTest)
 
-#include "commandrunner_test.moc"
+#include "tst_commandrunner.moc"

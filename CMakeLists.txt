@@ -29,8 +29,6 @@ include(KDEClangFormat)
 include(KDEGitCommitHooks)
 include(ECMSetupVersion)
 
-include(CTest)
-
 find_package(Qt6 REQUIRED COMPONENTS
     Core
     Quick
@@ -176,7 +174,10 @@ target_link_libraries(karton
 install(TARGETS karton ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
 
 
-if (BUILD_TESTING)
+# Tests are opt-in and are never part of the application target or package.
+option(KARTON_BUILD_TESTS "Build Karton autotests (Qt Test)" OFF)
+if (KARTON_BUILD_TESTS)
+    enable_testing()
     add_subdirectory(tests)
 endif()
 

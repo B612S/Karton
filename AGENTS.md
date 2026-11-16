@@ -42,7 +42,7 @@ development or testing must pass `-c <same URI>` (usually
 | `core/libvirt/libvirtmonitor.*`, `core/libvirt/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `core/util/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `qml/` | Kirigami QML pages and dialogs. |
-| `tests/` | QtTest-based unit tests for the XML parser/builder and command runner. |
+| `tests/` | Opt-in QtTest unit tests; never linked into the application. |
 | `src/` | Reserved for makepkg's `$srcdir`; it is not used for source files. |
 
 C++ sources are grouped by responsibility under `core/`:
@@ -108,15 +108,24 @@ Screenshots can be taken with `spectacle -b -n -f -o /tmp/karton.png`.
 
 ## Tests and manual smoke test
 
-Run the automated tests with:
+Autotests are opt-in, like Luma: they are separate executables built from a
+private `karton_testcore` archive, are never linked into `karton`, and are
+never installed with the package.
 
 ```sh
+cmake -S . -B build -G Ninja -DKARTON_BUILD_TESTS=ON
+cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 ```
 
-They currently cover the domain XML parser/builder and the asynchronous command
-runner. A build plus a manual smoke test is still the baseline for UI changes.
-Use a throwaway domain so nothing important is touched:
+Without `-DKARTON_BUILD_TESTS=ON` no test target is created. The unit tests run
+without a display or libvirt connection, use `QT_QPA_PLATFORM=offscreen`, and
+redirect `XDG_CONFIG_HOME`/`XDG_CACHE_HOME`/`XDG_STATE_HOME` into the build
+tree. They cover the domain XML reader/builder (including malformed XML,
+metadata preservation and disk escaping), `DomainConfig` state/signals and the
+asynchronous/blocking `CommandRunner`. A build plus a manual smoke test is
+still the baseline for UI changes. Use a throwaway domain so nothing important
+is touched:
 
 ```sh
 qemu-img create -f qcow2 ~/.local/share/libvirt/images/agent-test.qcow2 2G

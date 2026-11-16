@@ -77,9 +77,16 @@ install it with `makepkg -si`.
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j"$(nproc)"
-ctest --test-dir build --output-on-failure
 ```
 Use `-DKARTON_SANITIZE=ON` for an ASAN/UBSAN build.
+
+Autotests are opt-in and are never part of the application or package:
+
+```sh
+cmake -S . -B build -DKARTON_BUILD_TESTS=ON
+cmake --build build -j"$(nproc)"
+ctest --test-dir build --output-on-failure
+```
 
 ## We hope you find Karton useful!
 

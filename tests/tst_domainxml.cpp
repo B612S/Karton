@@ -17,6 +17,10 @@ private Q_SLOTS:
     void readerParsesMetadataAndDisks();
     void readerStopsAtDiskBoundary();
     void readerParsesRawDiskFormat();
+    void readerParsesIsoAndNetwork();
+    void readerDefaultsForMinimalXml();
+    void readerHandlesMalformedXml();
+    void readerUsesQcow2WhenDriverIsMissing();
     void readerParsesFirmware();
     void readerParsesSecureBoot();
     void builderGeneratesUefiRawDomain();
@@ -25,6 +29,12 @@ private Q_SLOTS:
     void builderLeavesUnknownStorageUntouched();
     void builderAddsMetadataWhenMissing();
     void builderGeneratesEjectDisk();
+    void builderGeneratesDiskWithoutReadonly();
+    void builderGeneratesDiskWithSource();
+    void builderRejectsMalformedXml();
+    void builderUpdateZeroStorageKeepsMetadata();
+    void builderPreservesUnknownMetadataAttributes();
+    void builderEscapesDiskSourcePaths();
 };
 
 static const QByteArray sampleDomainXml = R"(<domain type='kvm'>
@@ -87,6 +97,68 @@ void DomainXmlTest::readerStopsAtDiskBoundary()
 
     QVERIFY(info.isoDiskPath.isEmpty());
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.qcow2"));
+}
+
+void DomainXmlTest::readerParsesIsoAndNetwork()
+{
+    const QByteArray xml = R"(<domain type='kvm'>
+  <name>media</name>
+  <devices>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='/tmp/install.iso'/>
+      <target dev='sda' bus='sata'/>
+    </disk>
+    <interface type='network'>
+      <source network='default'/>
+      <model type='virtio'/>
+    </interface>
+  </devices>
+</domain>)";
+
+    const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml(xml);
+    QCOMPARE(info.isoDiskPath, QStringLiteral("/tmp/install.iso"));
+    QCOMPARE(info.networkModel, QStringLiteral("virtio"));
+    QVERIFY(info.virtualDiskPath.isEmpty());
+}
+
+void DomainXmlTest::readerDefaultsForMinimalXml()
+{
+    const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml("<domain type='qemu' id='7'/>");
+    QCOMPARE(info.hypervisorType, QStringLiteral("qemu"));
+    QCOMPARE(info.indexId, 7);
+    QCOMPARE(info.maxDiskStorage, 0);
+    QCOMPARE(info.diskFormat, QStringLiteral("qcow2"));
+    QCOMPARE(info.firmware, QStringLiteral("bios"));
+    QCOMPARE(info.networkModel, QStringLiteral("none"));
+    QVERIFY(!info.secureBoot);
+    QVERIFY(info.virtualDiskPaths.isEmpty());
+    QVERIFY(info.isoDiskPath.isEmpty());
+}
+
+void DomainXmlTest::readerHandlesMalformedXml()
+{
+    const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml("<domain><devices><disk>");
+    QCOMPARE(info.hypervisorType, QString());
+    QCOMPARE(info.diskFormat, QStringLiteral("qcow2"));
+    QVERIFY(info.virtualDiskPaths.isEmpty());
+}
+
+void DomainXmlTest::readerUsesQcow2WhenDriverIsMissing()
+{
+    const QByteArray xml = R"(<domain type='kvm'>
+  <name>nodriver</name>
+  <devices>
+    <disk type='file' device='disk'>
+      <source file='/tmp/disk.img'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+  </devices>
+</domain>)";
+
+    const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml(xml);
+    QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.img"));
+    QCOMPARE(info.diskFormat, QStringLiteral("qcow2"));
 }
 
 void DomainXmlTest::readerParsesFirmware()
@@ -315,6 +387,99 @@ void DomainXmlTest::builderGeneratesEjectDisk()
     QVERIFY(!disk.firstChildElement(QStringLiteral("readonly")).isNull());
 }
 
+void DomainXmlTest::builderGeneratesDiskWithoutReadonly()
+{
+    DomainXmlBuilder builder;
+    const QString xml = builder.generateDiskXML({.diskType = QStringLiteral("file"),
+                                                 .device = QStringLiteral("disk"),
+                                                 .driver = QStringLiteral("qemu"),
+                                                 .format = QStringLiteral("qcow2"),
+                                                 .sourcePath = QStringLiteral("/tmp/data.qcow2"),
+                                                 .target = QStringLiteral("vdb"),
+                                                 .bus = QStringLiteral("virtio"),
+                                                 .readonly = false});
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(xml), qPrintable(xml));
+    const QDomElement disk = document.documentElement();
+    QCOMPARE(disk.attribute(QStringLiteral("device")), QStringLiteral("disk"));
+    QCOMPARE(disk.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file")), QStringLiteral("/tmp/data.qcow2"));
+    QVERIFY(disk.firstChildElement(QStringLiteral("readonly")).isNull());
+}
+
+void DomainXmlTest::builderGeneratesDiskWithSource()
+{
+    DomainXmlBuilder builder;
+    const QString xml = builder.generateDiskXML({.diskType = QStringLiteral("file"),
+                                                 .device = QStringLiteral("cdrom"),
+                                                 .driver = QStringLiteral("qemu"),
+                                                 .format = QStringLiteral("raw"),
+                                                 .sourcePath = QStringLiteral("/tmp/install.iso"),
+                                                 .target = QStringLiteral("sdb"),
+                                                 .bus = QStringLiteral("sata"),
+                                                 .readonly = true});
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(xml), qPrintable(xml));
+    const QDomElement disk = document.documentElement();
+    QCOMPARE(disk.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file")), QStringLiteral("/tmp/install.iso"));
+    QVERIFY(!disk.firstChildElement(QStringLiteral("readonly")).isNull());
+}
+
+void DomainXmlTest::builderRejectsMalformedXml()
+{
+    DomainXmlBuilder builder;
+    QVERIFY(builder.updateXML(QStringLiteral("<domain><memory>"), {.maxRam = 1, .cpus = 1, .maxDiskStorage = 0}).isEmpty());
+}
+
+void DomainXmlTest::builderUpdateZeroStorageKeepsMetadata()
+{
+    DomainXmlBuilder builder;
+    const QString updated = builder.updateXML(QString::fromUtf8(sampleDomainXml), {.maxRam = 1, .cpus = 1, .maxDiskStorage = 0});
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(updated), qPrintable(updated));
+    const QDomNodeList dataNodes = document.elementsByTagName(QStringLiteral("karton:data"));
+    QCOMPARE(dataNodes.count(), 1);
+    QCOMPARE(dataNodes.at(0).toElement().attribute(QStringLiteral("maxDiskStorage")), QStringLiteral("4096"));
+    QCOMPARE(dataNodes.at(0).toElement().attribute(QStringLiteral("screenshotPreviewPath")), QStringLiteral("/tmp/preview.png"));
+}
+
+void DomainXmlTest::builderPreservesUnknownMetadataAttributes()
+{
+    const QByteArray xml = R"(<domain type='kvm'>
+  <name>meta</name>
+  <metadata><karton:data xmlns:karton="urn:karton" maxDiskStorage="2048" screenshotPreviewPath="/tmp/a.png" unknown="keep"/></metadata>
+</domain>)";
+
+    DomainXmlBuilder builder;
+    const QString updated = builder.updateXML(QString::fromUtf8(xml), {.maxRam = 1, .cpus = 1, .maxDiskStorage = 4});
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(updated), qPrintable(updated));
+    const QDomElement data = document.elementsByTagName(QStringLiteral("karton:data")).at(0).toElement();
+    QCOMPARE(data.attribute(QStringLiteral("maxDiskStorage")), QStringLiteral("4096"));
+    QCOMPARE(data.attribute(QStringLiteral("unknown")), QStringLiteral("keep"));
+    QCOMPARE(data.attribute(QStringLiteral("screenshotPreviewPath")), QStringLiteral("/tmp/a.png"));
+}
+
+void DomainXmlTest::builderEscapesDiskSourcePaths()
+{
+    DomainXmlBuilder builder;
+    const QString xml = builder.generateDiskXML({.diskType = QStringLiteral("file"),
+                                                 .device = QStringLiteral("disk"),
+                                                 .driver = QStringLiteral("qemu"),
+                                                 .format = QStringLiteral("qcow2"),
+                                                 .sourcePath = QStringLiteral("/tmp/a&b.qcow2"),
+                                                 .target = QStringLiteral("vdc"),
+                                                 .bus = QStringLiteral("virtio"),
+                                                 .readonly = false});
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(xml), qPrintable(xml));
+    QCOMPARE(document.documentElement().firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file")), QStringLiteral("/tmp/a&b.qcow2"));
+}
+
 QTEST_GUILESS_MAIN(DomainXmlTest)
 
-#include "domainxml_test.moc"
+#include "tst_domainxml.moc"
