@@ -176,41 +176,48 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 0
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("Add a disk image or an ISO image"); Layout.fillWidth: true }
-                                Controls.Button {
-                                    text: i18n("Choose disk image…")
-                                    icon.name: "media-optical-symbolic"
+                                GridLayout {
+                                    columns: 2
+                                    columnSpacing: 16
+                                    rowSpacing: 12
                                     Layout.fillWidth: true
-                                    onClicked: diskFileDialog.open()
-                                }
-                                Controls.Button {
-                                    text: i18n("Choose ISO image…")
-                                    icon.name: "media-optical-symbolic"
-                                    Layout.fillWidth: true
-                                    onClicked: isoFileDialog.open()
-                                }
-                                Controls.Label { text: i18n("Or create a new empty disk"); Layout.fillWidth: true; Layout.topMargin: 8 }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Controls.SpinBox {
-                                        id: addDiskSize
-                                        from: 1
-                                        to: 2048
-                                        value: 8
-                                        Layout.fillWidth: true
-                                    }
-                                    Controls.ComboBox {
-                                        id: addDiskFormat
-                                        model: ["qcow2", "raw", "vmdk"]
-                                        Layout.preferredWidth: 120
-                                    }
+                                    Controls.Label { text: i18n("Disk image"); Layout.fillWidth: true }
                                     Controls.Button {
-                                        text: i18n("Create disk")
-                                        icon.name: "list-add-symbolic"
-                                        onClicked: {
-                                            if (Karton.addDisk(root.domain, addDiskSize.value, addDiskFormat.currentText)) {
-                                                root.added();
+                                        text: i18n("Choose…")
+                                        icon.name: "document-open-symbolic"
+                                        Layout.preferredWidth: 260
+                                        onClicked: diskFileDialog.open()
+                                    }
+                                    Controls.Label { text: i18n("ISO image"); Layout.fillWidth: true }
+                                    Controls.Button {
+                                        text: i18n("Choose…")
+                                        icon.name: "media-optical-symbolic"
+                                        Layout.preferredWidth: 260
+                                        onClicked: isoFileDialog.open()
+                                    }
+                                    Controls.Label { text: i18n("New disk"); Layout.fillWidth: true }
+                                    RowLayout {
+                                        Layout.preferredWidth: 260
+                                        spacing: 6
+                                        Controls.SpinBox {
+                                            id: addDiskSize
+                                            from: 1
+                                            to: 2048
+                                            value: 8
+                                            Layout.fillWidth: true
+                                        }
+                                        Controls.ComboBox {
+                                            id: addDiskFormat
+                                            model: ["qcow2", "raw", "vmdk"]
+                                            Layout.preferredWidth: 90
+                                        }
+                                        Controls.Button {
+                                            icon.name: "list-add-symbolic"
+                                            display: Controls.AbstractButton.IconOnly
+                                            onClicked: {
+                                                if (Karton.addDisk(root.domain, addDiskSize.value, addDiskFormat.currentText)) {
+                                                    root.added();
+                                                }
                                             }
                                         }
                                     }
@@ -222,16 +229,23 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 1
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("Network"); Layout.fillWidth: true }
-                                Controls.ComboBox {
-                                    id: networkCombo
+                                GridLayout {
+                                    columns: 2
+                                    columnSpacing: 16
+                                    rowSpacing: 12
                                     Layout.fillWidth: true
-                                    model: root.networks.map(function(network) { return network.name; })
-                                }
-                                Controls.ComboBox {
-                                    id: networkModelCombo
-                                    Layout.fillWidth: true
-                                    model: ["virtio", "e1000"]
+                                    Controls.Label { text: i18n("Network"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: networkCombo
+                                        Layout.preferredWidth: 260
+                                        model: root.networks.map(function(network) { return network.name; })
+                                    }
+                                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: networkModelCombo
+                                        Layout.preferredWidth: 260
+                                        model: ["virtio", "e1000"]
+                                    }
                                 }
                                 Controls.Button {
                                     text: i18n("Add network interface")
@@ -251,16 +265,23 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 2
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("Input device"); Layout.fillWidth: true }
-                                Controls.ComboBox {
-                                    id: inputTypeCombo
+                                GridLayout {
+                                    columns: 2
+                                    columnSpacing: 16
+                                    rowSpacing: 12
                                     Layout.fillWidth: true
-                                    model: ["tablet", "mouse", "keyboard"]
-                                }
-                                Controls.ComboBox {
-                                    id: inputBusCombo
-                                    Layout.fillWidth: true
-                                    model: ["usb", "ps2", "virtio"]
+                                    Controls.Label { text: i18n("Device"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: inputTypeCombo
+                                        Layout.preferredWidth: 260
+                                        model: ["tablet", "mouse", "keyboard"]
+                                    }
+                                    Controls.Label { text: i18n("Bus"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: inputBusCombo
+                                        Layout.preferredWidth: 260
+                                        model: ["usb", "ps2", "virtio"]
+                                    }
                                 }
                                 Controls.Button {
                                     text: i18n("Add input device")
@@ -279,11 +300,17 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 3
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("Controller type"); Layout.fillWidth: true }
-                                Controls.ComboBox {
-                                    id: controllerTypeCombo
+                                GridLayout {
+                                    columns: 2
+                                    columnSpacing: 16
+                                    rowSpacing: 12
                                     Layout.fillWidth: true
-                                    model: ["usb", "pci", "sata", "virtio-serial"]
+                                    Controls.Label { text: i18n("Type"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: controllerTypeCombo
+                                        Layout.preferredWidth: 260
+                                        model: ["usb", "pci", "sata", "virtio-serial"]
+                                    }
                                 }
                                 Controls.Button {
                                     text: i18n("Add controller")
@@ -338,16 +365,22 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 6
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("VirtIO channel"); Layout.fillWidth: true }
-                                Controls.ComboBox {
-                                    id: channelCombo
+                                GridLayout {
+                                    columns: 2
+                                    columnSpacing: 16
+                                    rowSpacing: 12
                                     Layout.fillWidth: true
-                                    model: [
-                                        { label: i18n("QEMU Guest Agent"), name: "org.qemu.guest_agent.0" },
-                                        { label: i18n("SPICE Agent"), name: "com.redhat.spice.0" },
-                                        { label: i18n("SPICE WebDAV"), name: "org.spice-space.webdav.0" }
-                                    ]
-                                    textRole: "label"
+                                    Controls.Label { text: i18n("Channel"); Layout.fillWidth: true }
+                                    Controls.ComboBox {
+                                        id: channelCombo
+                                        Layout.preferredWidth: 260
+                                        model: [
+                                            { label: i18n("QEMU Guest Agent"), name: "org.qemu.guest_agent.0" },
+                                            { label: i18n("SPICE Agent"), name: "com.redhat.spice.0" },
+                                            { label: i18n("SPICE WebDAV"), name: "org.spice-space.webdav.0" }
+                                        ]
+                                        textRole: "label"
+                                    }
                                 }
                                 Controls.Button {
                                     text: i18n("Add channel")
