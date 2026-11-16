@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Karton contributors
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Controls as Controls
 
 // Flickable-based scrolling, matching Luma's settings pages. A Flickable
@@ -15,8 +16,8 @@ Flickable {
     contentHeight: Math.max(height, contentItem.childrenRect.height)
     boundsBehavior: Flickable.StopAtBounds
 
-    ScrollBar.vertical: Controls.ScrollBar {
-        policy: Controls.ScrollBar.AsNeeded
+    ScrollBar.vertical: ScrollBar {
+        policy: ScrollBar.AsNeeded
         width: 10
     }
 
