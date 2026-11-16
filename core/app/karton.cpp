@@ -990,6 +990,11 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
 
 bool Karton::refreshDomainPreview(const Domain *domain)
 {
+    // virsh screenshot briefly pauses QEMU. Never capture while a SPICE
+    // viewer is open, even if a stale QML timer still asks for a preview.
+    if (m_viewerCount > 0) {
+        return false;
+    }
     if (!domain || !domain->domainPtr() || m_previewCapturing || domain->config()->screenshotPreviewPath().isEmpty()) {
         return false;
     }
