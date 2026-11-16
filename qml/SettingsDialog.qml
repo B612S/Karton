@@ -130,18 +130,18 @@ Kirigami.Dialog {
         }
         root.optionalUpdating = true;
         const watchdog = root.deviceByTag("watchdog");
-        watchdogCheck.checked = watchdog !== null;
+        watchdogCheck.checked = Karton.domainHasDevice(domain, "watchdog");
         watchdogModelCombo.currentIndex = Math.max(0, ["i6300esb", "ib700"].indexOf(watchdog ? watchdog.model : ""));
         watchdogActionCombo.currentIndex = Math.max(0, ["reset", "poweroff", "shutdown", "pause", "none"].indexOf(watchdog ? watchdog.action : ""));
         const rng = root.deviceByTag("rng");
-        rngCheck.checked = rng !== null;
+        rngCheck.checked = Karton.domainHasDevice(domain, "rng");
         rngBackendCombo.currentIndex = Math.max(0, ["random", "egd"].indexOf(rng ? rng.backend : ""));
-        panicCheck.checked = root.hasXmlDevice("panic");
+        panicCheck.checked = Karton.domainHasDevice(domain, "panic");
         panicModelCombo.currentIndex = Math.max(0, ["isa", "pvpanic"].indexOf(panicCheck.checked ? root.deviceByTag("panic").model : ""));
-        vsockCheck.checked = root.hasXmlDevice("vsock");
+        vsockCheck.checked = Karton.domainHasDevice(domain, "vsock");
         memoryBackingCheck.checked = root.hardware.sharedMemoryBacking === true;
         const shmem = root.deviceByTag("shmem");
-        shmemCheck.checked = shmem !== null;
+        shmemCheck.checked = Karton.domainHasDevice(domain, "shmem");
         shmemNameField.text = shmem ? shmem.name : "karton";
         shmemSizeSpin.value = shmem ? Math.max(1, Math.round(Number(shmem.size) / (1024 * 1024))) : 64;
         shmemModelCombo.currentIndex = Math.max(0, ["ivshmem-plain", "ivshmem-doorbell"].indexOf(shmem ? shmem.model : ""));

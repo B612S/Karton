@@ -1552,6 +1552,33 @@ bool Karton::replaceXmlDevice(const Domain *domain, int index, const QString &xm
     return true;
 }
 
+bool Karton::domainHasDevice(const Domain *domain, const QString &tag) const
+{
+    if (!domain || !domain->domainPtr() || tag.isEmpty()) {
+        return false;
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
+    if (!xml) {
+        return false;
+    }
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return false;
+    }
+    free(xml);
+    const QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
+    for (QDomElement device = devices.firstChildElement(); !device.isNull(); device = device.nextSiblingElement()) {
+        if (device.tagName() == tag) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QVariantList Karton::domainXmlDevices(const Domain *domain) const
 {
     QVariantList result;
