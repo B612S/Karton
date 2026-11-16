@@ -189,6 +189,32 @@ Kirigami.Dialog {
                                     Layout.fillWidth: true
                                     onClicked: isoFileDialog.open()
                                 }
+                                Controls.Label { text: i18n("Or create a new empty disk"); Layout.fillWidth: true; Layout.topMargin: 8 }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Controls.SpinBox {
+                                        id: addDiskSize
+                                        from: 1
+                                        to: 2048
+                                        value: 8
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.ComboBox {
+                                        id: addDiskFormat
+                                        model: ["qcow2", "raw", "vmdk"]
+                                        Layout.preferredWidth: 120
+                                    }
+                                    Controls.Button {
+                                        text: i18n("Create disk")
+                                        icon.name: "list-add-symbolic"
+                                        onClicked: {
+                                            if (Karton.addDisk(root.domain, addDiskSize.value, addDiskFormat.currentText)) {
+                                                root.added();
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             // Network

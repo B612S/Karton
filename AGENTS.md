@@ -318,16 +318,15 @@ When testing destructive operations, prefer domains whose names start with
   path. Disks expose advanced options (read-only, shareable, serial, cache and
   discard). It reads `Karton::domainHardwareInfo()` and writes firmware, boot
   order, video, sound, TPM and description through `editDomainHardware()`.
-  "Add Hardware" opens the grouped `AddHardwareDialog.qml` wizard, which can
-  create storage, network, input, controller, serial, console, channel, USB/PCI
-  passthrough, redirection, watchdog, RNG and TPM devices directly. Input devices
-  (`<input>`) have their own page with add/edit-remove controls, and
-  Controllers, Serial & Console and Other devices pages surface the remaining
-  device categories from the domain XML using human-readable labels, with
-  detach actions for non-system devices. Add Hardware also creates input
-  devices directly and opens the appropriate picker for disks, ISO images,
-  USB and PCI passthrough. All pages are refreshed after XML edits or device
-  hotplug. The XML page is read-only by default with
+  The footer button "Add…" opens the grouped `AddHardwareDialog.qml` wizard,
+  which is the only place where devices are added: storage, network, input,
+  controller, serial, console, channel, USB/PCI passthrough, redirection,
+  watchdog, RNG and TPM. Settings pages list and edit attached devices but do
+  not duplicate add controls. Input devices (`<input>`) have their own page,
+  and Controllers, Serial & Console and Other devices pages surface the
+  remaining device categories from the domain XML using human-readable labels,
+  with detach actions for non-system devices. All pages are refreshed after XML
+  edits or device hotplug. The XML page is read-only by default with
   an Edit switch; it uses `XmlHighlighter` for theme-coloured XML syntax
   highlighting, preserves its scroll position when toggling Edit, and saves
   through `saveDomainXml()`.

@@ -235,75 +235,6 @@ Kirigami.Dialog {
         }
     }
 
-    Controls.Menu {
-        id: addHardwareMenu
-
-        Controls.MenuItem {
-            text: i18n("Disk image…")
-            icon.name: "drive-harddisk-symbolic"
-            onTriggered: {
-                categoryList.currentIndex = 3;
-                imageFileDialog.open();
-            }
-        }
-        Controls.MenuItem {
-            text: i18n("ISO image…")
-            icon.name: "media-optical-symbolic"
-            onTriggered: {
-                categoryList.currentIndex = 3;
-                isoFileDialog.open();
-            }
-        }
-        Controls.MenuItem {
-            text: i18n("Network interface")
-            icon.name: "network-wired-symbolic"
-            onTriggered: categoryList.currentIndex = 4
-        }
-        Controls.MenuItem {
-            text: i18n("USB device")
-            icon.name: "drive-removable-media-usb-symbolic"
-            onTriggered: categoryList.currentIndex = 7
-        }
-        Controls.MenuItem {
-            text: i18n("PCI device")
-            icon.name: "computer-symbolic"
-            onTriggered: categoryList.currentIndex = 8
-        }
-        Controls.MenuItem {
-            text: i18n("TPM device")
-            icon.name: "security-high-symbolic"
-            onTriggered: categoryList.currentIndex = 9
-        }
-        Controls.MenuSeparator {}
-        Controls.MenuItem {
-            text: i18n("Mouse")
-            icon.name: "input-mouse-symbolic"
-            onTriggered: {
-                if (Karton.attachInputDevice(root.domain, "mouse", "ps2")) {
-                    root.refresh();
-                }
-            }
-        }
-        Controls.MenuItem {
-            text: i18n("Tablet")
-            icon.name: "input-tablet-symbolic"
-            onTriggered: {
-                if (Karton.attachInputDevice(root.domain, "tablet", "usb")) {
-                    root.refresh();
-                }
-            }
-        }
-        Controls.MenuItem {
-            text: i18n("Keyboard")
-            icon.name: "input-keyboard-symbolic"
-            onTriggered: {
-                if (Karton.attachInputDevice(root.domain, "keyboard", "ps2")) {
-                    root.refresh();
-                }
-            }
-        }
-    }
-
     contentItem: Item {
         implicitWidth: root.cardWidth
         implicitHeight: root.cardHeight
@@ -780,114 +711,6 @@ Kirigami.Dialog {
                     }
 
                     Controls.Label {
-                        text: i18n("Create a new disk")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                        Layout.topMargin: 8
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
-                    GridLayout {
-                        columns: 2
-                        columnSpacing: 16
-                        rowSpacing: 16
-                        Layout.fillWidth: true
-
-                        Controls.Label {
-                            text: i18n("New disk size (GB)")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.SpinBox {
-                            id: newDiskSize
-                            from: 1
-                            to: 2048
-                            value: 8
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label {
-                            text: i18n("Format")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.ComboBox {
-                            id: newDiskFormat
-                            model: ["qcow2", "raw", "vmdk"]
-                            currentIndex: 0
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Item {
-                            Layout.columnSpan: 2
-                            Layout.fillWidth: true
-                        }
-                        Controls.Button {
-                            text: i18n("Create disk")
-                            icon.name: "list-add-symbolic"
-                            Layout.columnSpan: 2
-                            Layout.alignment: Qt.AlignRight
-                            onClicked: {
-                                if (Karton.addDisk(root.domain, newDiskSize.value, newDiskFormat.currentText)) {
-                                    root.refresh();
-                                }
-                            }
-                        }
-                    }
-
-                    Controls.Label {
-                        text: i18n("Attach existing media")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                        Layout.topMargin: 8
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
-                    GridLayout {
-                        columns: 2
-                        columnSpacing: 16
-                        rowSpacing: 16
-                        Layout.fillWidth: true
-
-                        Controls.Label {
-                            text: i18n("Disk image")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.Button {
-                            text: i18n("Attach disk image…")
-                            icon.name: "document-open-symbolic"
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                            onClicked: imageFileDialog.open()
-                        }
-                        Controls.Label {
-                            text: i18n("ISO image")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.Button {
-                            text: i18n("Attach ISO image…")
-                            icon.name: "media-optical-symbolic"
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                            onClicked: isoFileDialog.open()
-                        }
-                    }
-
-                    Controls.Label {
                         text: i18n("Advanced disk options")
                         font.pixelSize: 15
                         font.weight: Font.Bold
@@ -1069,30 +892,6 @@ Kirigami.Dialog {
                                             root.refresh();
                                         }
                                     }
-                                }
-                            }
-                        }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Controls.ComboBox {
-                            id: attachNetworkCombo
-                            Layout.fillWidth: true
-                            model: root.networks.map(function(network) { return network.name; })
-                        }
-                        Controls.ComboBox {
-                            id: attachModelCombo
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 9
-                            model: ["virtio", "e1000"]
-                        }
-                        Controls.Button {
-                            text: i18n("Attach")
-                            icon.name: "list-add-symbolic"
-                            enabled: attachNetworkCombo.count > 0
-                            onClicked: {
-                                if (Karton.attachNetwork(root.domain, attachNetworkCombo.currentText, attachModelCombo.currentText)) {
-                                    root.refresh();
                                 }
                             }
                         }
@@ -1307,50 +1106,6 @@ Kirigami.Dialog {
                     }
 
                     Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("Available host USB devices")
-                        font.bold: true
-                    }
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 9
-                        clip: true
-                        model: root.usbHostDevices
-                        spacing: Kirigami.Units.smallSpacing
-                        delegate: Controls.ItemDelegate {
-                            width: ListView.view.width
-                            contentItem: RowLayout {
-                                spacing: Kirigami.Units.largeSpacing
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        text: modelData.label
-                                        elide: Text.ElideRight
-                                    }
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        text: modelData.vendor + ":" + modelData.product + " · bus " + modelData.bus + ", device " + modelData.device
-                                        opacity: 0.7
-                                        elide: Text.ElideRight
-                                    }
-                                }
-                                Controls.Button {
-                                    text: i18n("Attach")
-                                    icon.name: "list-add-symbolic"
-                                    enabled: !modelData.hub
-                                    onClicked: {
-                                        if (Karton.attachUsbDevicePersistent(root.domain, modelData.vendor, modelData.product, modelData.bus, modelData.device)) {
-                                            root.refresh();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Controls.Label {
                         Layout.fillWidth: true
                         Layout.margins: Kirigami.Units.largeSpacing
                         wrapMode: Text.WordWrap
@@ -1403,51 +1158,6 @@ Kirigami.Dialog {
                         }
                     }
 
-                    Controls.Label {
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("Available PCI devices")
-                        font.bold: true
-                    }
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.largeSpacing
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 9
-                        clip: true
-                        model: root.pciHostDevices
-                        spacing: Kirigami.Units.smallSpacing
-                        delegate: Controls.ItemDelegate {
-                            width: ListView.view.width
-                            contentItem: RowLayout {
-                                spacing: Kirigami.Units.largeSpacing
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        text: modelData.label
-                                        elide: Text.ElideRight
-                                    }
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        text: modelData.address
-                                              + (modelData.iommuGroup.length > 0 ? " · IOMMU " + modelData.iommuGroup : " · " + i18n("no IOMMU group"))
-                                        opacity: 0.7
-                                        elide: Text.ElideRight
-                                    }
-                                }
-                                Controls.Button {
-                                    text: i18n("Attach")
-                                    icon.name: "list-add-symbolic"
-                                    enabled: modelData.iommuGroup.length > 0
-                                    onClicked: {
-                                        if (Karton.attachPciDevice(root.domain, modelData.pciDomain, modelData.bus, modelData.slot, modelData.function)) {
-                                            root.refresh();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
                         Layout.fillWidth: true
@@ -1672,29 +1382,6 @@ Kirigami.Dialog {
                                         root.refresh();
                                     }
                                 }
-                            }
-                        }
-                    }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    Controls.ComboBox {
-                        id: newInputType
-                        Layout.fillWidth: true
-                        model: ["tablet", "mouse", "keyboard"]
-                    }
-                    Controls.ComboBox {
-                        id: newInputBus
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                        model: ["usb", "ps2", "virtio"]
-                    }
-                    Controls.Button {
-                        text: i18n("Add")
-                        icon.name: "list-add-symbolic"
-                        onClicked: {
-                            if (Karton.attachInputDevice(root.domain, newInputType.currentText, newInputBus.currentText)) {
-                                root.refresh();
                             }
                         }
                     }
@@ -1952,7 +1639,7 @@ Kirigami.Dialog {
         contentItem: RowLayout {
             Item { Layout.fillWidth: true }
             Controls.Button {
-                text: i18n("Add Hardware")
+                text: i18n("Add…")
                 icon.name: "list-add-symbolic"
                 enabled: root.domain !== null
                 onClicked: addHardwareDialog.open()
@@ -2062,25 +1749,4 @@ Kirigami.Dialog {
         }
     }
 
-    FileDialog {
-        id: imageFileDialog
-        title: i18n("Select a disk image")
-        nameFilters: [i18n("Disk images (*.qcow2 *.img *.raw *.vmdk)"), i18n("All files (*)")]
-        onAccepted: {
-            if (Karton.attachDiskImage(root.domain, root.localPath(selectedFile), "qcow2")) {
-                root.refresh();
-            }
-        }
-    }
-
-    FileDialog {
-        id: isoFileDialog
-        title: i18n("Select an ISO image")
-        nameFilters: [i18n("ISO images (*.iso)"), i18n("All files (*)")]
-        onAccepted: {
-            if (Karton.attachIso(root.domain, root.localPath(selectedFile))) {
-                root.refresh();
-            }
-        }
-    }
 }
