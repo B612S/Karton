@@ -21,5 +21,7 @@ Flickable {
         width: 10
     }
 
-    Component.onCompleted: contentItem.width = Qt.binding(() => root.width)
+    // Luma reserves room for the scrollbar; otherwise form controls extend
+    // under it and become hard to click at the right edge.
+    Component.onCompleted: contentItem.width = Qt.binding(() => Math.max(0, root.width - 16))
 }
