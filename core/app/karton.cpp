@@ -1498,6 +1498,20 @@ bool Karton::saveDomainXml(const Domain *domain, const QString &xml)
     if (!domain || !m_conn || xml.trimmed().isEmpty()) {
         return false;
     }
+
+    QDomDocument document;
+    QString parseError;
+    int errorLine = 0;
+    int errorColumn = 0;
+    if (!document.setContent(xml, &parseError, &errorLine, &errorColumn) || document.documentElement().tagName() != QStringLiteral("domain")) {
+        Q_EMIT errorOccurred(i18nc("XML parse error with line and column", "Invalid domain XML at %1:%2: %3", errorLine, errorColumn, parseError));
+        return false;
+    }
+    if (document.documentElement().firstChildElement(QStringLiteral("name")).text().trimmed().isEmpty()) {
+        Q_EMIT errorOccurred(i18n("Invalid domain XML: a domain name is required."));
+        return false;
+    }
+
     virDomainPtr redefined = virDomainDefineXML(m_conn, xml.toUtf8().constData());
     if (!redefined) {
         Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",

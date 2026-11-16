@@ -37,6 +37,7 @@ Kirigami.Dialog {
     property bool xmlDirty: false
     property bool xmlLoading: false
     property string xmlContent: ""
+    property string xmlLastValid: ""
     property var xmlDevices: []
     property var inputDevices: []
 
@@ -95,11 +96,7 @@ Kirigami.Dialog {
         tpmModelCombo.currentIndex = Math.max(0, ["tpm-crb", "tpm-tis"].indexOf(hardware.tpmModel));
         tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
         if (!root.xmlDirty) {
-            root.xmlLoading = true;
-            root.xmlContent = Karton.domainXml(domain);
-            root.xmlLoading = false;
-            root.xmlDirty = false;
-            xmlEditSwitch.checked = false;
+            loadXml(Karton.domainXml(domain));
         }
         const resolution = Karton.domainDisplayResolution(domain);
         let resolutionIndex = 0;
@@ -116,6 +113,15 @@ Kirigami.Dialog {
             displayCustomHeight.value = resolution.height;
         }
         displayResolutionCombo.currentIndex = resolutionIndex;
+    }
+
+    function loadXml(xml) {
+        root.xmlLoading = true;
+        root.xmlContent = xml;
+        root.xmlLastValid = xml;
+        xmlEditor.text = xml;
+        root.xmlLoading = false;
+        root.xmlDirty = false;
     }
 
     function pciDeviceLabel(address) {
@@ -158,6 +164,7 @@ Kirigami.Dialog {
         autostartCheck.checked = domain.autostart;
         memorySpinBox.value = domain.config.maxRam;
         cpuSpinBox.value = domain.config.cpus;
+        xmlEditSwitch.checked = false;
         refresh();
     }
 
@@ -1650,6 +1657,12 @@ Kirigami.Dialog {
                             if (Karton.saveDomainXml(root.domain, xmlEditor.text)) {
                                 root.xmlDirty = false;
                                 root.refresh();
+                                root.xmlEditSwitch.checked = true;
+                            } else {
+                                // Keep the user in edit mode, but restore the
+                                // last configuration accepted by libvirt.
+                                root.loadXml(root.xmlLastValid);
+                                root.xmlEditSwitch.checked = true;
                             }
                         }
                     }
@@ -1771,10 +1784,7 @@ Kirigami.Dialog {
                 return;
             }
             if (categoryList.currentIndex === categoryList.count - 1) {
-                root.xmlLoading = true;
-                root.xmlContent = Karton.domainXml(root.domain);
-                root.xmlLoading = false;
-                root.xmlEditSwitch.checked = false;
+                root.loadXml(Karton.domainXml(root.domain));
             }
         }
     }
