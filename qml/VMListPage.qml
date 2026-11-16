@@ -78,7 +78,7 @@ Kirigami.ScrollablePage {
             }
         },
         Kirigami.Action {
-            icon.name: "settings-configure-symbolic"
+            icon.name: "preferences-system-symbolic"
             text: i18n("Settings")
             onTriggered: applicationSettingsDialog.open()
         }

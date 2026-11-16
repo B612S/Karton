@@ -763,9 +763,18 @@ void DomainViewer::playback_start_callback(SpicePlaybackChannel *channel, gint f
     item->m_audioFormat.setSampleFormat(QAudioFormat::Int16);
 
     item->m_audioSink = new QAudioSink(item->m_audioFormat, item);
+    // A small output buffer absorbs the initial SPICE packet jitter. Without
+    // it the first packets can underrun and produce a short crackle.
+    const int bufferBytes = item->m_audioFormat.bytesForDuration(200000);
+    item->m_audioSink->setBufferSize(qMax(bufferBytes, item->m_audioFormat.bytesForDuration(50000)));
     item->m_audioDevice = item->m_audioSink->start();
+    if (!item->m_audioDevice) {
+        qCWarning(KARTON_DEBUG) << "Failed to start audio output:" << item->m_audioSink->error();
+        item->stopAudio();
+        return;
+    }
 
-    qCInfo(KARTON_DEBUG) << "Audio output started successfully";
+    qCInfo(KARTON_DEBUG) << "Audio output started successfully, buffer:" << item->m_audioSink->bufferSize();
 }
 
 void DomainViewer::playback_data_callback(SpicePlaybackChannel *channel, gpointer data, gint size, gpointer user_data)

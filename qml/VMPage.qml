@@ -217,7 +217,7 @@ Kirigami.ScrollablePage {
         }
         Controls.MenuItem {
             text: i18n("Settings")
-            icon.name: "settings-configure-symbolic"
+            icon.name: "preferences-system-symbolic"
             onTriggered: settingsDialog.open()
         }
         Controls.MenuSeparator {
