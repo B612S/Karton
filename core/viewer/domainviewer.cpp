@@ -367,12 +367,19 @@ gboolean DomainViewer::clipboardSelectionRequestCallback(SpiceMainChannel *chann
         return FALSE;
     }
     const QByteArray text = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
-    qCInfo(KARTON_DEBUG) << "clipboard: guest requested text, sending" << text.size() << "bytes";
-    spice_main_channel_clipboard_selection_notify(channel,
-                                                  selection,
-                                                  VD_AGENT_CLIPBOARD_UTF8_TEXT,
-                                                  reinterpret_cast<const guchar *>(text.constData()),
-                                                  static_cast<size_t>(text.size()));
+    qCInfo(KARTON_DEBUG) << "clipboard: guest requested text, sending" << text.size() << "bytes, selection" << selection;
+    // Let the main channel finish processing the request before answering;
+    // calling notify synchronously from the signal handler can race the
+    // clipboard request on the guest side.
+    g_object_ref(channel);
+    QTimer::singleShot(0, qApp, [channel, selection, text]() {
+        spice_main_channel_clipboard_selection_notify(channel,
+                                                      selection,
+                                                      VD_AGENT_CLIPBOARD_UTF8_TEXT,
+                                                      reinterpret_cast<const guchar *>(text.constData()),
+                                                      static_cast<size_t>(text.size()));
+        g_object_unref(channel);
+    });
     return TRUE;
 }
 
