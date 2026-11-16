@@ -1663,8 +1663,6 @@ Kirigami.Dialog {
                     }
                 }
             }
-        }
-    }
 
     Controls.ToolBar {
         Layout.fillWidth: true
@@ -1784,4 +1782,7 @@ Kirigami.Dialog {
 
 }
 
+}
+
+}
 }

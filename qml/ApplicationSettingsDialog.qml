@@ -222,6 +222,14 @@ Kirigami.Dialog {
                                                 elide: Text.ElideRight
                                             }
                                         }
+                                        Controls.CheckBox {
+                                            text: i18n("Autostart")
+                                            checked: modelData.autostart
+                                            onToggled: {
+                                                Karton.setNetworkAutostart(modelData.name, checked);
+                                                root.refreshNetworks();
+                                            }
+                                        }
                                         Controls.Button {
                                             text: modelData.active ? i18n("Stop") : i18n("Start")
                                             icon.name: modelData.active ? "media-playback-stop-symbolic" : "media-playback-start-symbolic"
@@ -231,14 +239,6 @@ Kirigami.Dialog {
                                                 } else {
                                                     Karton.startNetwork(modelData.name);
                                                 }
-                                                root.refreshNetworks();
-                                            }
-                                        }
-                                        Controls.CheckBox {
-                                            text: i18n("Autostart")
-                                            checked: modelData.autostart
-                                            onToggled: {
-                                                Karton.setNetworkAutostart(modelData.name, checked);
                                                 root.refreshNetworks();
                                             }
                                         }
