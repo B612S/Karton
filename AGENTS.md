@@ -321,12 +321,13 @@ When testing destructive operations, prefer domains whose names start with
   `xcb` and `wayland`; subtracting it only on Wayland made keys map to unrelated
   PC XT scancodes under XWayland.
 - `DomainViewer::updateDisplayResolution()` calls
-  `spice_main_channel_update_display()` with a monitor rectangle fitted to the
-  current guest aspect ratio, in device pixels, on page resize and when the
-  SPICE agent connects; it enables display 0 and sends the monitor
-  configuration immediately when the agent is present. The request is capped
-  to fit the available viewer area instead of stretching the page, which some
-  agents rejected.
+  `spice_main_channel_update_display()` with the complete viewer area in
+  device pixels on page resize and when the SPICE agent connects; it enables
+  display 0 and sends the monitor configuration immediately when the agent is
+  present. Requesting the full area (rather than preserving the current guest
+  aspect) makes the agent resize the guest so it fills the window instead of
+  leaving black bars. If the agent is absent, QML fits the window once to the
+  guest aspect instead.
   It deliberately does not use the aspect-fitted `DomainViewer` item size: the
   item changes size when the guest resolution changes, which caused a resize
   feedback loop while Windows was booting. The guest adapts its resolution

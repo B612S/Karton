@@ -462,16 +462,11 @@ void DomainViewer::updateDisplayResolution()
     // stretching it to the page size. A request that is wider than the guest's
     // supported mode (for example 2160x1178 on a 1920x1200 guest) is rejected
     // by spice-vdagent and looked like auto-resize did nothing.
-    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
-    const qreal aspect = (frameSize.isValid() && frameSize.height() > 0) ? qreal(frameSize.width()) / frameSize.height() : 16.0 / 9.0;
-    qreal targetLogicalWidth = availableWidth;
-    qreal targetLogicalHeight = targetLogicalWidth / aspect;
-    if (targetLogicalHeight > availableHeight) {
-        targetLogicalHeight = availableHeight;
-        targetLogicalWidth = targetLogicalHeight * aspect;
-    }
-    int targetWidth = qMax(640, qRound(targetLogicalWidth));
-    int targetHeight = qMax(480, qRound(targetLogicalHeight));
+    // Ask the guest for the complete viewer area. If we instead preserve the
+    // old guest aspect ratio here, the aspect-fitted DomainViewer item keeps
+    // leaving black bars on the sides even after the agent applies the resize.
+    int targetWidth = qMax(640, qRound(availableWidth));
+    int targetHeight = qMax(480, qRound(availableHeight));
     targetWidth &= ~1;
     targetHeight &= ~1;
 
