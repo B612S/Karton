@@ -1855,7 +1855,10 @@ QVariantList Karton::domainInterfaces(const Domain *domain) const
     }
     free(interfaceAddresses);
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
     if (!xml) {
         return result;
     }
@@ -2231,7 +2234,10 @@ QVariantList Karton::domainUsbDevices(const Domain *domain) const
         return result;
     }
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
     if (!xml) {
         return result;
     }
@@ -2800,7 +2806,10 @@ QVariantList Karton::domainPciDevices(const Domain *domain) const
         return result;
     }
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
     if (!xml) {
         return result;
     }
@@ -3128,7 +3137,10 @@ static QString nextDiskTarget(const Domain *domain, const QString &prefix)
     }
 
     QSet<QString> usedTargets;
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
     if (xml) {
         QDomDocument document;
         if (document.setContent(QString::fromUtf8(xml))) {
@@ -3190,7 +3202,10 @@ QVariantList Karton::domainDisks(const Domain *domain) const
         return result;
     }
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+    }
     if (!xml) {
         return result;
     }
