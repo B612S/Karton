@@ -28,7 +28,6 @@
 #include <QStandardPaths>
 #include <functional>
 #include <memory>
-#include <thread>
 #include <utility>
 
 #include "domain/domain.h"
@@ -843,98 +842,41 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
     return true;
 }
 
-static QImage captureDomainScreenshotImage(const QString &uri, const QString &uuid)
-{
-    virConnectPtr conn = virConnectOpen(uri.toUtf8().constData());
-    if (!conn) {
-        return {};
-    }
-
-    virDomainPtr domain = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
-    if (!domain) {
-        virConnectClose(conn);
-        return {};
-    }
-
-    virStreamPtr stream = virStreamNew(conn, 0);
-    if (!stream) {
-        virDomainFree(domain);
-        virConnectClose(conn);
-        return {};
-    }
-
-    char *mimeType = virDomainScreenshot(domain, stream, 0, 0);
-    if (!mimeType) {
-        virStreamFree(stream);
-        virDomainFree(domain);
-        virConnectClose(conn);
-        return {};
-    }
-    free(mimeType);
-
-    QByteArray imageData;
-    char buffer[64 * 1024];
-    bool ok = true;
-    while (true) {
-        const int bytesRead = virStreamRecv(stream, buffer, sizeof(buffer));
-        if (bytesRead == 0) {
-            break;
-        }
-        if (bytesRead < 0) {
-            ok = false;
-            break;
-        }
-        imageData.append(buffer, bytesRead);
-    }
-
-    virStreamFree(stream);
-    virDomainFree(domain);
-    virConnectClose(conn);
-
-    if (!ok || imageData.isEmpty()) {
-        return {};
-    }
-    return QImage::fromData(imageData);
-}
-
 bool Karton::refreshDomainPreview(const Domain *domain)
 {
-    if (!domain || !domain->domainPtr() || !m_conn || m_previewCapturing) {
+    if (!domain || !domain->domainPtr() || m_previewCapturing || domain->config()->screenshotPreviewPath().isEmpty()) {
         return false;
     }
 
-    const QString uri = m_activeUri;
-    const QString uuid = Domain::uuidString(domain->domainPtr());
-    if (uri.isEmpty() || uuid.isEmpty()) {
-        return false;
-    }
+    const QString previewPath = domain->config()->screenshotPreviewPath();
+    QDir().mkpath(QFileInfo(previewPath).absolutePath());
+    const QString tempPath = previewPath + QStringLiteral(".tmp.png");
+    QFile::remove(tempPath);
 
-    m_previewCapturing = true;
     QPointer<Karton> guard(this);
-    std::thread([guard, uri, uuid]() {
-        const QImage image = captureDomainScreenshotImage(uri, uuid);
-        if (!guard) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-            guard.data(),
-            [guard, uuid, image]() {
-                if (!guard) {
-                    return;
-                }
-                guard->m_previewCapturing = false;
-                if (image.isNull()) {
-                    return;
-                }
-                for (Domain *candidate : std::as_const(guard->m_domains)) {
-                    if (candidate->config()->uuid() == uuid) {
-                        candidate->savePreviewFrame(image);
-                        break;
-                    }
-                }
-            },
-            Qt::QueuedConnection);
-    }).detach();
+    QPointer<Domain> domainGuard(const_cast<Domain *>(domain));
+    m_previewCapturing = true;
+    m_commandRunner->runCommand(QStringLiteral("virsh"),
+                                {QStringLiteral("-c"), m_activeUri, QStringLiteral("screenshot"), domain->config()->name(), tempPath},
+                                [guard, domainGuard, tempPath](bool success, const QString &output) {
+                                    Q_UNUSED(output);
+                                    if (!guard) {
+                                        return;
+                                    }
+                                    guard->m_previewCapturing = false;
+                                    if (!success) {
+                                        QFile::remove(tempPath);
+                                        return;
+                                    }
+                                    const QImage image(tempPath);
+                                    QFile::remove(tempPath);
+                                    if (image.isNull()) {
+                                        return;
+                                    }
+                                    if (domainGuard) {
+                                        domainGuard->savePreviewFrame(image);
+                                    }
+                                });
     return true;
 }
 

@@ -62,7 +62,7 @@ Kirigami.ScrollablePage {
         // Do not poll it while the viewer window is active (or any other
         // window has focus), otherwise mouse input visibly stalls every few
         // seconds during a live session.
-        running: root.isRunning && root.visible && Karton.viewerCount === 0
+        running: root.isRunning && root.visible
         triggeredOnStart: true
         onTriggered: {
             if (root.domain) {

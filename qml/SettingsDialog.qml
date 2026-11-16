@@ -24,6 +24,7 @@ Kirigami.Dialog {
     property var networks: []
     property var pciHostDevices: []
     property var usbHostDevices: []
+    property var performance: ({})
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
@@ -50,6 +51,7 @@ Kirigami.Dialog {
         networks = Karton.networks();
         pciHostDevices = Karton.pciDevices();
         usbHostDevices = Karton.usbDevices();
+        performance = Karton.domainStats(domain);
 
         firmwareCombo.currentIndex = hardware.firmware === "uefi" ? 1 : 0;
         secureBootCheck.checked = hardware.secureBoot === true;
@@ -243,7 +245,9 @@ Kirigami.Dialog {
                 {label: i18n("Sound"), icon: "audio-volume-high-symbolic"},
                 {label: i18n("USB"), icon: "drive-removable-media-usb-symbolic"},
                 {label: i18n("PCI"), icon: "computer-symbolic"},
-                {label: i18n("TPM"), icon: "security-high-symbolic"}
+                {label: i18n("TPM"), icon: "security-high-symbolic"},
+                {label: i18n("OS Information"), icon: "document-properties-symbolic"},
+                {label: i18n("Performance"), icon: "speedometer-symbolic"}
             ]
 
             delegate: Delegates.RoundedItemDelegate {
@@ -1035,6 +1039,72 @@ Kirigami.Dialog {
                         wrapMode: Text.WordWrap
                         opacity: 0.7
                         text: i18n("TPM emulation requires swtpm in the host and is applied to the persistent VM configuration.")
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+            }
+
+            // OS information
+            Controls.ScrollView {
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
+                    FormCard.FormCard {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        FormCard.FormTextDelegate {
+                            text: i18n("Name")
+                            description: root.domain ? root.domain.config.name : ""
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextDelegate {
+                            text: i18n("UUID")
+                            description: root.domain ? root.domain.config.uuid : ""
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextDelegate {
+                            text: i18n("OS ID")
+                            description: root.domain ? root.domain.config.osId : ""
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextDelegate {
+                            text: i18n("Short OS ID")
+                            description: root.domain ? root.domain.config.shortOsId : ""
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextDelegate {
+                            text: i18n("State")
+                            description: root.domain ? root.domain.config.state : ""
+                        }
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+            }
+
+            // Performance
+            Controls.ScrollView {
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
+                    FormCard.FormCard {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.largeSpacing
+                        FormCard.FormTextDelegate {
+                            text: i18n("CPU Usage")
+                            description: root.performance.cpuPercent !== undefined ? i18n("%1 %", root.performance.cpuPercent.toFixed(1)) : "—"
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextDelegate {
+                            text: i18n("Memory Usage")
+                            description: root.performance.memoryKiB !== undefined
+                                ? i18n("%1 MiB of %2 MiB", (root.performance.memoryKiB / 1024).toFixed(0), (root.performance.maxMemoryKiB / 1024).toFixed(0))
+                                : "—"
+                        }
+                        FormCard.FormDelegateSeparator {}
+                        FormCard.FormTextDelegate {
+                            text: i18n("vCPUs")
+                            description: root.performance.vcpus !== undefined ? root.performance.vcpus : ""
+                        }
                     }
                     Item { Layout.fillHeight: true }
                 }
