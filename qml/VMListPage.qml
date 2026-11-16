@@ -11,10 +11,46 @@ Kirigami.ScrollablePage {
     id: root
 
     title: i18nc("noun, Virtual Machines", "Virtual Machines")
+    property var pendingViewerDomain: null
     topPadding: 0
     bottomPadding: 0
     leftPadding: 0
     rightPadding: 0
+
+    function openViewer(domain) {
+        if (!domain || !domain.isActive) {
+            return;
+        }
+        const component = Qt.createComponent("VMViewerWindow.qml");
+        if (component.status !== Component.Ready) {
+            console.error("Failed to create VM viewer:", component.errorString());
+            return;
+        }
+        const window = component.createObject(null, {
+            domain: domain
+        });
+        if (!window) {
+            console.error("Failed to create VM viewer window");
+        }
+    }
+
+    function openViewerForDomain(domain) {
+        if (!domain) {
+            return;
+        }
+        if (domain.isActive) {
+            openViewer(domain);
+            return;
+        }
+
+        pendingViewerDomain = domain;
+        if (!Karton.startDomain(domain)) {
+            pendingViewerDomain = null;
+            return;
+        }
+        viewerWaitTimer.attempts = 0;
+        viewerWaitTimer.restart();
+    }
 
     function openDomain(domain) {
         const stack = applicationWindow().pageStack;
@@ -38,6 +74,34 @@ Kirigami.ScrollablePage {
         target: Karton
         function onErrorOccurred(errorMessage) {
             applicationWindow().showPassiveNotification(errorMessage, "long");
+        }
+        function onDomainRemoved(removedDomain) {
+            if (removedDomain === root.pendingViewerDomain) {
+                root.pendingViewerDomain = null;
+                viewerWaitTimer.stop();
+            }
+        }
+    }
+
+    Timer {
+        id: viewerWaitTimer
+        interval: 1000
+        repeat: true
+        property int attempts: 0
+        onTriggered: {
+            if (!root.pendingViewerDomain) {
+                stop();
+                return;
+            }
+            if (root.pendingViewerDomain.isActive) {
+                const domain = root.pendingViewerDomain;
+                root.pendingViewerDomain = null;
+                stop();
+                root.openViewer(domain);
+            } else if (++attempts >= 15) {
+                root.pendingViewerDomain = null;
+                stop();
+            }
         }
     }
 
@@ -109,6 +173,8 @@ Kirigami.ScrollablePage {
                 view.currentIndex = model.index;
                 root.openDomain(domain);
             }
+
+            onDoubleClicked: root.openViewerForDomain(domain)
 
             contentItem: RowLayout {
                 id: delegateLayout

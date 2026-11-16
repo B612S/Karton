@@ -16,6 +16,7 @@
 #include <QPointF>
 #include <QQuickItem>
 #include <QSGNode>
+#include <QSize>
 
 #include <memory>
 
@@ -76,6 +77,7 @@ public:
     void focusOutEvent(QFocusEvent *event) override;
 
     Q_INVOKABLE void saveFrameToDomain();
+    Q_INVOKABLE void updateDisplayResolution();
 
 Q_SIGNALS:
     void domainChanged();
@@ -99,6 +101,7 @@ private:
 
     static void cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData);
     static void cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData);
+    static void mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer userData);
     static void cursorHideCallback(SpiceCursorChannel *channel, gpointer userData);
     static void cursorResetCallback(SpiceCursorChannel *channel, gpointer userData);
     void clearCursor();
@@ -145,6 +148,7 @@ private:
     bool m_cursorTextureDirty = true;
     QPointF m_cursorPaintPosition;
     bool m_hasCursorPaintPosition = false;
+    QSize m_lastDisplayResolution;
 
     QSGNode *m_displayNode = nullptr;
     QSGSimpleTextureNode *m_cursorNode = nullptr;

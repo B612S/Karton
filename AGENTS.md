@@ -286,9 +286,22 @@ When testing destructive operations, prefer domains whose names start with
   normalized to evdev by subtracting the X11/xkb keycode offset of 8 on both
   `xcb` and `wayland`; subtracting it only on Wayland made keys map to unrelated
   PC XT scancodes under XWayland.
-- `VMViewerWindow.qml` starts at 85% of the screen and has the USB passthrough
-  action (and its dialog) in the viewer itself; the VM page no longer has a USB
-  action. UI icons use the monochrome `*-symbolic` variants.
+- `DomainViewer::updateDisplayResolution()` calls
+  `spice_main_channel_update_display()` with the current item size on window
+  resize and when the SPICE agent connects. The guest adapts its resolution
+  through the agent (spice-vdagent / Windows guest tools); without an agent the
+  request is a no-op. It is also exposed as "Fit Guest to Window" in the viewer
+  menu.
+- Pointer motion calls `QQuickItem::update()` so the local SPICE cursor overlay
+  is repainted on every motion event; without it the cursor looked laggy even
+  though input was sent at full rate.
+- `VMViewerWindow.qml` starts at 85% of the screen. Its toolbar only keeps the
+  overflow menu and fullscreen button visible; Actual Size, Fit to Window, Fit
+  Guest to Window and USB Devices live in the menu. There is no explicit
+  grab/release-pointer action: clicking the display grabs the pointer and Esc
+  releases it. A double-click on a VM list row opens that VM's viewer (a
+  stopped VM is started first). UI icons use the monochrome `*-symbolic`
+  variants.
 - The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
   `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
   `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.

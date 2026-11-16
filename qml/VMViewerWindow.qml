@@ -59,32 +59,33 @@ Kirigami.ApplicationWindow {
 
         actions: [
             Kirigami.Action {
-                text: i18n("Actual Size")
-                icon.name: "zoom-original-symbolic"
-                onTriggered: {
-                    viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
-                    viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
+                text: i18n("Menu")
+                icon.name: "application-menu-symbolic"
+
+                Kirigami.Action {
+                    text: i18n("Actual Size")
+                    icon.name: "zoom-original-symbolic"
+                    onTriggered: {
+                        viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
+                        viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
+                    }
                 }
-            },
-            Kirigami.Action {
-                text: i18n("Fit to Window")
-                icon.name: "zoom-fit-best-symbolic"
-                onTriggered: viewerWindow.showMaximized()
-            },
-            Kirigami.Action {
-                text: i18n("USB Devices")
-                icon.name: "drive-removable-media-usb-symbolic"
-                shortcut: "Ctrl+Shift+U"
-                onTriggered: {
-                    domainViewer.releasePointerGrab();
-                    usbDialog.open();
+                Kirigami.Action {
+                    text: i18n("Fit to Window")
+                    icon.name: "zoom-fit-best-symbolic"
+                    onTriggered: viewerWindow.showMaximized()
                 }
-            },
-            Kirigami.Action {
-                text: i18n("Release Pointer")
-                icon.name: "transform-browse-symbolic"
-                visible: domainViewer.pointerGrabbed
-                onTriggered: domainViewer.releasePointerGrab()
+                Kirigami.Action {
+                    text: i18n("Fit Guest to Window")
+                    icon.name: "transform-scale-symbolic"
+                    onTriggered: domainViewer.updateDisplayResolution()
+                }
+                Kirigami.Action {
+                    text: i18n("USB Devices")
+                    icon.name: "drive-removable-media-usb-symbolic"
+                    shortcut: "Ctrl+Shift+U"
+                    onTriggered: usbDialog.open()
+                }
             },
             Kirigami.Action {
                 icon.name: "view-fullscreen-symbolic"

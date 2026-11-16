@@ -20,6 +20,7 @@
 #include <QSGRendererInterface>
 #include <QSGSimpleTextureNode>
 #include <QString>
+#include <QTimer>
 
 #include "domain/domain.h"
 #include "glib.h"
@@ -46,6 +47,9 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     setAcceptedMouseButtons(Qt::AllButtons);
     setAcceptHoverEvents(true);
     setFlag(ItemIsFocusScope, true);
+
+    connect(this, &QQuickItem::widthChanged, this, &DomainViewer::updateDisplayResolution);
+    connect(this, &QQuickItem::heightChanged, this, &DomainViewer::updateDisplayResolution);
 }
 
 DomainViewer::~DomainViewer()
@@ -247,6 +251,7 @@ void DomainViewer::disconnectFromSpice()
     m_main_channel = nullptr;
     m_inputs_channel = nullptr;
     m_connected = false;
+    m_lastDisplayResolution = QSize();
     releasePointerGrab();
 }
 
@@ -264,6 +269,8 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         qCInfo(KARTON_DEBUG) << "SPICE main channel connected";
         spice_channel_connect(channel);
         item->m_main_channel = SPICE_MAIN_CHANNEL(channel);
+        g_signal_connect(channel, "main-agent-update", G_CALLBACK(mainAgentUpdateCallback), item);
+        QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
         spice_channel_connect(channel);
@@ -283,6 +290,16 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         g_object_get(channel, "channel-type", &type, NULL);
         qCDebug(KARTON_DEBUG) << "Unhandled SPICE channel type:" << QString::fromUtf8(spice_channel_type_to_string(type));
     }
+}
+
+void DomainViewer::mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer userData)
+{
+    Q_UNUSED(channel);
+    auto *item = static_cast<DomainViewer *>(userData);
+    // The agent can connect after the initial resize request. Force a new
+    // request even if the target size did not change in the meantime.
+    item->m_lastDisplayResolution = QSize();
+    item->updateDisplayResolution();
 }
 
 // ========================== Display rendering  ========================
@@ -404,6 +421,29 @@ void DomainViewer::handleRendererFrameSizeChanged()
     const QSize size = m_renderer->frameSize();
     setImplicitWidth(size.width());
     setImplicitHeight(size.height());
+}
+
+void DomainViewer::updateDisplayResolution()
+{
+    if (!m_main_channel || !m_connected || width() < 320 || height() < 240) {
+        return;
+    }
+
+    // The SPICE agent resizes the guest desktop to the monitor configuration.
+    // update=TRUE lets spice-gtk debounce resize storms while the user drags
+    // the window, and send the final configuration to the agent.
+    int targetWidth = qMax(640, qRound(width()));
+    int targetHeight = qMax(480, qRound(height()));
+    targetWidth &= ~1;
+    targetHeight &= ~1;
+
+    const QSize target(targetWidth, targetHeight);
+    if (target == m_lastDisplayResolution) {
+        return;
+    }
+    m_lastDisplayResolution = target;
+    spice_main_channel_update_display(m_main_channel, 0, 0, 0, targetWidth, targetHeight, TRUE);
+    qCInfo(KARTON_DEBUG) << "Requested guest display resolution:" << target;
 }
 
 // triggered by update()
@@ -744,12 +784,14 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
         // while the pointer is grabbed and the host cursor is outside the item.
         if (!qFuzzyIsNull(delta.x()) || !qFuzzyIsNull(delta.y())) {
             spice_inputs_channel_motion(m_inputs_channel, qRound(delta.x() * scaleX), qRound(delta.y() * scaleY), buttonMask);
+            update();
         }
         return;
     }
 
     const QPointF absolute = m_pointerGrabbed ? m_virtualPointerPosition : guestPosition;
     spice_inputs_channel_position(m_inputs_channel, qRound(absolute.x()), qRound(absolute.y()), 0, buttonMask);
+    update();
 }
 
 static quint32 evdevScancodeForEvent(const QKeyEvent *event)
