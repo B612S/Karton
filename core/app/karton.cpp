@@ -1727,9 +1727,27 @@ QVariantMap Karton::domainStats(const Domain *domain)
     m_cpuSamples.insert(cacheKey, {cpuTime, now});
 
     const unsigned long maxMemory = virDomainGetMaxMemory(domainPtr);
+    unsigned long long actualMemory = 0;
+    unsigned long long unusedMemory = 0;
+    virDomainMemoryStatStruct memoryStats[VIR_DOMAIN_MEMORY_STAT_NR] = {};
+    const int memoryStatCount = virDomainMemoryStats(domainPtr, memoryStats, VIR_DOMAIN_MEMORY_STAT_NR, 0);
+    for (int i = 0; i < memoryStatCount; ++i) {
+        if (memoryStats[i].tag == VIR_DOMAIN_MEMORY_STAT_ACTUAL_BALLOON) {
+            actualMemory = memoryStats[i].val;
+        } else if (memoryStats[i].tag == VIR_DOMAIN_MEMORY_STAT_UNUSED) {
+            unusedMemory = memoryStats[i].val;
+        }
+    }
+
     stats.insert(QStringLiteral("cpuPercent"), cpuPercent);
     stats.insert(QStringLiteral("cpuTime"), cpuTime);
     stats.insert(QStringLiteral("memoryKiB"), static_cast<qulonglong>(info.memory));
+    if (actualMemory > 0) {
+        stats.insert(QStringLiteral("memoryTotalKiB"), static_cast<qulonglong>(actualMemory));
+        if (unusedMemory <= actualMemory) {
+            stats.insert(QStringLiteral("memoryUsedKiB"), static_cast<qulonglong>(actualMemory - unusedMemory));
+        }
+    }
     stats.insert(QStringLiteral("maxMemoryKiB"), static_cast<qulonglong>(maxMemory));
     stats.insert(QStringLiteral("vcpus"), vcpus);
     return stats;

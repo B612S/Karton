@@ -748,9 +748,11 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
                         Controls.Label {
-                            text: root.performance.memoryKiB !== undefined
-                                ? i18n("%1 MiB of %2 MiB", (root.performance.memoryKiB / 1024).toFixed(0), (root.performance.maxMemoryKiB / 1024).toFixed(0))
-                                : "—"
+                            text: root.performance.memoryUsedKiB !== undefined
+                                ? i18n("%1 MiB of %2 MiB used", (root.performance.memoryUsedKiB / 1024).toFixed(0), (root.performance.memoryTotalKiB / 1024).toFixed(0))
+                                : (root.performance.memoryKiB !== undefined
+                                    ? i18n("%1 MiB allocated", (root.performance.memoryKiB / 1024).toFixed(0))
+                                    : "—")
                             opacity: 0.7
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight

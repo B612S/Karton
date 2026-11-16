@@ -370,8 +370,11 @@ Kirigami.ScrollablePage {
                     if (!domain) {
                         return "";
                     }
+                    if (root.stats.memoryUsedKiB !== undefined) {
+                        return i18n("%1 MiB of %2 MiB used", (root.stats.memoryUsedKiB / 1024).toFixed(0), (root.stats.memoryTotalKiB / 1024).toFixed(0));
+                    }
                     if (root.stats.memoryKiB !== undefined) {
-                        return i18n("%1 MiB of %2 MiB", (root.stats.memoryKiB / 1024).toFixed(0), (root.stats.maxMemoryKiB / 1024).toFixed(0));
+                        return i18n("%1 MiB allocated", (root.stats.memoryKiB / 1024).toFixed(0));
                     }
                     return domain.config.ramUsage + " GB";
                 }
