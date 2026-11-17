@@ -1,5 +1,6 @@
 # Maintainer: Karton contributors
 # SPDX-License-Identifier: CC0-1.0
+# SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 pkgname=karton
 # The version is taken from the local CMake project; override with
@@ -29,14 +30,12 @@ depends=(
     'phodav'
     'pipewire'
     'mesa'
-    'vulkan-icd-loader'
     'hicolor-icon-theme'
 )
 makedepends=(
     'cmake'
     'ninja'
     'extra-cmake-modules'
-    'vulkan-headers'
 )
 checkdepends=('appstream')
 conflicts=('karton-git')

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #pragma once
 
@@ -99,7 +100,6 @@ public:
     void setClipboardFilesMode(int mode);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
-    Q_INVOKABLE void syncHostClipboard();
 
     void componentComplete() override;
 
@@ -149,7 +149,6 @@ private Q_SLOTS:
 private:
     enum class RenderMode {
         GlScanout,
-        VulkanScanout,
         PrimarySurface,
     };
 

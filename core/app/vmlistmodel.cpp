@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #include "app/vmlistmodel.h"
 
@@ -88,6 +89,31 @@ void VMModel::onDomainRemoved(Domain *domain)
     beginRemoveRows(QModelIndex(), index, index);
     m_datas.removeAt(index);
     endRemoveRows();
+}
+
+void VMModel::moveItem(int from, int to)
+{
+    if (from == to || from < 0 || to < 0 || from >= m_datas.size() || to >= m_datas.size()) {
+        return;
+    }
+
+    beginMoveRows(QModelIndex(), from, from, QModelIndex(), to > from ? to + 1 : to);
+    m_datas.move(from, to);
+    endMoveRows();
+
+    // Keep Karton's own domain list in the same order so a later refresh does
+    // not undo the move; this also persists the new order.
+    m_karton->moveDomain(from, to);
+}
+
+int VMModel::rowOfUuid(const QString &uuid) const
+{
+    for (int i = 0; i < m_datas.size(); ++i) {
+        if (m_datas[i]->config()->uuid() == uuid) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void VMModel::refreshAllDomains()

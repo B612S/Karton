@@ -3,6 +3,7 @@ SPDX-License-Identifier: CC0-1.0
 SPDX-FileCopyrightText: 2024 Aaron Rainbolt <arraybolt3@gmail.com>
 SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
 SPDX-FileCopyrightText: 2026 Karton contributors
+SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 -->
 
 # Karton
@@ -137,7 +138,7 @@ Global Application Settings provide:
 - spice-client-glib
 - phodav
 - PipeWire
-- Vulkan with external-memory/DMA-BUF support, or OpenGL as a fallback
+- OpenGL (EGL) for the scene graph and the SPICE display
 - Extra CMake Modules
 
 ### Arch Linux
@@ -155,7 +156,7 @@ Development packages:
 sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules \
     qt6-base qt6-declarative qt6-multimedia qt6-tools \
     kirigami kirigami-addons kcoreaddons ki18n kiconthemes qqc2-desktop-style \
-    libvirt libosinfo spice-gtk phodav pipewire mesa vulkan-headers vulkan-icd-loader
+    libvirt libosinfo spice-gtk phodav pipewire mesa
 ```
 
 ## Build from source
@@ -211,11 +212,14 @@ per-VM display resolution and audio preferences.
 
 ### Rendering
 
-Vulkan is used by default, with automatic OpenGL fallback. Force a renderer:
+The scene graph uses OpenGL (EGL) with a 1-frame swap interval; on Wayland the
+compositor provides the presentation sync. Vulkan is intentionally not used:
+Qt 6.12's Vulkan/Wayland swapchain stops presenting after the first fullscreen
+transition on NVIDIA, which left the viewer window without updates.
+
+The software renderer remains available for headless/offscreen use:
 
 ```sh
-KARTON_GRAPHICS_API=opengl ./build/bin/karton
-KARTON_GRAPHICS_API=vulkan ./build/bin/karton
 KARTON_GRAPHICS_API=software ./build/bin/karton
 ```
 

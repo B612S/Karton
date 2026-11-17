@@ -42,7 +42,7 @@ development or testing must pass `-c <same URI>` (usually
 | `img/os/` | Bundled flat OS family icons installed into hicolor. |
 | `core/viewer/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
 | `core/viewer/previewitem.{h,cpp}` | Painted item that displays the latest in-memory preview frame. |
-| `core/viewer/glscanoutrenderer.*`, `core/viewer/primarysurfacerenderer.*`, `core/viewer/vulkanscanoutrenderer.*` | SPICE display rendering backends. |
+| `core/viewer/glscanoutrenderer.*`, `core/viewer/primarysurfacerenderer.*` | SPICE display rendering backends. |
 | `core/libvirt/libvirtmonitor.*`, `core/libvirt/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `core/util/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `core/util/xmlhighlighter.*` | Theme-coloured XML syntax highlighter for the VM XML editor. |
@@ -74,9 +74,8 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 
 Required: CMake >= 3.20, a C++23 compiler, Qt 6, KF6 (Kirigami, I18n,
 CoreAddons, QQC2DesktopStyle, IconThemes), Kirigami Addons >= 1.11, libvirt,
-libosinfo, GLib, spice-client-glib, phodav, PipeWire, Vulkan (default scene graph and SPICE
-scanout import), OpenGL/EGL (fallback renderer), and Extra CMake Modules (ECM)
->= 6.0.
+libosinfo, GLib, spice-client-glib, phodav, PipeWire, OpenGL/EGL (scene graph and
+SPICE scanout), and Extra CMake Modules (ECM) >= 6.0.
 
 On Arch Linux, the relevant packages are roughly:
 
@@ -84,7 +83,7 @@ On Arch Linux, the relevant packages are roughly:
 sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules \
     qt6-base qt6-declarative qt6-multimedia qt6-tools \
     kirigami kirigami-addons kcoreaddons ki18n kiconthemes qqc2-desktop-style \
-    libvirt libosinfo spice-gtk phodav pipewire mesa vulkan-headers vulkan-icd-loader
+    libvirt libosinfo spice-gtk phodav pipewire mesa
 ```
 
 Configure and build out-of-tree:
@@ -350,7 +349,10 @@ Every settings page must look and behave the same:
   VM (`display/<uuid>/width|height`), with presets and a Custom width/height
   pair. When set, the viewer requests that exact
   SPICE resolution, scales the content to fit the screen, and locks the window
-  size; Auto restores normal auto-resize.
+  size; Auto restores normal auto-resize. In fullscreen the fixed resolution is
+  ignored so the guest can follow the screen. The Display page also exposes QXL
+  video memory (`vgamem`, 16–256 MiB) for higher guest resolutions; the change
+  is written to the inactive domain XML and applies after a VM restart.
 - The VM list uses `Karton::domainOsIcon()`/`domainOsName()` and flat
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
   macOS and DOS), installed into hicolor. The VM page uses Luma-style
@@ -420,12 +422,11 @@ Every settings page must look and behave the same:
   `Domain::savePreviewFrame()` also keeps the new frame in memory and emits
   `previewFrameChanged()`. `PreviewItem` paints that `QImage` directly, so the
   QML never reloads a PNG while updating and the preview does not blink.
-- SPICE cursor shapes are rendered by `DomainViewer` as a separate scene-graph
-  overlay, above the display node; the local cursor is hidden while the remote
-  cursor is visible. There is one display node per renderer and one root node
-  that owns both. Client mouse mode sends no SPICE `cursor-move` events, so the
-  overlay follows the local pointer (and a grabbed virtual pointer) instead of
-  the initial `(0, 0)` cursor position.
+- SPICE cursor shapes are installed as the actual host cursor by
+  `DomainViewer::applyGuestCursor()`; no scene-graph cursor overlay is painted.
+  There is one display node per renderer and one root node that owns it. Client
+  mouse mode sends no SPICE `cursor-move` events, so the host cursor follows the
+  local pointer instead of the initial `(0, 0)` cursor position.
 - The viewer's `DomainViewer` must receive keyboard focus after the window
   opens (`forceActiveFocus` in `VMViewerWindow.qml` and on click). Scancodes are
   normalized to evdev by subtracting the X11/xkb keycode offset of 8 on both
@@ -445,11 +446,12 @@ Every settings page must look and behave the same:
   through the agent (spice-vdagent / Windows guest tools); without an agent the
   request is a no-op. `fitGuestToWindow()` forces a fresh request even if the
   target size did not change.
-- Pointer motion calls `QQuickItem::update()` so the local SPICE cursor overlay
-  is repainted on every motion event; without it the cursor looked laggy even
-  though input was sent at full rate. While the pointer is inside the display,
-  a guest `cursor-hide` keeps the last guest cursor and leaves the host cursor
-  blank, so dragging a guest window does not flash the host arrow.
+- The guest cursor is installed as the actual host cursor and no scene-graph
+  cursor overlay is painted, so pointer motion must not call
+  `QQuickItem::update()`; doing so repainted the whole viewer at pointer rate.
+  While the pointer is inside the display, a guest `cursor-hide` keeps the last
+  guest cursor and leaves the host cursor blank, so dragging a guest window
+  does not flash the host arrow.
 - `PrimarySurfaceRenderer` copies SPICE's primary framebuffer into an owned
   `QImage`. The original buffer is unmapped by spice-gtk when the guest changes
   resolution (notably while Windows boots); creating/using a texture from that
@@ -474,16 +476,15 @@ Every settings page must look and behave the same:
   viewer, whether it is running or stopped. UI icons use the monochrome
   `*-symbolic` variants. PCI and Storage have no separate menu actions; they are
   managed inline from SettingsDialog.
-- The scene graph uses Vulkan by default (`QQuickWindow::setGraphicsApi()` in
-  `main.cpp`), with automatic OpenGL fallback when Vulkan is unavailable.
-  `KARTON_GRAPHICS_API=opengl|vulkan|software` overrides the choice.
-  `VulkanScanoutRenderer` imports the SPICE GL scanout DMA-BUF into a
-  `VkImage` using `VK_EXT_external_memory_dma_buf` and
-  `VK_EXT_image_drm_format_modifier`; `main.cpp` enables those device
-  extensions before the scene graph is created. ARGB/XRGB scanouts are sampled
-  directly, RGB565 scanouts are copied to a host buffer and converted to RGBA8.
-  The OpenGL renderer remains available with `KARTON_GRAPHICS_API=opengl`.
-  New domains can use 3D acceleration under Vulkan.
+- The scene graph uses OpenGL (`QQuickWindow::setGraphicsApi()` in `main.cpp`)
+  with a 1-frame swap interval, double buffering and no multisampling. On
+  Wayland the compositor provides the presentation sync. Vulkan is not
+  supported: Qt 6.12's Vulkan/Wayland swapchain stops presenting after the
+  first fullscreen transition on NVIDIA, leaving the viewer window stale.
+  `KARTON_GRAPHICS_API=software` forces the software renderer for
+  headless/offscreen use. `GlScanoutRenderer` imports virtio-gpu GL scanouts
+  through EGL; QXL/TCP guests use `PrimarySurfaceRenderer`. New domains can use
+  3D acceleration through the GL scanout path.
 - Suspend/undefine/define events can arrive while a QML page is open; check for
   valid domain pointers and handle missing files gracefully.
 

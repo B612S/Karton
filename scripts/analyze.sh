@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: BSD-2-Clause
-# SPDX-FileCopyrightText: 2026 Karton contributors
+# SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 #
 # Configure a separate analyzer build with clang-tidy and sanitizers, build it,
 # and run the tests. The normal build tree is left untouched.

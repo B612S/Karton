@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Karton contributors
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 import QtQuick
 import QtQuick.Controls as Controls

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 import QtQuick
 import QtQuick.Layouts
@@ -18,7 +19,7 @@ Kirigami.ScrollablePage {
     readonly property bool hasSavedState: domain ? domain.hasSavedState : false
     property var stats: ({})
 
-    onDomainChanged: stats = domain && domain.isActive ? Karton.domainStats(domain) : ({})
+    onDomainChanged: stats = domain && domain.isActive && Karton.viewerCount === 0 ? Karton.domainStats(domain) : ({})
     onIsRunningChanged: {
         if (!isRunning) {
             stats = ({});
@@ -45,7 +46,10 @@ Kirigami.ScrollablePage {
         id: statsTimer
         interval: 2000
         repeat: true
-        running: root.isRunning && root.visible
+        // The page is hidden behind an open viewer; polling libvirt stats
+        // while the guest runs is unnecessary and any synchronous libvirt
+        // call here would block the GUI thread of the viewer as well.
+        running: root.isRunning && root.visible && Karton.viewerCount === 0
         triggeredOnStart: true
         onTriggered: {
             if (root.domain) {
@@ -259,7 +263,9 @@ Kirigami.ScrollablePage {
 
             PreviewItem {
                 anchors.fill: parent
-                image: domain ? domain.previewFrame : null
+                // A stopped VM has no screen: never leave the last captured
+                // frame (or the frame saved by an earlier session) on display.
+                image: root.isRunning && domain ? domain.previewFrame : null
             }
 
             Rectangle {
@@ -276,6 +282,15 @@ Kirigami.ScrollablePage {
                         duration: Kirigami.Units.shortDuration
                     }
                 }
+            }
+
+            Kirigami.Icon {
+                anchors.centerIn: parent
+                visible: !root.isRunning
+                source: domain ? Karton.domainOsIcon(domain) : "computer-symbolic"
+                width: Kirigami.Units.iconSizes.huge
+                height: width
+                opacity: 0.35
             }
 
             MouseArea {

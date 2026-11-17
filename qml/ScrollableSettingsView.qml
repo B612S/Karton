@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Karton contributors
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 import QtQuick
 import QtQuick.Controls
@@ -10,6 +10,8 @@ Flickable {
     id: root
 
     default property alias contentData: contentWrapper.data
+    // Allows a modal dialog to hide the page scrollbar behind it.
+    property int scrollBarPolicy: ScrollBar.AsNeeded
 
     clip: true
     contentWidth: width
@@ -17,7 +19,7 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
 
     ScrollBar.vertical: ScrollBar {
-        policy: ScrollBar.AsNeeded
+        policy: root.scrollBarPolicy
         width: 10
     }
 

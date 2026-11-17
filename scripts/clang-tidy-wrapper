@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: BSD-2-Clause
-# SPDX-FileCopyrightText: 2026 Karton contributors
+# SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 #
 # clang-tidy does not understand this GCC-only flag emitted by KDE's compiler
 # settings. Strip it before invoking the analyzer.

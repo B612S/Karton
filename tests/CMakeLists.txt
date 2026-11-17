@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# SPDX-FileCopyrightText: 2026 Karton contributors
+# SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 # Autotests are opt-in (KARTON_BUILD_TESTS=ON). They are separate executables,
 # link against a test-only static library and are never installed with Karton.

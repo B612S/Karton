@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2024 Aaron Rainbolt <arraybolt3@gmail.com>
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 import QtQuick
 import org.kde.kirigami as Kirigami
 
 Kirigami.ApplicationWindow {
     id: root
+    objectName: "mainWindow"
 
     width: Kirigami.Units.gridUnit * 50
     height: Kirigami.Units.gridUnit * 35
@@ -34,13 +36,16 @@ Kirigami.ApplicationWindow {
 
     onWidthChanged: if (sizeRestored) mainSizeTimer.restart()
     onHeightChanged: if (sizeRestored) mainSizeTimer.restart()
-    onClosing: {
+    onClosing: (close) => {
+        // Destroying the platform window from inside the close event deadlocks
+        // in QWaylandWindow::reset() (Qt Wayland) and aborts Karton. Ignore the
+        // event, hide the window, close the viewers and leave the event loop;
+        // aboutToQuit exits the process before Qt tears its windows down.
+        close.accepted = false;
         Karton.saveMainWindowSize(width, height);
-        // Close the viewer windows and let Qt quit when the last top-level
-        // window is gone. Calling Qt.quit() here tears down the Wayland
-        // platform windows while they are still processing their close
-        // events, which aborts inside QWaylandWindow::reset().
         Karton.closeAllViewers();
+        root.hide();
+        Qt.quit();
     }
 
     Timer {

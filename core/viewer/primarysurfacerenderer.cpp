@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #include "viewer/primarysurfacerenderer.h"
 
@@ -155,7 +156,7 @@ QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *
         return node;
     }
 
-    QSGTexture *texture = window->createTextureFromImage(m_frame);
+    QSGTexture *texture = window->createTextureFromImage(m_frame, QQuickWindow::TextureIsOpaque);
     if (texture) {
         node->setTexture(texture);
         m_frameUpdated = false;

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # SPDX-FileCopyrightText: 2024 Aaron Rainbolt <arraybolt3@gmail.com>
 # SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+# SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 cmake_minimum_required(VERSION 3.20)
 project(karton VERSION 1.0.0)
@@ -65,6 +66,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Widgets
     Xml
     Multimedia
+    Network
 )
 
 find_package(Libvirt REQUIRED)
@@ -75,7 +77,6 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(PHODAV REQUIRED IMPORTED_TARGET libphodav-3.0)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
 find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
-find_package(Vulkan REQUIRED)
 
 find_package(KF6 REQUIRED COMPONENTS
     Kirigami
@@ -132,6 +133,17 @@ target_sources(karton
     PRIVATE
     main.cpp
     core/app/karton.cpp
+    core/app/karton_private.h
+    core/app/karton_devices.cpp
+    core/app/karton_disk.cpp
+    core/app/karton_domain.cpp
+    core/app/karton_network.cpp
+    core/app/karton_os.cpp
+    core/app/karton_pci.cpp
+    core/app/karton_preview.cpp
+    core/app/karton_settings.cpp
+    core/app/karton_snapshots.cpp
+    core/app/karton_usb.cpp
     core/app/vmlistmodel.cpp
     core/domain/domain.cpp
     core/domain/domainconfig.cpp
@@ -143,8 +155,6 @@ target_sources(karton
     core/viewer/spicedisplayrenderer.h
     core/viewer/glscanoutrenderer.cpp
     core/viewer/primarysurfacerenderer.cpp
-    core/viewer/vulkanscanoutrenderer.cpp
-    core/viewer/vulkanscanoutrenderer.h
     core/viewer/previewitem.cpp
     core/viewer/previewitem.h
     core/domain/domainxmlbuilder.cpp
@@ -200,6 +210,7 @@ target_link_libraries(karton
     Qt6::Widgets
     Qt6::Xml
     Qt6::Multimedia
+    Qt6::Network
     Qt6::GuiPrivate
     KF6::I18n
     KF6::I18nQml
@@ -214,7 +225,6 @@ target_link_libraries(karton
     Glib::Glib
     OpenGL::EGL
     OpenGL::GL
-    Vulkan::Vulkan
 )
 
 install(TARGETS karton ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})

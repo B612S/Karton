@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 import QtQuick
 import QtQuick.Controls as Controls
@@ -27,40 +28,104 @@ Kirigami.ApplicationWindow {
     property alias domainViewerItem: domainViewer
     property int fixedContentWidth: 0
     property int fixedContentHeight: 0
+    // QWindow's default maximum; used to make the window resizable again when
+    // a fixed resolution is switched back to Auto or when going fullscreen.
+    readonly property int unlimitedWindowSize: 16777215
     readonly property bool isFullScreen: visibility === Window.FullScreen
-    // Floating fullscreen bar: tall enough for icon+label buttons, but not a
-    // full-width title bar.
+    // Floating fullscreen bar. It is only visible while
+    // `fullScreenToolbarVisible` is true, so it can never swallow clicks
+    // while invisible.
     readonly property int compactToolbarHeight: 52
     property bool fullScreenToolbarVisible: true
-    property bool toolbarHovered: false
-    property real fullScreenToolbarOpacity: (isFullScreen && !fullScreenToolbarVisible) ? 0 : 1
+    // The desktop style's ToolButton.hovered is not refreshed when the bar
+    // appears under a stationary pointer, so track the hovered button from the
+    // page's HoverHandler instead.
+    property string hoveredToolbarButton: ""
+    property bool toolbarMoved: false
 
-    Behavior on fullScreenToolbarOpacity {
-        NumberAnimation {
-            duration: 180
-            easing.type: Easing.InOutQuad
+    function clampToolbar() {
+        if (!toolbarMoved || !floatingToolbar) {
+            return;
         }
+        floatingToolbar.x = Math.max(0, Math.min(floatingToolbar.x, viewerPage.width - floatingToolbar.width));
+        floatingToolbar.y = 0;
+    }
+
+    function toolbarButtonAt(pageX, pageY) {
+        if (!floatingToolbar || !floatingToolbar.visible) {
+            return "";
+        }
+        const p = floatingToolbar.mapFromItem(viewerPage, pageX, pageY);
+        if (!floatingToolbar.contains(p)) {
+            return "";
+        }
+        const frames = [
+            ["power", powerFrame],
+            ["pause", pauseFrame],
+            ["reboot", rebootFrame],
+            ["fullscreen", fullscreenFrame],
+            ["more", moreFrame]
+        ];
+        for (let i = 0; i < frames.length; ++i) {
+            const name = frames[i][0];
+            const frame = frames[i][1];
+            if (!frame || !frame.visible) {
+                continue;
+            }
+            const local = frame.mapFromItem(floatingToolbar, p.x, p.y);
+            if (local.x >= 0 && local.x < frame.width && local.y >= 0 && local.y < frame.height) {
+                return name;
+            }
+        }
+        return "";
     }
 
     Timer {
         id: toolbarHideTimer
-        interval: 1400
+        interval: 1200
         onTriggered: {
-            if (viewerWindow.isFullScreen && !viewerWindow.toolbarHovered
+            // A drag started on the bar keeps the pointer grab even after it
+            // leaves the bar, so the bar must not fade out from under it.
+            if (viewerWindow.isFullScreen && !toolbarBarHover.hovered && !toolbarDrag.active
                     && !powerMenu.opened && !rebootMenu.opened && !viewerMenu.opened) {
                 viewerWindow.fullScreenToolbarVisible = false;
+                viewerWindow.hoveredToolbarButton = "";
             }
         }
     }
 
-    onVisibilityChanged: {
+    onIsFullScreenChanged: {
         if (isFullScreen) {
+            // Fixed-size limits must not constrain or stretch a fullscreen
+            // window; the guest follows the whole screen there.
+            resetWindowSizeLimits();
             fullScreenToolbarVisible = true;
             toolbarHideTimer.restart();
         } else {
             fullScreenToolbarVisible = true;
             toolbarHideTimer.stop();
+            // Restore the configured windowed size (or fit the guest) once the
+            // normal window geometry and the toolbar are back.
+            Qt.callLater(applyDisplayMode);
         }
+    }
+
+    function toggleFullScreen() {
+        if (visibility === Window.FullScreen) {
+            showNormal();
+            return;
+        }
+        // Release fixed limits before asking the compositor for fullscreen;
+        // otherwise a FullHD window can enter fullscreen stretched.
+        resetWindowSizeLimits();
+        showFullScreen();
+        // Start the auto-hide timeout explicitly; visibility changes can be
+        // delivered before isFullScreen updates, which used to leave the
+        // toolbar without a running hide timer until it was hovered.
+        Qt.callLater(function() {
+            fullScreenToolbarVisible = true;
+            toolbarHideTimer.restart();
+        });
     }
 
     function registerViewer() {
@@ -71,12 +136,35 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    // The window chrome above the guest is the Kirigami global toolbar. Using
+    // the aspect-fitted DomainViewer height here used to compute the wrong
+    // height (and even a negative one) whenever the guest aspect differed from
+    // the saved window size.
+    function chromeHeight() {
+        if (viewerWindow.isFullScreen) {
+            return 0;
+        }
+        const toolbar = pageStack.globalToolBar;
+        if (toolbar && toolbar.height > 0) {
+            return Math.round(toolbar.height);
+        }
+        const difference = viewerWindow.height - viewerPage.height;
+        return difference > 0 ? Math.round(difference) : 48;
+    }
+
+    function resetWindowSizeLimits() {
+        viewerWindow.minimumWidth = 0;
+        viewerWindow.maximumWidth = viewerWindow.unlimitedWindowSize;
+        viewerWindow.minimumHeight = 0;
+        viewerWindow.maximumHeight = viewerWindow.unlimitedWindowSize;
+    }
+
     function fitWindowToGuest() {
-        if (fixedContentWidth > 0 || domainViewer.agentConnected || domainViewer.implicitWidth <= 0 || domainViewer.implicitHeight <= 0 || !viewerWindow.visible) {
+        if (viewerWindow.isFullScreen || fixedContentWidth > 0 || domainViewer.agentConnected || domainViewer.implicitWidth <= 0 || domainViewer.implicitHeight <= 0 || !viewerWindow.visible) {
             return;
         }
         const aspect = domainViewer.implicitWidth / domainViewer.implicitHeight;
-        const chrome = Math.max(0, viewerWindow.height - domainViewer.height);
+        const chrome = chromeHeight();
         const maxContentHeight = Screen.height * 0.85 - chrome;
         let contentWidth = viewerWindow.width;
         let contentHeight = contentWidth / aspect;
@@ -88,22 +176,74 @@ Kirigami.ApplicationWindow {
         viewerWindow.height = Math.round(contentHeight + chrome);
     }
 
+    // The configured guest resolution always wins over whatever size was last
+    // written to karton.conf. This is what guarantees a fixed-resolution VM
+    // (for example FullHD) reopens at that size even after a crash while the
+    // viewer was fullscreen or had an unrelated geometry.
     function applyFixedWindowSize() {
-        if (fixedContentWidth <= 0 || fixedContentHeight <= 0) {
+        if (fixedContentWidth <= 0 || fixedContentHeight <= 0 || viewerWindow.isFullScreen) {
             return;
         }
         const scale = Math.min(1.0, Screen.width * 0.9 / fixedContentWidth, Screen.height * 0.85 / fixedContentHeight);
         const contentWidth = Math.round(fixedContentWidth * scale);
         const contentHeight = Math.round(fixedContentHeight * scale);
-        const chromeHeight = Math.max(48, viewerWindow.height - domainViewer.height);
+        const chrome = chromeHeight();
         const windowWidth = Math.max(320, contentWidth);
-        const windowHeight = Math.max(240, contentHeight + chromeHeight);
+        const windowHeight = Math.max(240, contentHeight + chrome);
+        if (viewerWindow.width === windowWidth
+                && viewerWindow.height === windowHeight
+                && viewerWindow.minimumWidth === windowWidth
+                && viewerWindow.maximumWidth === windowWidth
+                && viewerWindow.minimumHeight === windowHeight
+                && viewerWindow.maximumHeight === windowHeight) {
+            return;
+        }
+        // Clear stale limits before changing the size: going from a smaller
+        // fixed mode to a larger one (or back from fullscreen) must not be
+        // clamped by the previous maximum.
+        resetWindowSizeLimits();
+        viewerWindow.width = windowWidth;
+        viewerWindow.height = windowHeight;
         viewerWindow.minimumWidth = windowWidth;
         viewerWindow.maximumWidth = windowWidth;
         viewerWindow.minimumHeight = windowHeight;
         viewerWindow.maximumHeight = windowHeight;
-        viewerWindow.width = windowWidth;
-        viewerWindow.height = windowHeight;
+    }
+
+    function applyDisplayMode() {
+        if (fixedContentWidth > 0 && fixedContentHeight > 0) {
+            applyFixedWindowSize();
+        } else if (!viewerWindow.isFullScreen) {
+            fitWindowToGuest();
+        }
+    }
+
+    // Called when the Display settings page saves a resolution for this VM.
+    function reloadDisplayResolution() {
+        if (!domain) {
+            return;
+        }
+        const resolution = Karton.domainDisplayResolution(domain);
+        const newWidth = resolution.width > 0 ? resolution.width : 0;
+        const newHeight = resolution.height > 0 ? resolution.height : 0;
+        if (newWidth === fixedContentWidth && newHeight === fixedContentHeight) {
+            return;
+        }
+
+        fixedContentWidth = newWidth;
+        fixedContentHeight = newHeight;
+        domainViewer.setFixedDisplayResolution(newWidth, newHeight);
+
+        if (viewerWindow.isFullScreen) {
+            // Fullscreen follows the screen, not the per-VM fixed mode.
+            resetWindowSizeLimits();
+            domainViewer.fitGuestToWindow();
+        } else if (newWidth > 0) {
+            applyFixedWindowSize();
+        } else {
+            resetWindowSizeLimits();
+            Qt.callLater(fitWindowToGuest);
+        }
     }
 
     Component.onCompleted: {
@@ -116,23 +256,39 @@ Kirigami.ApplicationWindow {
         }
         domainViewer.audioPlaybackEnabled = Karton.audioPlaybackEnabled(domain);
         domainViewer.microphoneEnabled = Karton.microphoneEnabled(domain);
-        const savedSize = Karton.viewerWindowSize(domain);
-        if (savedSize.width > 0 && savedSize.height > 0) {
-            width = Math.max(320, Math.min(savedSize.width, Screen.width * 0.95));
-            height = Math.max(240, Math.min(savedSize.height, Screen.height * 0.95));
+        // A fixed resolution defines the window size; never let a stale size
+        // from a previous (possibly crashed or fullscreen) session override it.
+        if (fixedContentWidth <= 0) {
+            const savedSize = Karton.viewerWindowSize(domain);
+            if (savedSize.width > 0 && savedSize.height > 0) {
+                width = Math.max(320, Math.min(savedSize.width, Screen.width * 0.95));
+                height = Math.max(240, Math.min(savedSize.height, Screen.height * 0.95));
+            }
         }
         sizeRestored = true;
-        if (fixedContentWidth > 0) {
-            Qt.callLater(applyFixedWindowSize);
-        }
+        // Apply the fixed size before the window is mapped so a stale saved
+        // geometry cannot even flash on screen, then refine it once the
+        // toolbar has been laid out.
+        applyDisplayMode();
+        Qt.callLater(applyDisplayMode);
         wasRunning = isRunning;
         Qt.callLater(function() {
             domainViewer.forceActiveFocus();
         });
     }
 
-    onWidthChanged: if (sizeRestored) viewerSizeTimer.restart()
-    onHeightChanged: if (sizeRestored) viewerSizeTimer.restart()
+    onWidthChanged: {
+        if (sizeRestored && !isFullScreen) {
+            viewerSizeTimer.restart();
+        }
+        clampToolbar();
+    }
+    onHeightChanged: {
+        if (sizeRestored && !isFullScreen) {
+            viewerSizeTimer.restart();
+        }
+        clampToolbar();
+    }
 
     Component.onDestruction: {
         if (viewerRegistered) {
@@ -146,30 +302,41 @@ Kirigami.ApplicationWindow {
         if (active) {
             Qt.callLater(function() {
                 domainViewer.forceActiveFocus();
-                domainViewer.syncHostClipboard();
             });
         }
     }
 
     onVisibleChanged: {
         if (visible) {
-            Qt.callLater(fitWindowToGuest);
+            // The toolbar is laid out by now; reapply the fixed size so the
+            // window opens at exactly the configured content size.
+            Qt.callLater(applyDisplayMode);
         }
     }
 
     onClosing: (close) => {
-        Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height);
+        // Accepting the close lets QWindow::event() destroy the platform window
+        // synchronously, which deadlocks Qt Wayland in QWaylandWindow::reset()
+        // while the scene graph render thread still holds its lock (and then
+        // aborts on the lock timeout). Keep the close event ignored, hide the
+        // window and delete the QWindow later from the event loop instead.
+        close.accepted = false;
+        // A fullscreen geometry is not a meaningful windowed size; keep the
+        // last normal size so a crash there cannot leave the next window huge.
+        if (!viewerWindow.isFullScreen) {
+            Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height);
+        }
         if (viewerRegistered) {
             viewerRegistered = false;
             Karton.unregisterViewer(viewerWindow);
             Karton.viewerClosed();
         }
         domainViewer.disconnectFromSpice();
-        close.accepted = true;
-        // Do not destroy the QWindow from its close handler. Qt Wayland
-        // aborts in QWaylandWindow::reset() when the platform window is torn
-        // down while the close event is still on the stack. Hiding it keeps
-        // the application stable; the process exits after the main window.
+        // Keep the hidden QWindow alive. Deleting it later still tears down
+        // the Wayland platform window while the scene-graph render thread can
+        // be inside QWaylandWindow, which deadlocks in QWaylandWindow::reset()
+        // exactly like accepting the close event did. The process exits via
+        // std::_Exit() on quit, before Qt destroys its windows.
         viewerWindow.hide();
     }
 
@@ -177,7 +344,11 @@ Kirigami.ApplicationWindow {
         id: viewerSizeTimer
         interval: 500
         repeat: false
-        onTriggered: Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height)
+        onTriggered: {
+            if (!viewerWindow.isFullScreen) {
+                Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height);
+            }
+        }
     }
 
     Connections {
@@ -185,6 +356,11 @@ Kirigami.ApplicationWindow {
         function onDomainRemoved(removedDomain) {
             if (removedDomain === viewerWindow.domain) {
                 viewerWindow.close();
+            }
+        }
+        function onDisplayResolutionChanged(changedDomain) {
+            if (changedDomain === viewerWindow.domain) {
+                viewerWindow.reloadDisplayResolution();
             }
         }
     }
@@ -209,8 +385,8 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    // In fullscreen the normal window header is removed entirely; the
-    // floating bar below is the only chrome over the guest.
+    // In fullscreen the real header is removed and the floating bar below is
+    // the only chrome over the guest.
     Binding {
         target: pageStack.globalToolBar
         property: "preferredHeight"
@@ -230,41 +406,115 @@ Kirigami.ApplicationWindow {
                 if (!viewerWindow.isFullScreen) {
                     return;
                 }
-                const nearTop = point.position.y <= viewerWindow.compactToolbarHeight + 20;
-                viewerWindow.toolbarHovered = nearTop;
-                if (nearTop) {
+                viewerWindow.hoveredToolbarButton = viewerWindow.fullScreenToolbarVisible
+                        ? viewerWindow.toolbarButtonAt(point.position.x, point.position.y) : "";
+            }
+            onHoveredChanged: {
+                if (!hovered) {
+                    viewerWindow.hoveredToolbarButton = "";
+                }
+            }
+        }
+
+        // Invisible hover target that exactly matches the hidden toolbar.
+        // The toolbar is revealed only when the pointer is over the toolbar
+        // itself, not anywhere along the top edge of the display.
+        Item {
+            id: toolbarHoverArea
+            x: floatingToolbar.x
+            y: floatingToolbar.y
+            width: floatingToolbar.width
+            height: floatingToolbar.height
+            z: 90
+            visible: viewerWindow.isFullScreen
+            enabled: !viewerWindow.fullScreenToolbarVisible
+
+            HoverHandler {
+                onPointChanged: {
+                    if (!hovered || !viewerWindow.isFullScreen) {
+                        return;
+                    }
                     viewerWindow.fullScreenToolbarVisible = true;
                     toolbarHideTimer.stop();
-                } else {
-                    toolbarHideTimer.restart();
+                    const pagePoint = toolbarHoverArea.mapToItem(viewerPage, point.position.x, point.position.y);
+                    viewerWindow.hoveredToolbarButton = viewerWindow.toolbarButtonAt(pagePoint.x, pagePoint.y);
+                }
+                onHoveredChanged: {
+                    if (!viewerWindow.isFullScreen) {
+                        return;
+                    }
+                    if (!hovered) {
+                        toolbarHideTimer.restart();
+                        return;
+                    }
+                    viewerWindow.fullScreenToolbarVisible = true;
+                    toolbarHideTimer.stop();
+                    const pagePoint = toolbarHoverArea.mapToItem(viewerPage, point.position.x, point.position.y);
+                    viewerWindow.hoveredToolbarButton = viewerWindow.toolbarButtonAt(pagePoint.x, pagePoint.y);
                 }
             }
         }
 
         Rectangle {
             id: floatingToolbar
-            anchors.top: parent.top
-            anchors.topMargin: 8
-            anchors.horizontalCenter: parent.horizontalCenter
+            x: Math.max(0, (parent.width - width) / 2)
+            y: 0
             width: Math.min(viewerPage.width - 24, toolbarContent.implicitWidth + 32)
             height: viewerWindow.compactToolbarHeight
             radius: 12
-            color: Qt.rgba(0, 0, 0, 0.58)
-            visible: viewerWindow.isFullScreen
-            opacity: viewerWindow.fullScreenToolbarOpacity
-            enabled: viewerWindow.fullScreenToolbarVisible
+            topLeftRadius: 0
+            topRightRadius: 0
+            bottomLeftRadius: 12
+            bottomRightRadius: 12
+            color: Qt.rgba(0, 0, 0, 0.72)
+            visible: viewerWindow.isFullScreen && (viewerWindow.fullScreenToolbarVisible || opacity > 0.01)
+            opacity: viewerWindow.fullScreenToolbarVisible ? 1 : 0
+            enabled: viewerWindow.fullScreenToolbarVisible && opacity > 0.5
             z: 100
 
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.InOutQuad
+                }
+            }
+
+            onWidthChanged: {
+                if (viewerWindow.toolbarMoved) {
+                    viewerWindow.clampToolbar();
+                }
+            }
+
+            DragHandler {
+                id: toolbarDrag
+                target: floatingToolbar
+                acceptedButtons: Qt.LeftButton
+                dragThreshold: 4
+                xAxis.minimum: 0
+                xAxis.maximum: Math.max(0, viewerPage.width - floatingToolbar.width)
+                yAxis.enabled: false
+
+                onActiveChanged: {
+                    if (active) {
+                        viewerWindow.toolbarMoved = true;
+                        toolbarHideTimer.stop();
+                    } else {
+                        viewerWindow.clampToolbar();
+                        toolbarHideTimer.restart();
+                    }
+                }
+            }
+
             HoverHandler {
+                id: toolbarBarHover
                 onHoveredChanged: {
                     if (!viewerWindow.isFullScreen) {
                         return;
                     }
-                    viewerWindow.toolbarHovered = hovered;
                     if (hovered) {
                         viewerWindow.fullScreenToolbarVisible = true;
                         toolbarHideTimer.stop();
-                    } else {
+                    } else if (!toolbarDrag.active) {
                         toolbarHideTimer.restart();
                     }
                 }
@@ -275,10 +525,15 @@ Kirigami.ApplicationWindow {
                 anchors.fill: parent
                 anchors.leftMargin: 16
                 anchors.rightMargin: 8
-                spacing: 4
+                anchors.topMargin: 6
+                anchors.bottomMargin: 6
+                spacing: 8
 
                 Controls.Label {
                     Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignVCenter
+                    verticalAlignment: Text.AlignVCenter
                     text: viewerWindow.title
                     color: "white"
                     elide: Text.ElideRight
@@ -286,105 +541,129 @@ Kirigami.ApplicationWindow {
                 }
 
                 Row {
-                    spacing: 2
+                    spacing: 8
+                    Layout.alignment: Qt.AlignVCenter
 
-                    Controls.Button {
-                        id: powerButton
-                        text: viewerWindow.isRunning ? i18n("Shut Down") : i18n("Start")
-                        icon.name: viewerWindow.isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
-                        flat: true
-                        hoverEnabled: true
+                    Rectangle {
+                        id: powerFrame
                         width: 120
                         height: 40
-                        onClicked: {
-                            if (viewerWindow.isRunning) {
-                                Karton.stopDomain(viewerWindow.domain);
-                            } else if (Karton.startDomain(viewerWindow.domain)) {
-                                viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", viewerWindow.domain.config.name));
+                        radius: 8
+                        color: viewerWindow.hoveredToolbarButton === "power" || powerButton.hovered || powerButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+
+                        Controls.ToolButton {
+                            id: powerButton
+                            anchors.fill: parent
+                            text: viewerWindow.isRunning ? i18n("Shut Down") : i18n("Start")
+                            icon.name: viewerWindow.isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            onClicked: {
+                                if (viewerWindow.isRunning) {
+                                    Karton.stopDomain(viewerWindow.domain);
+                                } else if (Karton.startDomain(viewerWindow.domain)) {
+                                    viewerWindow.showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Starting VM: %1!", viewerWindow.domain.config.name));
+                                }
                             }
-                        }
-                        background: Rectangle {
-                            radius: 8
-                            color: powerButton.down ? Qt.rgba(1, 1, 1, 0.22) : powerButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
                         }
                     }
 
-                    Controls.Button {
-                        id: pauseButton
+                    Rectangle {
+                        id: pauseFrame
                         visible: viewerWindow.isRunning
-                        text: viewerWindow.domain && viewerWindow.domain.isPaused ? i18n("Resume") : i18n("Pause")
-                        icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
-                        flat: true
-                        hoverEnabled: true
                         width: 100
                         height: 40
-                        onClicked: {
-                            if (viewerWindow.domain.isPaused) {
-                                Karton.resumeDomain(viewerWindow.domain);
-                            } else {
-                                Karton.pauseDomain(viewerWindow.domain);
+                        radius: 8
+                        color: viewerWindow.hoveredToolbarButton === "pause" || pauseButton.hovered || pauseButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+
+                        Controls.ToolButton {
+                            id: pauseButton
+                            anchors.fill: parent
+                            text: viewerWindow.domain && viewerWindow.domain.isPaused ? i18n("Resume") : i18n("Pause")
+                            icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            onClicked: {
+                                if (viewerWindow.domain.isPaused) {
+                                    Karton.resumeDomain(viewerWindow.domain);
+                                } else {
+                                    Karton.pauseDomain(viewerWindow.domain);
+                                }
                             }
-                        }
-                        background: Rectangle {
-                            radius: 8
-                            color: pauseButton.down ? Qt.rgba(1, 1, 1, 0.22) : pauseButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
                         }
                     }
 
-                    Controls.Button {
-                        id: rebootButton
+                    Rectangle {
+                        id: rebootFrame
                         visible: viewerWindow.isRunning
-                        text: i18n("Reboot")
-                        icon.name: "system-reboot-symbolic"
-                        flat: true
-                        hoverEnabled: true
                         width: 100
                         height: 40
-                        onClicked: Karton.rebootDomain(viewerWindow.domain)
-                        background: Rectangle {
-                            radius: 8
-                            color: rebootButton.down ? Qt.rgba(1, 1, 1, 0.22) : rebootButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                        }
-                    }
+                        radius: 8
+                        color: viewerWindow.hoveredToolbarButton === "reboot" || rebootButton.hovered || rebootButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
 
-                    Controls.Button {
-                        id: fullscreenButton
-                        text: ""
-                        icon.name: "view-fullscreen-symbolic"
-                        flat: true
-                        hoverEnabled: true
-                        width: 40
-                        height: 40
-                        display: Controls.AbstractButton.IconOnly
-                        onClicked: {
-                            if (viewerWindow.visibility === Window.FullScreen) {
-                                viewerWindow.showNormal();
-                            } else {
-                                viewerWindow.showFullScreen();
+                        Controls.ToolButton {
+                            id: rebootButton
+                            anchors.fill: parent
+                            text: i18n("Reboot")
+                            icon.name: "system-reboot-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            onClicked: {
+                                Karton.rebootDomain(viewerWindow.domain);
                             }
                         }
-                        background: Rectangle {
-                            radius: 8
-                            color: fullscreenButton.down ? Qt.rgba(1, 1, 1, 0.22) : fullscreenButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                    }
+
+                    Rectangle {
+                        id: fullscreenFrame
+                        width: 40
+                        height: 40
+                        radius: 8
+                        color: viewerWindow.hoveredToolbarButton === "fullscreen" || fullscreenButton.hovered || fullscreenButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+
+                        Controls.ToolButton {
+                            id: fullscreenButton
+                            anchors.fill: parent
+                            icon.name: "view-fullscreen-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            display: Controls.AbstractButton.IconOnly
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            Controls.ToolTip.visible: hovered
+                            Controls.ToolTip.text: i18n("Exit Fullscreen")
+                            onClicked: viewerWindow.toggleFullScreen()
                         }
                     }
 
-                    Controls.Button {
-                        id: moreButton
-                        text: i18n("More")
-                        icon.name: "view-more-symbolic"
-                        flat: true
-                        hoverEnabled: true
+                    Rectangle {
+                        id: moreFrame
                         width: 40
                         height: 40
-                        display: Controls.AbstractButton.IconOnly
-                        onClicked: {
-                            domainViewer.releasePointerGrab();
-                            viewerMenu.popup();
-                        }
-                        background: Rectangle {
-                            radius: 8
-                            color: moreButton.down ? Qt.rgba(1, 1, 1, 0.22) : moreButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        radius: 8
+                        color: viewerWindow.hoveredToolbarButton === "more" || moreButton.hovered || moreButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+
+                        Controls.ToolButton {
+                            id: moreButton
+                            anchors.fill: parent
+                            icon.name: "view-more-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            display: Controls.AbstractButton.IconOnly
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            Controls.ToolTip.visible: hovered
+                            Controls.ToolTip.text: i18n("More")
+                            onClicked: {
+                                domainViewer.releasePointerGrab();
+                                viewerMenu.popup();
+                            }
                         }
                     }
                 }
@@ -454,13 +733,7 @@ Kirigami.ApplicationWindow {
             },
             Kirigami.Action {
                 icon.name: "view-fullscreen-symbolic"
-                onTriggered: {
-                    if (viewerWindow.visibility === Window.FullScreen) {
-                        viewerWindow.showNormal();
-                    } else {
-                        viewerWindow.showFullScreen();
-                    }
-                }
+                onTriggered: viewerWindow.toggleFullScreen()
             },
             Kirigami.Action {
                 text: i18n("More")
@@ -573,6 +846,11 @@ Kirigami.ApplicationWindow {
 
         DomainViewer {
             id: domainViewer
+
+            // Hovering the top edge of the guest (which is the item under the
+            // pointer once the floating toolbar has faded out) must bring the
+            // toolbar back. The page-level HoverHandler alone could miss this
+            // after the toolbar was hidden under a stationary pointer.
 
             property DevicePixelRatioHelper dprHelper: DevicePixelRatioHelper {
                 window: domainViewer.Window.window

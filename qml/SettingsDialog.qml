@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Karton contributors
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 import QtQuick
 import QtQuick.Layouts
@@ -32,6 +32,13 @@ Kirigami.Dialog {
     property var parentWindow: null
     property bool saving: false
     property string pendingName: ""
+    // Baseline of the values that the footer Save button writes. The button
+    // stays disabled until one of them actually differs, so simply opening
+    // the dialog (or reverting an edit) does not enable it.
+    property string savedSettings: ""
+    property bool formReady: false
+    readonly property bool hasChanges: formReady && savedSettings.length > 0
+        && JSON.stringify(currentSettings()) !== savedSettings
     property var hardware: ({})
     property var disks: []
     property var interfaces: []
@@ -93,6 +100,8 @@ Kirigami.Dialog {
         if (!domain) {
             return;
         }
+        // Suppress dirty tracking while the controls are being repopulated.
+        formReady = false;
         const currentDomain = Karton.domainByUuid(domain.config.uuid);
         if (currentDomain && currentDomain !== domain) {
             domain = currentDomain;
@@ -115,6 +124,7 @@ Kirigami.Dialog {
         bootCombo.currentIndex = Math.max(0, bootDevices.indexOf(hardware.bootDev));
         videoCombo.currentIndex = Math.max(0, videoModels.indexOf(hardware.videoModel));
         videoHeadsSpin.value = Math.max(1, hardware.videoHeads || 1);
+        videoMemorySpin.value = Math.max(16, Math.min(256, Math.round((hardware.videoMemoryKiB || 16384) / 1024)));
         accel3dCheck.checked = hardware.accel3d === true;
         soundCombo.currentIndex = Math.max(0, soundModels.indexOf(hardware.soundModel));
         soundOutputCheck.checked = Karton.audioPlaybackEnabled(domain);
@@ -167,6 +177,56 @@ Kirigami.Dialog {
             displayCustomHeight.value = resolution.height;
         }
         displayResolutionCombo.currentIndex = resolutionIndex;
+        clipboardTextCombo.currentIndex = Karton.clipboardTextMode();
+        clipboardFilesCombo.currentIndex = Karton.clipboardFilesMode();
+        markSettingsSaved();
+        formReady = true;
+    }
+
+    function currentSettings() {
+        if (!domain) {
+            return null;
+        }
+        let resolutionWidth = 0;
+        let resolutionHeight = 0;
+        if (displayResolutionCombo.currentIndex === displayResolutions.length - 1) {
+            resolutionWidth = displayCustomWidth.value;
+            resolutionHeight = displayCustomHeight.value;
+        } else {
+            const resolution = displayResolutions[Math.max(0, displayResolutionCombo.currentIndex)];
+            resolutionWidth = resolution.width;
+            resolutionHeight = resolution.height;
+        }
+        return {
+            name: nameField.text.trim(),
+            memory: memorySpinBox.value,
+            cpus: cpuSpinBox.value,
+            firmware: firmwareCombo.currentIndex === 1 ? "uefi" : "bios",
+            secureBoot: secureBootCheck.checked,
+            bootDev: bootDevices[Math.max(0, bootCombo.currentIndex)],
+            videoModel: videoModels[Math.max(0, videoCombo.currentIndex)],
+            videoHeads: videoHeadsSpin.value,
+            videoMemory: videoMemorySpin.value,
+            accel3d: accel3dCheck.checked,
+            soundModel: soundModels[Math.max(0, soundCombo.currentIndex)],
+            tpmEnabled: tpmEnabledCheck.checked,
+            tpmModel: ["tpm-crb", "tpm-tis"][Math.max(0, tpmModelCombo.currentIndex)],
+            tpmVersion: ["2.0", "1.2"][Math.max(0, tpmVersionCombo.currentIndex)],
+            description: descriptionField.text,
+            resolutionWidth: resolutionWidth,
+            resolutionHeight: resolutionHeight,
+            autostart: autostartCheck.checked,
+            audioPlayback: soundOutputCheck.checked,
+            microphone: microphoneCheck.checked,
+            clipboardText: clipboardTextCombo.currentIndex,
+            clipboardFiles: clipboardFilesCombo.currentIndex,
+            memoryBacking: memoryBackingCheck.checked
+        };
+    }
+
+    function markSettingsSaved() {
+        const state = currentSettings();
+        savedSettings = state === null ? "" : JSON.stringify(state);
     }
 
     function loadXml(xml) {
@@ -334,13 +394,52 @@ Kirigami.Dialog {
     }
 
     onClosed: {
+        formReady = false;
         categoryList.currentIndex = 0;
         categoryList.positionViewAtBeginning();
     }
 
+    function applyAudioToViewer() {
+        const viewer = Karton.viewerForDomain(root.domain);
+        if (viewer && viewer.domainViewerItem) {
+            viewer.domainViewerItem.audioPlaybackEnabled = soundOutputCheck.checked;
+            viewer.domainViewerItem.microphoneEnabled = microphoneCheck.checked;
+        }
+    }
+
     function save() {
-        if (!domain || nameField.text.trim() === "") {
+        if (!domain || saving || nameField.text.trim() === "" || !hasChanges) {
             return;
+        }
+
+        // These values used to be written as soon as their control changed.
+        // They are part of the dialog now and are committed by Save together
+        // with the rest of the settings.
+        if (autostartCheck.checked !== (domain.autostart === true)) {
+            if (!Karton.setAutostart(domain, autostartCheck.checked)) {
+                return;
+            }
+        }
+        Karton.saveAudioPlaybackEnabled(domain, soundOutputCheck.checked);
+        Karton.saveMicrophoneEnabled(domain, microphoneCheck.checked);
+        applyAudioToViewer();
+
+        Karton.saveClipboardTextMode(clipboardTextCombo.currentIndex);
+        const oldFilesMode = Karton.clipboardFilesMode();
+        const newFilesMode = clipboardFilesCombo.currentIndex;
+        Karton.saveClipboardFilesMode(newFilesMode);
+        if (newFilesMode !== oldFilesMode) {
+            if (newFilesMode === 1 || newFilesMode === 3) {
+                Karton.ensureWebdavChannel(domain);
+            } else {
+                Karton.disableWebdavChannel(domain);
+            }
+        }
+
+        if (memoryBackingCheck.checked !== (hardware.sharedMemoryBacking === true)) {
+            if (!Karton.setSharedMemoryBacking(domain, memoryBackingCheck.checked)) {
+                return;
+            }
         }
 
         const hw = {
@@ -349,6 +448,7 @@ Kirigami.Dialog {
             bootDev: bootDevices[bootCombo.currentIndex],
             videoModel: videoModels[videoCombo.currentIndex],
             videoHeads: videoHeadsSpin.value,
+            videoMemory: videoMemorySpin.value,
             accel3d: accel3dCheck.checked,
             soundModel: soundModels[soundCombo.currentIndex],
             tpmEnabled: tpmEnabledCheck.checked,
@@ -380,7 +480,8 @@ Kirigami.Dialog {
             || cpuSpinBox.value !== domain.config.cpus;
 
         if (!changed) {
-            close();
+            // Keep the dialog open; the user may want to adjust more settings.
+            refresh();
             applicationWindow().showPassiveNotification(i18n("Settings saved"));
             return;
         }
@@ -408,7 +509,8 @@ Kirigami.Dialog {
             root.saving = false;
             root.pendingName = "";
             if (success) {
-                root.close();
+                // Do not close on save: refresh the form and stay open.
+                root.refresh();
                 applicationWindow().showPassiveNotification(i18n("Settings saved"));
             }
         }
@@ -424,7 +526,8 @@ Kirigami.Dialog {
         Kirigami.Action {
             text: i18n("Save")
             icon.name: "dialog-ok-symbolic"
-            enabled: !root.saving && root.domain !== null
+            enabled: !root.saving && root.domain !== null && root.hasChanges
+                && nameField.text.trim() !== ""
             onTriggered: root.save()
         },
         Kirigami.Action {
@@ -621,7 +724,6 @@ Kirigami.Dialog {
                         Controls.CheckBox {
                             id: autostartCheck
                             Layout.alignment: Qt.AlignRight
-                            onToggled: if (root.domain && checked !== root.domain.autostart) Karton.setAutostart(root.domain, checked)
                         }
                         Controls.Label {
                             text: i18n("Description")
@@ -1199,6 +1301,21 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
+                            text: i18n("Video memory (MiB)")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.SpinBox {
+                            id: videoMemorySpin
+                            from: 16
+                            to: 256
+                            stepSize: 8
+                            editable: true
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
                             text: i18n("Heads")
                             font.pixelSize: 14
                             Layout.fillWidth: true
@@ -1308,13 +1425,6 @@ Kirigami.Dialog {
                         Controls.CheckBox {
                             id: soundOutputCheck
                             Layout.alignment: Qt.AlignRight
-                            onToggled: {
-                                Karton.saveAudioPlaybackEnabled(root.domain, checked);
-                                const viewer = Karton.viewerForDomain(root.domain);
-                                if (viewer && viewer.domainViewerItem) {
-                                    viewer.domainViewerItem.audioPlaybackEnabled = checked;
-                                }
-                            }
                         }
                         Controls.Label {
                             text: i18n("Microphone")
@@ -1325,13 +1435,6 @@ Kirigami.Dialog {
                         Controls.CheckBox {
                             id: microphoneCheck
                             Layout.alignment: Qt.AlignRight
-                            onToggled: {
-                                Karton.saveMicrophoneEnabled(root.domain, checked);
-                                const viewer = Karton.viewerForDomain(root.domain);
-                                if (viewer && viewer.domainViewerItem) {
-                                    viewer.domainViewerItem.microphoneEnabled = checked;
-                                }
-                            }
                         }
                     }
                     Item { Layout.fillHeight: true }
@@ -1783,11 +1886,6 @@ Kirigami.Dialog {
                     Controls.CheckBox {
                         id: memoryBackingCheck
                         Layout.alignment: Qt.AlignRight
-                        onToggled: {
-                            if (!root.optionalUpdating && Karton.setSharedMemoryBacking(root.domain, checked)) {
-                                root.refresh();
-                            }
-                        }
                     }
                 }
 
@@ -2060,8 +2158,6 @@ Kirigami.Dialog {
                                 i18n("Guest to host"),
                                 i18n("Bidirectional")
                             ]
-                            currentIndex: Karton.clipboardTextMode()
-                            onActivated: Karton.saveClipboardTextMode(index)
                         }
                         Controls.Label { text: i18n("Files"); Layout.fillWidth: true }
                         Controls.ComboBox {
@@ -2073,15 +2169,6 @@ Kirigami.Dialog {
                                 i18n("Guest to host"),
                                 i18n("Bidirectional")
                             ]
-                            currentIndex: Karton.clipboardFilesMode()
-                            onActivated: {
-                                Karton.saveClipboardFilesMode(index);
-                                if (index === 1 || index === 3) {
-                                    Karton.ensureWebdavChannel(root.domain);
-                                } else {
-                                    Karton.disableWebdavChannel(root.domain);
-                                }
-                            }
                         }
                     }
                     Controls.Label {
@@ -2195,6 +2282,17 @@ Kirigami.Dialog {
         property string shareDriver: ""
         property string shareAccess: ""
         property bool shareReadonly: false
+        property string savedState: ""
+
+        function currentState() {
+            return JSON.stringify({
+                source: fsEditSource.text.trim(),
+                target: fsEditTarget.text.trim().length > 0 ? fsEditTarget.text.trim() : "share",
+                driver: fsEditDriver.currentText,
+                access: fsEditAccess.currentText,
+                readonly: fsEditReadonly.checked
+            });
+        }
 
         background: Rectangle {
             color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
@@ -2210,6 +2308,7 @@ Kirigami.Dialog {
             fsEditDriver.currentIndex = Math.max(0, ["9p", "virtiofs"].indexOf(shareDriver));
             fsEditAccess.currentIndex = Math.max(0, ["passthrough", "mapped", "squash"].indexOf(shareAccess));
             fsEditReadonly.checked = shareReadonly;
+            savedState = currentState();
         }
 
         ColumnLayout {
@@ -2253,14 +2352,11 @@ Kirigami.Dialog {
 
         customFooterActions: [
             Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel-symbolic"
-                onTriggered: filesystemEditDialog.close()
-            },
-            Kirigami.Action {
                 text: i18n("Save")
                 icon.name: "dialog-ok-symbolic"
                 enabled: fsEditSource.text.trim().length > 0
+                    && savedState.length > 0
+                    && currentState() !== savedState
                 onTriggered: {
                     const target = fsEditTarget.text.trim().length > 0 ? fsEditTarget.text.trim() : "share";
                     let xml = "<filesystem type='mount' accessmode='" + fsEditAccess.currentText + "'>";
@@ -2278,6 +2374,11 @@ Kirigami.Dialog {
                         root.refresh();
                     }
                 }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: filesystemEditDialog.close()
             }
         ]
     }
@@ -2301,6 +2402,14 @@ Kirigami.Dialog {
         preferredWidth: Kirigami.Units.gridUnit * 28
         property string originalMac: ""
         property string model: "virtio"
+        property string savedState: ""
+
+        function currentState() {
+            return JSON.stringify({
+                mac: macField.text.trim().toLowerCase(),
+                model: modelCombo.currentText
+            });
+        }
 
         background: Rectangle {
             color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
@@ -2313,6 +2422,7 @@ Kirigami.Dialog {
         onOpened: {
             macField.text = originalMac;
             modelCombo.currentIndex = Math.max(0, modelCombo.model.indexOf(model));
+            savedState = currentState();
         }
 
         ColumnLayout {
@@ -2342,6 +2452,8 @@ Kirigami.Dialog {
                 text: i18n("Save")
                 icon.name: "dialog-ok-symbolic"
                 enabled: macField.text.trim().length > 0
+                    && savedState.length > 0
+                    && currentState() !== savedState
                 onTriggered: {
                     if (Karton.editNetworkInterface(root.domain, editInterfaceDialog.originalMac,
                                                     macField.text.trim(), modelCombo.currentText)) {

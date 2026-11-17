@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Karton contributors
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #include "viewer/clipboardmanager.h"
 
@@ -86,13 +86,6 @@ void ClipboardManager::setTextMode(int mode)
 void ClipboardManager::setFilesMode(int mode)
 {
     m_filesMode = qBound(0, mode, 3);
-}
-
-void ClipboardManager::syncHostClipboard()
-{
-    if (m_channel) {
-        hostClipboardChanged();
-    }
 }
 
 QByteArray ClipboardManager::buildFileList(const QList<QUrl> &urls)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Karton contributors
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #pragma once
 
@@ -34,7 +34,6 @@ public:
         return m_filesMode;
     }
 
-    void syncHostClipboard();
 
 private:
     static gboolean clipboardSelectionGrabCallback(SpiceMainChannel *channel, guint selection, guint32 *types, guint ntypes, gpointer userData);

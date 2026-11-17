@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #include "viewer/domainviewer.h"
 
@@ -22,7 +23,6 @@
 #include <QPixmap>
 #include <QQuickItemGrabResult>
 #include <QQuickWindow>
-#include <QSGRendererInterface>
 #include <QSGSimpleTextureNode>
 #include <QString>
 #include <QTimer>
@@ -32,7 +32,6 @@
 #include "karton_debug.h"
 #include "viewer/glscanoutrenderer.h"
 #include "viewer/primarysurfacerenderer.h"
-#include "viewer/vulkanscanoutrenderer.h"
 
 #include "util/evdev_to_xtkbd_map.h"
 
@@ -129,7 +128,6 @@ bool DomainViewer::setupSpiceSession()
     }
 
     QString uri;
-    bool glEnabled = false;
     m_spiceTlsPort = 0;
     m_spicePassword.clear();
 
@@ -139,9 +137,6 @@ bool DomainViewer::setupSpiceSession()
         if (graphics.attribute(QStringLiteral("type")) != QStringLiteral("spice")) {
             continue;
         }
-
-        const QDomElement gl = graphics.firstChildElement(QStringLiteral("gl"));
-        glEnabled = gl.attribute(QStringLiteral("enable")) == QStringLiteral("yes");
 
         const QDomElement listen = graphics.firstChildElement(QStringLiteral("listen"));
         QString listenType = listen.attribute(QStringLiteral("type"));
@@ -190,11 +185,7 @@ bool DomainViewer::setupSpiceSession()
 
     m_spiceUri = uri;
 
-    const bool vulkan = QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan;
-    if (vulkan) {
-        m_renderMode = glEnabled ? RenderMode::VulkanScanout : RenderMode::PrimarySurface;
-        qCInfo(KARTON_DEBUG) << "Using Vulkan;" << (glEnabled ? "scanout" : "primary surface") << "rendering selected";
-    } else if (uri.startsWith(QStringLiteral("spice+unix://"))) {
+    if (uri.startsWith(QStringLiteral("spice+unix://"))) {
         qCInfo(KARTON_DEBUG) << "Detected UNIX socket. Using GL scanout rendering.";
         m_renderMode = RenderMode::GlScanout;
     } else {
@@ -339,13 +330,6 @@ void DomainViewer::mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer u
     item->updateDisplayResolution();
 }
 
-void DomainViewer::syncHostClipboard()
-{
-    if (m_clipboard) {
-        m_clipboard->syncHostClipboard();
-    }
-}
-
 // ========================== Display rendering  ========================
 
 void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
@@ -355,9 +339,6 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
     switch (m_renderMode) {
     case RenderMode::GlScanout:
         m_renderer = std::make_unique<GlScanoutRenderer>();
-        break;
-    case RenderMode::VulkanScanout:
-        m_renderer = std::make_unique<VulkanScanoutRenderer>();
         break;
     case RenderMode::PrimarySurface:
         m_renderer = std::make_unique<PrimarySurfaceRenderer>();
@@ -548,7 +529,11 @@ void DomainViewer::updateDisplayResolution()
     // leaving black bars on the sides even after the agent applies the resize.
     int targetWidth = qMax(640, qRound(availableWidth));
     int targetHeight = qMax(480, qRound(availableHeight));
-    if (m_fixedDisplayWidth >= 320 && m_fixedDisplayHeight >= 240) {
+    // A per-VM fixed resolution is a windowed-mode preference. In fullscreen
+    // the guest should follow the screen, otherwise it stays at the fixed size
+    // and is letterboxed inside the fullscreen window.
+    const bool fullScreen = window() && window()->visibility() == QWindow::FullScreen;
+    if (!fullScreen && m_fixedDisplayWidth >= 320 && m_fixedDisplayHeight >= 240) {
         targetWidth = m_fixedDisplayWidth;
         targetHeight = m_fixedDisplayHeight;
     }
@@ -1051,14 +1036,15 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
         // while the pointer is grabbed and the host cursor is outside the item.
         if (!qFuzzyIsNull(delta.x()) || !qFuzzyIsNull(delta.y())) {
             spice_inputs_channel_motion(m_inputs_channel, qRound(delta.x() * scaleX), qRound(delta.y() * scaleY), buttonMask);
-            update();
         }
         return;
     }
 
     const QPointF absolute = m_pointerGrabbed ? m_virtualPointerPosition : guestPosition;
     spice_inputs_channel_position(m_inputs_channel, qRound(absolute.x()), qRound(absolute.y()), 0, buttonMask);
-    update();
+    // Do not repaint the scene graph here: the guest cursor is installed as
+    // the host cursor, and repainting on every motion event at pointer rate
+    // wasted GPU/CPU time (and caused needless present churn).
 }
 
 static quint32 evdevScancodeForEvent(const QKeyEvent *event)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #pragma once
 
@@ -10,6 +11,7 @@
 #include <QHash>
 #include <QModelIndex>
 #include <QObject>
+#include <QString>
 #include <QVariant>
 
 #include "app/karton.h"
@@ -34,6 +36,8 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     void updateDomains(const virDomainPtr domainPtr = nullptr);
     void refreshAllDomains();
+    Q_INVOKABLE void moveItem(int from, int to);
+    Q_INVOKABLE int rowOfUuid(const QString &uuid) const;
 private Q_SLOTS:
     void onDomainsChanged(const virDomainPtr domainPtr, int event, int detail);
     void onDomainRemoved(Domain *domain);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Derek Lin <derekhongdalin@gmail.com>
+// SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 #pragma once
 
 #include <libvirt/libvirt.h>
@@ -75,6 +76,7 @@ Q_SIGNALS:
     void clipboardSettingsChanged();
     void domainAdded(Domain *domain);
     void domainRemoved(Domain *domain);
+    void displayResolutionChanged(const Domain *domain);
     void domainCreated(bool success, const QString &name);
     void domainEdited(bool success, const QString &name);
     void domainCloned(bool success, const QString &sourceName, const QString &newName);
@@ -140,14 +142,18 @@ public Q_SLOTS:
     Q_INVOKABLE void registerViewer(Domain *domain, QObject *window);
     Q_INVOKABLE void unregisterViewer(QObject *window);
     Q_INVOKABLE void closeAllViewers();
-    Q_INVOKABLE void destroyViewer(QObject *window);
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
+    Q_INVOKABLE void moveDomain(int fromRow, int toRow);
     Q_INVOKABLE bool ejectDisk(const Domain *domain);
     Q_INVOKABLE void saveConnectionUri(const QString &uri);
     Q_INVOKABLE bool setAutostart(const Domain *domain, bool autostart);
     Q_INVOKABLE QVariantList networks() const;
+    Q_INVOKABLE QVariantMap defaultNetworkConfig() const;
+    Q_INVOKABLE QVariantList hostNetworkInterfaces() const;
+    Q_INVOKABLE bool createNetwork(const QVariantMap &config);
+    Q_INVOKABLE bool updateNetwork(const QVariantMap &config);
     Q_INVOKABLE bool startNetwork(const QString &name);
     Q_INVOKABLE bool stopNetwork(const QString &name);
     Q_INVOKABLE bool setNetworkAutostart(const QString &name, bool autostart);
