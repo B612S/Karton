@@ -13,8 +13,8 @@
 
 #include <cstdlib>
 
-#include <KLocalizedString>
-
+#include <QByteArrayView>
+#include <QCoreApplication>
 #include <QCursor>
 #include <QDomDocument>
 #include <QDomElement>
@@ -24,6 +24,7 @@
 #include <QQuickItemGrabResult>
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
+#include <QScreen>
 #include <QString>
 #include <QTimer>
 
@@ -50,6 +51,10 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     setAcceptedMouseButtons(Qt::AllButtons);
     setAcceptHoverEvents(true);
     setFlag(ItemIsFocusScope, true);
+
+    m_displayResizeTimer.setSingleShot(true);
+    m_displayResizeTimer.setInterval(200);
+    connect(&m_displayResizeTimer, &QTimer::timeout, this, &DomainViewer::applyDisplayResolution);
 }
 
 DomainViewer::~DomainViewer()
@@ -97,11 +102,12 @@ void DomainViewer::componentComplete()
 
 bool DomainViewer::setupSpiceSession()
 {
+    disconnectFromSpice();
     setErrorMessage(QString());
 
     if (!m_domain || !m_domain->domainPtr()) {
         qCWarning(KARTON_DEBUG) << "setupSpiceSession(): no valid domain";
-        setErrorMessage(i18n("No virtual machine is selected."));
+        setErrorMessage(QCoreApplication::translate("DomainViewer", "no_virtual_machine_is_selected"));
         return false;
     }
 
@@ -113,7 +119,7 @@ bool DomainViewer::setupSpiceSession()
     }
     if (!xmlDesc) {
         qCWarning(KARTON_DEBUG) << "Failed to read domain XML:" << virGetLastErrorMessage();
-        setErrorMessage(i18n("Failed to read the virtual machine configuration."));
+        setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_read_the_virtual_machine_configuration"));
         return false;
     }
 
@@ -123,11 +129,12 @@ bool DomainViewer::setupSpiceSession()
     QDomDocument document;
     if (!document.setContent(QString::fromUtf8(xml))) {
         qCWarning(KARTON_DEBUG) << "Failed to parse domain XML";
-        setErrorMessage(i18n("Failed to parse the virtual machine configuration."));
+        setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_parse_the_virtual_machine_configuration"));
         return false;
     }
 
     QString uri;
+    bool glEnabled = false;
     m_spiceTlsPort = 0;
     m_spicePassword.clear();
 
@@ -137,6 +144,9 @@ bool DomainViewer::setupSpiceSession()
         if (graphics.attribute(QStringLiteral("type")) != QStringLiteral("spice")) {
             continue;
         }
+
+        const QDomElement gl = graphics.firstChildElement(QStringLiteral("gl"));
+        const bool graphicsGl = !gl.isNull() && gl.attribute(QStringLiteral("enable")) != QStringLiteral("no");
 
         const QDomElement listen = graphics.firstChildElement(QStringLiteral("listen"));
         QString listenType = listen.attribute(QStringLiteral("type"));
@@ -173,28 +183,47 @@ bool DomainViewer::setupSpiceSession()
         }
 
         if (!uri.isEmpty()) {
+            glEnabled = graphicsGl;
             break;
         }
     }
 
     if (uri.isEmpty()) {
-        qCWarning(KARTON_DEBUG) << "No usable SPICE graphics device found for domain:" << m_domain->config()->name();
-        setErrorMessage(i18n("This virtual machine has no usable SPICE display."));
+        // Text-only domains (and VMs configured with -display none) have no
+        // SPICE graphics at all. virt-manager shows their serial console in
+        // that case, so fall back to the libvirt console stream.
+        qCInfo(KARTON_DEBUG) << "No SPICE graphics found for domain; trying the serial console";
+        if (openSerialConsole()) {
+            return true;
+        }
+        qCWarning(KARTON_DEBUG) << "No usable SPICE graphics device or serial console found for domain:" << m_domain->config()->name();
+        setErrorMessage(QCoreApplication::translate("DomainViewer", "this_virtual_machine_has_no_usable_spice_display_or_serial_console"));
         return false;
     }
 
     m_spiceUri = uri;
 
-    if (uri.startsWith(QStringLiteral("spice+unix://"))) {
-        qCInfo(KARTON_DEBUG) << "Detected UNIX socket. Using GL scanout rendering.";
+    // GL scanout requires both a local connection and a SPICE display that was
+    // created with <gl enable='yes'/>. Selecting it by transport alone made
+    // local domains without 3D acceleration stay black: they only provide
+    // primary surfaces, which the GL renderer does not handle.
+    if (glEnabled && uri.startsWith(QStringLiteral("spice+unix://"))) {
+        qCInfo(KARTON_DEBUG) << "Detected local GL-enabled SPICE display. Using GL scanout rendering.";
         m_renderMode = RenderMode::GlScanout;
     } else {
-        qCInfo(KARTON_DEBUG) << "Detected network TCP socket. Using primary surface rendering.";
+        if (glEnabled) {
+            qCInfo(KARTON_DEBUG) << "SPICE GL is enabled but the connection is not local. Using primary surface rendering.";
+        } else {
+            qCInfo(KARTON_DEBUG) << "SPICE GL is disabled. Using primary surface rendering.";
+        }
         m_renderMode = RenderMode::PrimarySurface;
     }
 
     if (!connectToSpice()) {
-        setErrorMessage(i18n("Could not connect to the SPICE display."));
+        if (openSerialConsole()) {
+            return true;
+        }
+        setErrorMessage(QCoreApplication::translate("DomainViewer", "could_not_connect_to_the_spice_display_or_serial_console"));
         return false;
     }
     return true;
@@ -248,11 +277,13 @@ bool DomainViewer::connectToSpice()
 
 void DomainViewer::disconnectFromSpice()
 {
+    m_displayResizeTimer.stop();
+    closeSerialConsole();
     stopAudio();
 
     if (m_renderer) {
         m_renderer->detach();
-        m_renderer.reset();
+        m_detachedRenderer = std::move(m_renderer);
     }
 
     clearCursor();
@@ -274,6 +305,189 @@ void DomainViewer::disconnectFromSpice()
     m_connected = false;
     m_lastDisplayResolution = QSize();
     releasePointerGrab();
+}
+
+bool DomainViewer::openSerialConsole()
+{
+    if (!m_domain || !m_domain->domainPtr() || !m_domain->isActive()) {
+        return false;
+    }
+    if (m_consoleStream) {
+        return true;
+    }
+
+    virConnectPtr connection = virDomainGetConnect(m_domain->domainPtr());
+    if (!connection) {
+        return false;
+    }
+    // A blocking stream makes virStreamRecv() enter libvirt's own GLib main
+    // loop from inside a stream-event callback. During a guest reboot that
+    // re-entrant wait aborts the process; use the event-driven, non-blocking
+    // stream instead and let -2 mean "wait for the next READABLE event".
+    virStreamPtr stream = virStreamNew(connection, VIR_STREAM_NONBLOCK);
+    if (!stream) {
+        qCWarning(KARTON_DEBUG) << "Failed to create a libvirt stream for the serial console";
+        return false;
+    }
+    if (virDomainOpenConsole(m_domain->domainPtr(), nullptr, stream, 0) < 0) {
+        qCInfo(KARTON_DEBUG) << "Serial console is not available:" << QString::fromUtf8(virGetLastErrorMessage());
+        virStreamFree(stream);
+        return false;
+    }
+    if (virStreamEventAddCallback(stream, VIR_STREAM_EVENT_READABLE | VIR_STREAM_EVENT_ERROR | VIR_STREAM_EVENT_HANGUP, consoleEventCallback, this, nullptr)
+        < 0) {
+        qCWarning(KARTON_DEBUG) << "Failed to register serial console events:" << QString::fromUtf8(virGetLastErrorMessage());
+        virStreamAbort(stream);
+        virStreamFree(stream);
+        return false;
+    }
+
+    m_consoleStream = stream;
+    m_consoleWriteBuffer.clear();
+    m_consoleDecoder = QStringDecoder(QStringConverter::Utf8);
+    m_consoleClosePending = false;
+    ++m_consoleGeneration;
+    m_serialConsoleActive = true;
+    Q_EMIT serialConsoleActiveChanged();
+    // A text-only VM has no framebuffer for virsh screenshot. Drop the cached
+    // preview so the VM page cannot keep showing an old error/window capture.
+    m_domain->clearPreviewFrame();
+    qCInfo(KARTON_DEBUG) << "Opened serial console for" << m_domain->config()->name();
+    // Do not inject input here: opening a console must never send characters
+    // to a guest that may be running a command or waiting at a password prompt.
+    return true;
+}
+
+void DomainViewer::closeSerialConsole()
+{
+    m_consoleClosePending = false;
+    ++m_consoleGeneration;
+    if (m_consoleStream) {
+        virStreamPtr stream = m_consoleStream;
+        m_consoleStream = nullptr;
+        virStreamEventRemoveCallback(stream);
+        virStreamAbort(stream);
+        virStreamFree(stream);
+        m_consoleWriteBuffer.clear();
+        m_consoleDecoder = QStringDecoder(QStringConverter::Utf8);
+    }
+    if (m_serialConsoleActive) {
+        m_serialConsoleActive = false;
+        Q_EMIT serialConsoleActiveChanged();
+    }
+}
+
+void DomainViewer::scheduleConsoleClose()
+{
+    if (m_consoleClosePending) {
+        return;
+    }
+    // Never tear the stream down from inside libvirt's event callback. The
+    // generation check keeps a stale timer from closing a stream that was
+    // reopened in the meantime (for example during a guest reboot).
+    m_consoleClosePending = true;
+    const quint64 generation = m_consoleGeneration;
+    QTimer::singleShot(0, this, [this, generation]() {
+        if (generation == m_consoleGeneration) {
+            closeSerialConsole();
+        }
+    });
+}
+
+void DomainViewer::consoleEventCallback(virStreamPtr stream, int events, void *opaque)
+{
+    auto *self = static_cast<DomainViewer *>(opaque);
+    if (!self || stream != self->m_consoleStream || self->m_consoleClosePending) {
+        return;
+    }
+
+    if (events & VIR_STREAM_EVENT_READABLE) {
+        char buffer[4096];
+        QString output;
+        for (;;) {
+            const int count = virStreamRecv(stream, buffer, sizeof(buffer));
+            if (count > 0) {
+                output += self->m_consoleDecoder.decode(QByteArrayView(buffer, count));
+            } else if (count == -2) {
+                break;
+            } else if (count == 0) {
+                if (!output.isEmpty()) {
+                    Q_EMIT self->consoleDataReceived(output);
+                }
+                self->scheduleConsoleClose();
+                return;
+            } else {
+                if (!output.isEmpty()) {
+                    Q_EMIT self->consoleDataReceived(output);
+                }
+                qCWarning(KARTON_DEBUG) << "Failed to read from the serial console:" << QString::fromUtf8(virGetLastErrorMessage());
+                self->setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_read_from_the_serial_console"));
+                self->scheduleConsoleClose();
+                return;
+            }
+        }
+        // One signal per callback keeps terminal repaints and QML round-trips
+        // down when the guest writes a large burst (boot logs, dmesg, ...).
+        if (!output.isEmpty()) {
+            Q_EMIT self->consoleDataReceived(output);
+        }
+    }
+
+    if (events & (VIR_STREAM_EVENT_ERROR | VIR_STREAM_EVENT_HANGUP)) {
+        if (events & VIR_STREAM_EVENT_ERROR) {
+            qCWarning(KARTON_DEBUG) << "Serial console stream error";
+        }
+        self->setErrorMessage(QCoreApplication::translate("DomainViewer", "the_serial_console_connection_was_closed"));
+        self->scheduleConsoleClose();
+        return;
+    }
+
+    if (events & VIR_STREAM_EVENT_WRITABLE) {
+        self->flushConsoleWrites();
+    }
+}
+
+void DomainViewer::sendConsoleText(const QString &text)
+{
+    if (!m_consoleStream || text.isEmpty()) {
+        return;
+    }
+    m_consoleWriteBuffer += text.toUtf8();
+    flushConsoleWrites();
+}
+
+void DomainViewer::flushConsoleWrites()
+{
+    if (!m_consoleStream) {
+        m_consoleWriteBuffer.clear();
+        return;
+    }
+    while (!m_consoleWriteBuffer.isEmpty()) {
+        const int written = virStreamSend(m_consoleStream, m_consoleWriteBuffer.constData(), m_consoleWriteBuffer.size());
+        if (written > 0) {
+            m_consoleWriteBuffer.remove(0, written);
+        } else if (written == -2) {
+            break;
+        } else {
+            qCWarning(KARTON_DEBUG) << "Failed to write to the serial console:" << QString::fromUtf8(virGetLastErrorMessage());
+            setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_write_to_the_serial_console"));
+            closeSerialConsole();
+            return;
+        }
+    }
+    updateConsoleEvents();
+}
+
+void DomainViewer::updateConsoleEvents()
+{
+    if (!m_consoleStream) {
+        return;
+    }
+    int events = VIR_STREAM_EVENT_READABLE | VIR_STREAM_EVENT_ERROR | VIR_STREAM_EVENT_HANGUP;
+    if (!m_consoleWriteBuffer.isEmpty()) {
+        events |= VIR_STREAM_EVENT_WRITABLE;
+    }
+    virStreamEventUpdateCallback(m_consoleStream, events);
 }
 
 void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *channel, gpointer user_data)
@@ -502,6 +716,19 @@ void DomainViewer::setFixedDisplayResolution(int width, int height)
 
 void DomainViewer::updateDisplayResolution()
 {
+    if (!m_main_channel || !m_connected) {
+        return;
+    }
+    // Resizing the window for fullscreen produces several geometry changes in
+    // a row (toolbar height, compositor restore, aspect fit). Debounce them so
+    // the guest agent receives one final configuration instead of switching
+    // the guest mode two or three times, which looked like the whole viewer
+    // was flickering.
+    m_displayResizeTimer.start();
+}
+
+void DomainViewer::applyDisplayResolution()
+{
     if (!m_main_channel || !m_connected || width() < 320 || height() < 240) {
         return;
     }
@@ -509,30 +736,36 @@ void DomainViewer::updateDisplayResolution()
     // The SPICE agent resizes the guest desktop to the monitor configuration.
     // update=TRUE lets spice-gtk debounce resize storms while the user drags
     // the window, and send the final configuration to the agent.
-    // Use the parent page size, not the aspect-fitted display item: the item
-    // shrinks/grows when the guest resolution changes, and using it here made
-    // the auto-fit request oscillate between two resolutions while Windows
-    // was booting.
-    QQuickItem *container = parentItem();
-    const qreal logicalWidth = container ? container->width() : width();
-    const qreal logicalHeight = container ? container->height() : height();
-    const qreal dpr = window() ? window()->devicePixelRatio() : 1.0;
-    const qreal availableWidth = logicalWidth * dpr;
-    const qreal availableHeight = logicalHeight * dpr;
+    const bool fullScreen = window() && window()->visibility() == QWindow::FullScreen;
 
-    // Fit the monitor rectangle to the current guest aspect ratio instead of
-    // stretching it to the page size. A request that is wider than the guest's
-    // supported mode (for example 2160x1178 on a 1920x1200 guest) is rejected
-    // by spice-vdagent and looked like auto-resize did nothing.
-    // Ask the guest for the complete viewer area. If we instead preserve the
-    // old guest aspect ratio here, the aspect-fitted DomainViewer item keeps
-    // leaving black bars on the sides even after the agent applies the resize.
+    qreal availableWidth = 0;
+    qreal availableHeight = 0;
+    if (fullScreen && window()->screen()) {
+        // In fullscreen the guest must follow the output, not the window or
+        // page size. Relying on the page also picked up a stale fixed-size
+        // window (1920x1126) and left the guest at that resolution.
+        const QScreen *screen = window()->screen();
+        const qreal screenDpr = screen->devicePixelRatio();
+        availableWidth = screen->geometry().width() * screenDpr;
+        availableHeight = screen->geometry().height() * screenDpr;
+    } else {
+        // Use the parent page size, not the aspect-fitted display item: the
+        // item shrinks/grows when the guest resolution changes, and using it
+        // here made the auto-fit request oscillate between two resolutions
+        // while Windows was booting.
+        QQuickItem *container = parentItem();
+        const qreal logicalWidth = container ? container->width() : width();
+        const qreal logicalHeight = container ? container->height() : height();
+        const qreal dpr = window() ? window()->devicePixelRatio() : 1.0;
+        availableWidth = logicalWidth * dpr;
+        availableHeight = logicalHeight * dpr;
+    }
+
     int targetWidth = qMax(640, qRound(availableWidth));
     int targetHeight = qMax(480, qRound(availableHeight));
     // A per-VM fixed resolution is a windowed-mode preference. In fullscreen
     // the guest should follow the screen, otherwise it stays at the fixed size
     // and is letterboxed inside the fullscreen window.
-    const bool fullScreen = window() && window()->visibility() == QWindow::FullScreen;
     if (!fullScreen && m_fixedDisplayWidth >= 320 && m_fixedDisplayHeight >= 240) {
         targetWidth = m_fixedDisplayWidth;
         targetHeight = m_fixedDisplayHeight;
@@ -585,11 +818,26 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     if (m_renderer) {
         QSGNode *display = m_renderer->updatePaintNode(window(), m_displayNode, boundingRect());
         if (display != m_displayNode) {
+            // Renderers must never delete a node that is already attached to
+            // the scene graph. Detach and delete the previous display node
+            // here, where its parent is known.
+            if (m_displayNode) {
+                if (m_displayNode->parent()) {
+                    m_displayNode->parent()->removeChildNode(m_displayNode);
+                }
+                delete m_displayNode;
+            }
             m_displayNode = display;
             if (display) {
+                if (display->parent()) {
+                    display->parent()->removeChildNode(display);
+                }
                 root->appendChildNode(display);
             }
         } else if (display && display->parent() != root) {
+            if (display->parent()) {
+                display->parent()->removeChildNode(display);
+            }
             root->appendChildNode(display);
         }
     } else if (m_displayNode) {
@@ -611,6 +859,22 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     }
 
     return root;
+}
+
+void DomainViewer::releaseResources()
+{
+    // Called on the render thread when the scene graph (and possibly the GL
+    // context) is invalidated. Renderers release their GL/EGL objects here;
+    // the scene graph deletes the nodes themselves.
+    if (m_renderer) {
+        m_renderer->releaseResources();
+    }
+    if (m_detachedRenderer) {
+        m_detachedRenderer->releaseResources();
+    }
+    m_displayNode = nullptr;
+    m_cursorNode = nullptr;
+    QQuickItem::releaseResources();
 }
 
 void DomainViewer::updateDomainPreview()
@@ -874,14 +1138,16 @@ void DomainViewer::readRecordingData()
 // ========================== Input handling =============================
 
 // maps qt provided scancode to pcxt
-uint8_t DomainViewer::evdevToPcXt(uint32_t evdev_scancode)
+uint32_t DomainViewer::evdevToPcXt(uint32_t evdev_scancode)
 {
     if (evdev_scancode >= CODE_MAP_LINUX_TO_XTKBD_LEN) {
         qCWarning(KARTON_DEBUG) << "Scancode out of range:" << evdev_scancode;
         return 0;
     }
 
-    uint8_t result = code_map_linux_to_xtkbd[evdev_scancode] & 0xFF;
+    // Extended XT keys use the 0x100 flag (for example Up is 0x148). Masking
+    // the result to 8 bits turned those into unrelated numeric-keypad keys.
+    const uint32_t result = code_map_linux_to_xtkbd[evdev_scancode];
     if (result == 0) {
         qCWarning(KARTON_DEBUG) << "Unknown evdev scancode:" << evdev_scancode;
         return 0;
@@ -1061,9 +1327,30 @@ static quint32 evdevScancodeForEvent(const QKeyEvent *event)
     return scancode;
 }
 
+bool DomainViewer::event(QEvent *event)
+{
+    // While the pointer is over the running guest display, every application
+    // shortcut must be overridden so keys such as Ctrl+Q/Ctrl+W reach the
+    // guest instead of closing the viewer or triggering another QAction. The
+    // focus alone is not enough: the display may keep keyboard focus while the
+    // pointer is on the toolbar, where normal shortcuts must work.
+    if (event->type() == QEvent::ShortcutOverride && m_domain && m_domain->isActive() && (m_pointerInside || m_pointerGrabbed)) {
+        event->accept();
+        return true;
+    }
+    return QQuickItem::event(event);
+}
+
 void DomainViewer::keyPressEvent(QKeyEvent *event)
 {
-    if (m_pointerGrabbed && event->key() == Qt::Key_Escape) {
+    // Release the pointer with Ctrl+Alt, like virt-viewer. Escape and every
+    // other key must reach the guest, otherwise terminal applications that
+    // use Esc (vim, less, ...) cannot be operated.
+    const Qt::KeyboardModifiers modifiers = event->modifiers();
+    const bool releaseCombo = m_pointerGrabbed
+        && (((event->key() == Qt::Key_Alt || event->key() == Qt::Key_AltGr) && (modifiers & Qt::ControlModifier))
+            || (event->key() == Qt::Key_Control && (modifiers & Qt::AltModifier)));
+    if (releaseCombo) {
         releasePointerGrab();
         event->accept();
         return;
@@ -1072,7 +1359,7 @@ void DomainViewer::keyPressEvent(QKeyEvent *event)
     event->accept();
     const quint32 evdev_scancode = evdevScancodeForEvent(event);
 
-    uint8_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode); // SPICE accepts PC XT: see inputs channel docs
+    const uint32_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode); // SPICE uses XT scancodes with the 0x100 extended flag
     qCDebug(KARTON_DEBUG) << "key press: " << event->text() << evdev_scancode << pcxt_scancode;
 
     if (m_inputs_channel && m_connected && pcxt_scancode != 0) {
@@ -1085,7 +1372,7 @@ void DomainViewer::keyReleaseEvent(QKeyEvent *event)
     event->accept();
 
     const quint32 evdev_scancode = evdevScancodeForEvent(event);
-    uint8_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode);
+    const uint32_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode);
 
     if (m_inputs_channel && m_connected && pcxt_scancode != 0) {
         spice_inputs_channel_key_release(m_inputs_channel, pcxt_scancode);
@@ -1135,14 +1422,26 @@ void DomainViewer::mouseMoveEvent(QMouseEvent *event)
 
 void DomainViewer::hoverEnterEvent(QHoverEvent *event)
 {
+    // Moving the pointer into a running guest means the user is about to
+    // interact with it. Returning keyboard focus here makes the "cursor is in
+    // the VM" case behave like a click: application shortcuts such as Ctrl+Q
+    // are then overridden and reach the guest instead of closing the viewer.
+    if (m_domain && m_domain->isActive() && window() && window()->isActive() && !QGuiApplication::modalWindow() && !hasActiveFocus()) {
+        forceActiveFocus(Qt::MouseFocusReason);
+    }
     bool haveCursor = false;
+    bool entered = false;
     {
         QMutexLocker locker(&m_cursorMutex);
+        entered = !m_pointerInside;
         m_pointerInside = true;
         if (!m_cursorImage.isNull()) {
             m_cursorVisible = true;
             haveCursor = true;
         }
+    }
+    if (entered) {
+        Q_EMIT pointerInsideChanged();
     }
     if (haveCursor) {
         applyGuestCursor();
@@ -1154,10 +1453,15 @@ void DomainViewer::hoverEnterEvent(QHoverEvent *event)
 
 void DomainViewer::hoverLeaveEvent(QHoverEvent *event)
 {
+    bool left = false;
     {
         QMutexLocker locker(&m_cursorMutex);
+        left = m_pointerInside;
         m_pointerInside = false;
         m_cursorVisible = false;
+    }
+    if (left) {
+        Q_EMIT pointerInsideChanged();
     }
     if (!m_pointerGrabbed) {
         unsetCursor();

@@ -31,6 +31,8 @@ with a desktop-oriented viewer.
 - Take snapshots, revert to them and delete them.
 - Delete a VM together with its local disks when requested.
 - Live CPU and memory usage on the VM page.
+- A New Year easter egg between 25 December and 7 January: Tux stands in a
+  snow drift.
 
 ### SPICE viewer
 
@@ -130,8 +132,9 @@ Global Application Settings provide:
 - C++23 compiler
 - CMake >= 3.20
 - Qt 6
-- KF6: Kirigami, Kirigami Addons, I18n, CoreAddons, QQC2 Desktop Style,
+- KF6: Kirigami, Kirigami Addons, CoreAddons, QQC2 Desktop Style,
   Icon Themes
+- Qt Linguist tools (`qt6-tools` on Arch) for building the translations
 - libvirt
 - libosinfo
 - GLib
@@ -155,7 +158,7 @@ Development packages:
 ```sh
 sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules \
     qt6-base qt6-declarative qt6-multimedia qt6-tools \
-    kirigami kirigami-addons kcoreaddons ki18n kiconthemes qqc2-desktop-style \
+    kirigami kirigami-addons kcoreaddons kiconthemes qqc2-desktop-style \
     libvirt libosinfo spice-gtk phodav pipewire mesa
 ```
 
@@ -250,17 +253,48 @@ the application manually and exercise the affected pages with a throwaway VM.
 | `core/util/` | Small helpers, including XML syntax highlighting. |
 | `qml/` | Kirigami pages and dialogs. |
 | `img/os/` | Bundled flat OS family icons. |
+| `locales/` | Qt `.ts` translation sources (English and Russian). |
 | `tests/` | Optional QtTest unit tests. |
 
 ## Contributing
 
 - Use C++23 and Qt/KF6 APIs.
-- Keep UI strings translatable with `i18n()`/`i18nc()`.
+- Keep UI strings translatable: use `qsTr("key")` in QML and
+  `QCoreApplication::translate("Context", "key")` in C++, then add the key to
+  both `locales/en.ts` and `locales/ru.ts`.
 - Run `clang-format` on touched C++ files.
 - Keep user-visible changes tested with a disposable VM.
 - Never test destructive operations on the user's production VMs.
 
 See `AGENTS.md` for the full engineering conventions and architecture notes.
+
+## Localization
+
+UI strings are stored as translation keys, not English source text. The sources
+are `locales/en.ts` and `locales/ru.ts`; `qt_add_translations()` compiles them to
+`en.qm`/`ru.qm`, embeds them in the binary and installs them to
+`share/karton/translations` for distribution packages.
+
+The language is stored as `ui/language` in `karton.conf`:
+
+- `auto` follows the first two letters of the system locale (`ru` selects
+  Russian, every other locale falls back to English);
+- `en` and `ru` force the language.
+
+It can be changed at runtime in **Application Settings → Application →
+Interface → Language**; Karton reloads the translator and retranslates the QML
+without a restart. The translator is looked up in `:/i18n/<lang>.qm` first, then
+in `share/karton/translations`, then next to the executable.
+
+To add a language:
+
+1. create `locales/<lang>.ts` (use `en.ts` as the key template);
+2. add it to `qt_add_translations(karton TS_FILES ...)` and the `install(FILES
+   ...)` list in `CMakeLists.txt`;
+3. add its native name to the language combo box in
+   `qml/ApplicationSettingsDialog.qml`;
+4. extend `Karton::resolveLanguage()` and `Karton::setLanguage()` for the new
+   code.
 
 ## Links
 

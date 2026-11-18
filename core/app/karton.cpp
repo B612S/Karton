@@ -4,13 +4,18 @@
 
 #include "app/karton.h"
 #include "app/karton_private.h"
+#include "app/shortcutinhibitor.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDate>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -32,6 +37,7 @@
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QWindow>
 #include <algorithm>
 #include <cstring>
 #include <functional>
@@ -65,7 +71,28 @@ Karton::Karton(QObject *parent)
     if (QCoreApplication::instance()) {
         QCoreApplication::instance()->installEventFilter(this);
     }
+    updateHolidayMode();
+    m_holidayTimer.setInterval(3600000);
+    connect(&m_holidayTimer, &QTimer::timeout, this, &Karton::updateHolidayMode);
+    m_holidayTimer.start();
     init();
+}
+
+void Karton::updateHolidayMode()
+{
+    // A week before and after New Year: 25 December through 7 January.
+    // KARTON_HOLIDAY_MODE=1/0 forces the easter egg on/off for testing.
+    const QByteArray forced = qgetenv("KARTON_HOLIDAY_MODE").trimmed().toLower();
+    const QDate today = QDate::currentDate();
+    const int newYear = today.month() == 12 ? today.year() + 1 : today.year();
+    const QDate start(newYear - 1, 12, 25);
+    const QDate end(newYear, 1, 7);
+    const bool active = forced == "1" || forced == "true" ? true : forced == "0" || forced == "false" ? false : today >= start && today <= end;
+    if (active == m_holidayMode) {
+        return;
+    }
+    m_holidayMode = active;
+    Q_EMIT holidayModeChanged();
 }
 
 bool Karton::eventFilter(QObject *watched, QEvent *event)
@@ -78,6 +105,11 @@ bool Karton::eventFilter(QObject *watched, QEvent *event)
 
 Karton::~Karton()
 {
+    if (m_shortcutInhibitor) {
+        m_shortcutInhibitor->release();
+    }
+    m_shortcutBlockedViewers.clear();
+    updateGlobalShortcutsBlock();
     if (m_conn) {
         virConnectClose(m_conn);
         m_conn = nullptr;
@@ -129,6 +161,14 @@ void Karton::onDomainStateChanged(virDomainPtr domainPtr, int event, int detail)
 
 bool Karton::init()
 {
+    // Clear a KGlobalAccel block left behind by a previous crashed viewer.
+    if (QDBusConnection::sessionBus().isConnected()) {
+        QDBusInterface iface(QStringLiteral("org.kde.kglobalaccel"),
+                             QStringLiteral("/kglobalaccel"),
+                             QStringLiteral("org.kde.KGlobalAccel"),
+                             QDBusConnection::sessionBus());
+        iface.call(QStringLiteral("blockGlobalShortcuts"), false);
+    }
     // Register the Qt-based event loop. Note: must be done before connecting
     // to the hypervisor.
     LibvirtEventLoop::registerImpl();
@@ -243,23 +283,23 @@ static QString domainStateString(unsigned int state)
 {
     switch (state) {
     case VIR_DOMAIN_NOSTATE:
-        return i18n("no state");
+        return QCoreApplication::translate("Karton", "no_state");
     case VIR_DOMAIN_RUNNING:
-        return i18n("running");
+        return QCoreApplication::translate("Karton", "running");
     case VIR_DOMAIN_BLOCKED:
-        return i18n("blocked");
+        return QCoreApplication::translate("Karton", "blocked");
     case VIR_DOMAIN_PAUSED:
-        return i18n("paused");
+        return QCoreApplication::translate("Karton", "paused");
     case VIR_DOMAIN_SHUTDOWN:
-        return i18n("shutting down");
+        return QCoreApplication::translate("Karton", "shutting_down");
     case VIR_DOMAIN_SHUTOFF:
-        return i18n("shutoff");
+        return QCoreApplication::translate("Karton", "shutoff");
     case VIR_DOMAIN_CRASHED:
-        return i18n("crashed");
+        return QCoreApplication::translate("Karton", "crashed");
     case VIR_DOMAIN_PMSUSPENDED:
-        return i18n("suspended");
+        return QCoreApplication::translate("Karton", "suspended");
     default:
-        return i18n("unknown");
+        return QCoreApplication::translate("Karton", "unknown");
     }
 }
 
@@ -298,6 +338,21 @@ void Karton::refreshDomain(const virDomainPtr domainPtr)
     domain->setAutostart(autoFlag != 0);
 }
 
+// Capacity is available through libvirt for stopped domains too, and unlike
+// qemu-img it keeps working when libvirt's dynamic ownership made the image
+// unreadable for the current user.
+static int domainDiskSizeGB(virDomainPtr domainPtr, const QString &path)
+{
+    if (!domainPtr || path.isEmpty()) {
+        return 0;
+    }
+    virDomainBlockInfo blockInfo = {};
+    if (virDomainGetBlockInfo(domainPtr, path.toUtf8().constData(), &blockInfo, 0) < 0 || blockInfo.capacity <= 0) {
+        return 0;
+    }
+    return static_cast<int>((blockInfo.capacity + (1LL << 30) - 1) / (1LL << 30));
+}
+
 // Refresh the complete list of domains. Existing Domain objects are updated in
 // place so that QML pages holding them keep working.
 void Karton::refreshDomainList()
@@ -305,6 +360,10 @@ void Karton::refreshDomainList()
     if (!m_conn) {
         return;
     }
+
+    // Device capabilities may have changed together with the domain
+    // definition, so let the preview code probe them again.
+    m_previewUnsupportedDomains.clear();
 
     virDomainPtr *domains = nullptr;
     const int numDomains = virConnectListAllDomains(m_conn, &domains, 0);
@@ -345,6 +404,16 @@ void Karton::refreshDomainList()
         int autoFlag = 0;
         virDomainGetAutostart(domainPtr, &autoFlag);
 
+        int maxDiskStorage = reader.m_xmlInfo.maxDiskStorage > 0 ? reader.m_xmlInfo.maxDiskStorage / 1024 : 0; // MiB -> GiB
+        if (maxDiskStorage <= 0) {
+            maxDiskStorage = domainDiskSizeGB(domainPtr, reader.m_xmlInfo.virtualDiskPath);
+        }
+        if (maxDiskStorage <= 0) {
+            // Fallback for disks libvirt cannot describe (for example a path
+            // that is not part of the persistent definition).
+            maxDiskStorage = diskSizeGB(reader.m_xmlInfo.virtualDiskPath);
+        }
+
         const DomainConfig::DomainConfigData configData = {
             .hypervisorType = reader.m_xmlInfo.hypervisorType,
             .indexId = reader.m_xmlInfo.indexId,
@@ -356,11 +425,11 @@ void Karton::refreshDomainList()
             .isPaused = domInfo.state == VIR_DOMAIN_PAUSED,
             .hasSavedState = virDomainHasManagedSaveImage(domainPtr, 0) == 1,
             .state = domainStateString(domInfo.state),
-            .maxRam = static_cast<int>(domInfo.maxMem / (1024 * 1024)), // KiB -> GiB
-            .ramUsage = static_cast<int>(domInfo.memory / (1024 * 1024)), // KiB -> GiB
+            // Round up so a sub-GiB VM (for example 512 MiB) is not shown as 0 GB.
+            .maxRam = static_cast<int>((domInfo.maxMem + 1024ULL * 1024ULL - 1) / (1024ULL * 1024ULL)),
+            .ramUsage = static_cast<int>((domInfo.memory + 1024ULL * 1024ULL - 1) / (1024ULL * 1024ULL)),
             .cpus = static_cast<int>(domInfo.nrVirtCpu),
-            .maxDiskStorage = reader.m_xmlInfo.maxDiskStorage > 0 ? reader.m_xmlInfo.maxDiskStorage / 1024 // MiB -> GiB
-                                                                  : diskSizeGB(reader.m_xmlInfo.virtualDiskPath),
+            .maxDiskStorage = maxDiskStorage,
             .xmlConfigPath = xmlConfigPath,
             .isoDiskPath = reader.m_xmlInfo.isoDiskPath,
             .virtualDiskPath = reader.m_xmlInfo.virtualDiskPath,
@@ -368,7 +437,9 @@ void Karton::refreshDomainList()
             .diskFormat = reader.m_xmlInfo.diskFormat,
             .firmware = reader.m_xmlInfo.firmware,
             .networkModel = reader.m_xmlInfo.networkModel,
+            .networkName = reader.m_xmlInfo.networkName,
             .secureBoot = reader.m_xmlInfo.secureBoot,
+            .hasGraphics = reader.m_xmlInfo.hasGraphics,
             .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
@@ -442,9 +513,35 @@ void Karton::refreshDomainList()
     }
     for (Domain *domain : previousDomains) {
         if (!m_domains.contains(domain)) {
+            removeDomainCache(domain->config()->uuid(), domain->config()->screenshotPreviewPath());
             Q_EMIT domainRemoved(domain);
             domain->deleteLater();
         }
+    }
+
+    // The runtime path above cleans VMs removed while Karton is running. Use a
+    // per-connection list of known UUIDs so VMs deleted while Karton was closed
+    // are cleaned up on the next start, without touching data that belongs to
+    // another libvirt connection.
+    QSet<QString> currentUuids;
+    for (const Domain *domain : std::as_const(m_domains)) {
+        currentUuids.insert(domain->config()->uuid());
+    }
+    const QString connectionKey =
+        QString::fromLatin1(QCryptographicHash::hash((m_activeUri.isEmpty() ? connectionUri() : m_activeUri).toUtf8(), QCryptographicHash::Sha1).toHex());
+    const QString knownKey = QStringLiteral("knownDomains/%1").arg(connectionKey);
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QStringList previousKnown = settings.value(knownKey).toStringList();
+    for (const QString &uuid : previousKnown) {
+        if (!currentUuids.contains(uuid)) {
+            removeDomainCache(uuid, QString());
+        }
+    }
+    QStringList currentKnown = currentUuids.values();
+    currentKnown.sort();
+    if (currentKnown != previousKnown) {
+        settings.setValue(knownKey, currentKnown);
+        settings.sync();
     }
 }
 
@@ -471,10 +568,8 @@ bool Karton::startDomain(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainCreate(domainPtr) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to start domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg =
+            QCoreApplication::translate("Karton", "failed_to_start_domain_1_2").arg(domain->config()->name()).arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -492,10 +587,9 @@ bool Karton::stopDomain(const Domain *domain)
     virDomainPtr domainPtr = domain->domainPtr();
     virDomainInfo info = {};
     if (virDomainGetInfo(domainPtr, &info) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to get state of domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_get_state_of_domain_1_2")
+                                     .arg(domain->config()->name())
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -503,10 +597,9 @@ bool Karton::stopDomain(const Domain *domain)
 
     if (info.state == VIR_DOMAIN_RUNNING || info.state == VIR_DOMAIN_PAUSED) {
         if (virDomainShutdown(domainPtr) < 0) {
-            const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                           "Failed to stop domain %1: %2",
-                                           domain->config()->name(),
-                                           QString::fromUtf8(virGetLastErrorMessage()));
+            const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_stop_domain_1_2")
+                                         .arg(domain->config()->name())
+                                         .arg(QString::fromUtf8(virGetLastErrorMessage()));
             qCWarning(KARTON_DEBUG) << errorMsg;
             Q_EMIT errorOccurred(errorMsg);
             return false;
@@ -525,10 +618,9 @@ bool Karton::forceStopDomain(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainDestroy(domainPtr) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to force-stop domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_force_stop_domain_1_2")
+                                     .arg(domain->config()->name())
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -545,10 +637,8 @@ bool Karton::pauseDomain(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainSuspend(domainPtr) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to pause domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg =
+            QCoreApplication::translate("Karton", "failed_to_pause_domain_1_2").arg(domain->config()->name()).arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -567,10 +657,8 @@ bool Karton::resumeDomain(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainResume(domainPtr) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to resume domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg =
+            QCoreApplication::translate("Karton", "failed_to_resume_domain_1_2").arg(domain->config()->name()).arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -589,10 +677,8 @@ bool Karton::rebootDomain(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainReboot(domainPtr, VIR_DOMAIN_REBOOT_DEFAULT) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to reboot domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg =
+            QCoreApplication::translate("Karton", "failed_to_reboot_domain_1_2").arg(domain->config()->name()).arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -610,10 +696,8 @@ bool Karton::resetDomain(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainReset(domainPtr, 0) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to reset domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg =
+            QCoreApplication::translate("Karton", "failed_to_reset_domain_1_2").arg(domain->config()->name()).arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -631,10 +715,9 @@ bool Karton::saveDomainState(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainManagedSave(domainPtr, 0) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to save the state of domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_save_the_state_of_domain_1_2")
+                                     .arg(domain->config()->name())
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -653,10 +736,9 @@ bool Karton::deleteSavedState(const Domain *domain)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainManagedSaveRemove(domainPtr, 0) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to delete the saved state of domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_the_saved_state_of_domain_1_2")
+                                     .arg(domain->config()->name())
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -665,15 +747,6 @@ bool Karton::deleteSavedState(const Domain *domain)
     refreshDomain(domainPtr);
     qCInfo(KARTON_DEBUG) << "Successfully deleted the saved state of domain:" << domain->config()->name();
     return true;
-}
-
-void Karton::setGuestAgentWarningDismissed(bool dismissed)
-{
-    if (m_guestAgentWarningDismissed == dismissed) {
-        return;
-    }
-    m_guestAgentWarningDismissed = dismissed;
-    Q_EMIT guestAgentWarningDismissedChanged();
 }
 
 void Karton::viewerOpened()
@@ -733,6 +806,60 @@ void Karton::unregisterViewer(QObject *window)
         } else {
             ++it;
         }
+    }
+}
+
+void Karton::setViewerGlobalShortcutsBlocked(QObject *viewer, bool blocked)
+{
+    if (!viewer) {
+        return;
+    }
+    if (blocked) {
+        if (m_shortcutBlockedViewers.contains(viewer)) {
+            return;
+        }
+        m_shortcutBlockedViewers.insert(viewer);
+        if (auto *window = qobject_cast<QWindow *>(viewer)) {
+            if (!m_shortcutInhibitor) {
+                m_shortcutInhibitor = std::make_unique<ShortcutInhibitor>(this);
+            }
+            m_shortcutInhibitor->setWindow(window);
+            m_shortcutInhibitor->setInhibited(true);
+        }
+        connect(viewer, &QObject::destroyed, this, [this, viewer]() {
+            m_shortcutBlockedViewers.remove(viewer);
+            if (m_shortcutBlockedViewers.isEmpty() && m_shortcutInhibitor) {
+                m_shortcutInhibitor->release();
+            }
+            updateGlobalShortcutsBlock();
+        });
+    } else {
+        m_shortcutBlockedViewers.remove(viewer);
+        if (m_shortcutBlockedViewers.isEmpty() && m_shortcutInhibitor) {
+            m_shortcutInhibitor->release();
+        }
+    }
+    updateGlobalShortcutsBlock();
+}
+
+void Karton::updateGlobalShortcutsBlock()
+{
+    const bool block = !m_shortcutBlockedViewers.isEmpty();
+    if (block == m_kglobalShortcutsBlocked) {
+        return;
+    }
+    if (!QDBusConnection::sessionBus().isConnected()) {
+        return;
+    }
+    // KWin still consumes some window shortcuts such as Alt+F4 even with the
+    // keyboard-shortcuts-inhibit protocol. Keep this KDE-only fallback so a
+    // running guest really receives every key. Other desktops ignore it.
+    QDBusInterface iface(QStringLiteral("org.kde.kglobalaccel"),
+                         QStringLiteral("/kglobalaccel"),
+                         QStringLiteral("org.kde.KGlobalAccel"),
+                         QDBusConnection::sessionBus());
+    if (iface.isValid() && iface.call(QStringLiteral("blockGlobalShortcuts"), block).type() == QDBusMessage::ReplyMessage) {
+        m_kglobalShortcutsBlocked = block;
     }
 }
 
@@ -806,10 +933,9 @@ bool Karton::setAutostart(const Domain *domain, bool autostart)
 
     virDomainPtr domainPtr = domain->domainPtr();
     if (virDomainSetAutostart(domainPtr, autostart ? 1 : 0) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to change autostart for domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_change_autostart_for_domain_1_2")
+                                     .arg(domain->config()->name())
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;

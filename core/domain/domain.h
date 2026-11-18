@@ -95,6 +95,7 @@ public:
     void setAutostart(bool autostart);
     static QString uuidString(virDomainPtr domainPtr);
     void savePreviewFrame(QImage frame);
+    void clearPreviewFrame();
     void updateLivePreviewFrame(QImage frame);
 
 private:

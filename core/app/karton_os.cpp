@@ -7,7 +7,6 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
 #include <QDateTime>
@@ -51,7 +50,7 @@ using namespace KartonCommon;
 QString Karton::domainOsIcon(const Domain *domain) const
 {
     if (!domain) {
-        return QStringLiteral("computer-symbolic");
+        return QStringLiteral("karton-os-generic");
     }
     return OsIconMapper::iconName(domain->config()->shortOsId(), domain->config()->osId());
 }

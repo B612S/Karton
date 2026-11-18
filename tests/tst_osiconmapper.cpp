@@ -72,9 +72,9 @@ void OsIconMapperTest::macAndDos()
 
 void OsIconMapperTest::fallback()
 {
-    QCOMPARE(OsIconMapper::iconName(QString()), QStringLiteral("computer-symbolic"));
+    QCOMPARE(OsIconMapper::iconName(QString()), QStringLiteral("karton-os-generic"));
     QCOMPARE(OsIconMapper::displayName(QString()), QString());
-    QCOMPARE(OsIconMapper::iconName(QStringLiteral("unknown-os")), QStringLiteral("computer-symbolic"));
+    QCOMPARE(OsIconMapper::iconName(QStringLiteral("unknown-os")), QStringLiteral("karton-os-generic"));
 }
 
 QTEST_GUILESS_MAIN(OsIconMapperTest)

@@ -29,6 +29,14 @@ public:
 
     virtual QSGNode *updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds) = 0;
 
+    // Called from QQuickItem::releaseResources() on the render thread when the
+    // scene graph (and possibly the OpenGL context) is going away. Renderers
+    // must drop their GL/EGL objects here instead of in detach(), which runs
+    // on the GUI thread without a current context.
+    virtual void releaseResources()
+    {
+    }
+
     virtual QSize frameSize() const = 0;
 
     // CPU copy of the latest frame when the backend has one. GPU scanout

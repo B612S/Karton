@@ -11,7 +11,7 @@ Kirigami.Dialog {
     id: root
     property Domain domain: null
 
-    title: domain ? i18n("Snapshots — %1", domain.config.name) : i18n("Snapshots")
+    title: domain ? qsTr("snapshots_1").arg(domain.config.name) : qsTr("snapshots")
 
     background: Rectangle {
         color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
@@ -60,7 +60,7 @@ Kirigami.Dialog {
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.topMargin: Kirigami.Units.largeSpacing
             level: 3
-            text: i18n("Snapshots")
+            text: qsTr("snapshots")
         }
 
         Controls.Label {
@@ -77,7 +77,7 @@ Kirigami.Dialog {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.snapshotList.length === 0
-            text: i18n("No snapshots yet.")
+            text: qsTr("no_snapshots_yet")
             opacity: 0.7
         }
 
@@ -102,7 +102,7 @@ Kirigami.Dialog {
 
                         Controls.Label {
                             Layout.fillWidth: true
-                            text: modelData.name + (modelData.current ? " (" + i18n("current") + ")" : "")
+                            text: modelData.name + (modelData.current ? " (" + qsTr("current") + ")" : "")
                             elide: Text.ElideRight
                         }
                         Controls.Label {
@@ -115,7 +115,7 @@ Kirigami.Dialog {
                     }
 
                     Controls.Button {
-                        text: i18n("Revert")
+                        text: qsTr("revert")
                         icon.name: "edit-undo-symbolic"
                         onClicked: {
                             if (Karton.revertSnapshot(root.domain, modelData.name)) {
@@ -124,7 +124,7 @@ Kirigami.Dialog {
                         }
                     }
                     Controls.Button {
-                        text: i18n("Delete")
+                        text: qsTr("delete")
                         icon.name: "edit-delete-symbolic"
                         onClicked: {
                             if (Karton.deleteSnapshot(root.domain, modelData.name)) {
@@ -147,7 +147,7 @@ Kirigami.Dialog {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
-            placeholderText: i18n("Snapshot name")
+            placeholderText: qsTr("snapshot_name")
         }
 
         Controls.TextField {
@@ -155,14 +155,14 @@ Kirigami.Dialog {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
-            placeholderText: i18n("Description (optional)")
+            placeholderText: qsTr("description_optional")
         }
 
         Controls.CheckBox {
             id: includeMemoryCheck
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
-            text: i18n("Include memory (internal snapshot)")
+            text: qsTr("include_memory_internal_snapshot")
             enabled: root.domain !== null && root.domain.isActive
         }
 
@@ -171,7 +171,7 @@ Kirigami.Dialog {
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
             visible: includeMemoryCheck.enabled && !includeMemoryCheck.checked
-            text: i18n("Without memory, a running VM gets an external disk-only snapshot.")
+            text: qsTr("without_memory_a_running_vm_gets_an_external_disk_only_snapshot")
             opacity: 0.7
             wrapMode: Text.WordWrap
         }
@@ -180,7 +180,7 @@ Kirigami.Dialog {
             Layout.alignment: Qt.AlignRight
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.bottomMargin: Kirigami.Units.largeSpacing
-            text: i18n("Create snapshot")
+            text: qsTr("create_snapshot")
             icon.name: "camera-photo-symbolic"
             enabled: nameField.text.trim().length > 0 && root.domain !== null
             onClicked: {
@@ -196,7 +196,7 @@ Kirigami.Dialog {
             Layout.alignment: Qt.AlignRight
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.bottomMargin: Kirigami.Units.largeSpacing
-            text: i18n("Close")
+            text: qsTr("close")
             onClicked: root.close()
         }
     }

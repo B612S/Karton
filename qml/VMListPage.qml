@@ -11,7 +11,7 @@ import org.kde.karton
 Kirigami.ScrollablePage {
     id: root
 
-    title: i18nc("noun, Virtual Machines", "Virtual Machines")
+    title: qsTr("virtual_machines")
     topPadding: 0
     bottomPadding: 0
     leftPadding: 0
@@ -61,9 +61,24 @@ Kirigami.ScrollablePage {
             stack.pop();
         }
 
-        stack.push(Qt.resolvedUrl("VMPage.qml"), {
+        const component = Qt.createComponent("VMPage.qml");
+        if (component.status !== Component.Ready) {
+            console.error("Failed to create VM page:", component.errorString());
+            return;
+        }
+        // Create the page before pushing it. Passing a URL or a Component to
+        // pageStack.push() creates the object with a non-item JS parent,
+        // which makes Qt warn "Created graphical object was not placed in the
+        // graphics scene". A parentless object is not warned about, and the
+        // page stack takes ownership when the page is inserted.
+        const page = component.createObject(null, {
             domain: domain
         });
+        if (!page) {
+            console.error("Failed to create VM page");
+            return;
+        }
+        stack.push(page);
     }
 
     // Reordering uses a long press, like Luma's playlist: hold a row for a
@@ -229,14 +244,14 @@ Kirigami.ScrollablePage {
     actions: [
         Kirigami.Action {
             icon.name: "list-add-symbolic"
-            text: i18nc("verb, to create a new virtual machine", "Create")
+            text: qsTr("create")
             onTriggered: source => {
                 addDomainDialog.open();
             }
         },
         Kirigami.Action {
             icon.name: "preferences-system-symbolic"
-            text: i18n("Settings")
+            text: qsTr("settings")
             onTriggered: applicationSettingsDialog.open()
         }
     ]
@@ -312,7 +327,10 @@ Kirigami.ScrollablePage {
                 spacing: Kirigami.Units.largeSpacing
 
                 Kirigami.Icon {
-                    source: domain ? Karton.domainOsIcon(domain) : "computer-symbolic"
+                    source: {
+                        const icon = domain ? Karton.domainOsIcon(domain) : "karton-os-generic";
+                        return Karton.holidayMode && icon === "karton-os-linux" ? "karton-os-linux-newyear" : icon;
+                    }
                     Layout.fillHeight: true
                     Layout.maximumHeight: Kirigami.Units.iconSizes.huge
                     Layout.preferredWidth: height
@@ -408,8 +426,8 @@ Kirigami.ScrollablePage {
 
             visible: view.count === 0
 
-            text: Karton.connected ? i18nc("@title, greet user to Karton", "Welcome to Karton!") : i18n("Cannot connect to libvirt")
-            explanation: Karton.connected ? i18nc("%1 is the libvirt connection URI", "Connected to %1. Create a new virtual machine to proceed.", Karton.connectionUri) : i18nc("%1 is the libvirt connection URI", "Check that libvirt is running and that the %1 connection is available.", Karton.connectionUri)
+            text: Karton.connected ? qsTr("welcome_to_karton") : qsTr("cannot_connect_to_libvirt")
+            explanation: Karton.connected ? qsTr("connected_to_1_create_a_new_virtual_machine_to_proceed").arg(Karton.connectionUri) : qsTr("check_that_libvirt_is_running_and_that_the_1_connection_is_available").arg(Karton.connectionUri)
             icon.name: Karton.connected ? "computer-symbolic" : "error-symbolic"
         }
     }

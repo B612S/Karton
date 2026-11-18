@@ -4,11 +4,110 @@
 
 #include "viewer/primarysurfacerenderer.h"
 
+#include <cstring>
+
 #include <QMutexLocker>
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 
+#include <spice/protocol.h>
+
 #include "karton_debug.h"
+
+namespace
+{
+int bytesPerPixelForFormat(int format)
+{
+    switch (format) {
+    case SPICE_SURFACE_FMT_16_555:
+    case SPICE_SURFACE_FMT_16_565:
+        return 2;
+    case SPICE_SURFACE_FMT_32_xRGB:
+    case SPICE_SURFACE_FMT_32_ARGB:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+QImage::Format imageFormatForSurface(int format)
+{
+    switch (format) {
+    case SPICE_SURFACE_FMT_16_565:
+        return QImage::Format_RGB16;
+    case SPICE_SURFACE_FMT_16_555:
+    case SPICE_SURFACE_FMT_32_xRGB:
+    case SPICE_SURFACE_FMT_32_ARGB:
+        return QImage::Format_RGB32;
+    default:
+        return QImage::Format_Invalid;
+    }
+}
+
+QRgb rgb555ToRgb(quint16 pixel)
+{
+    const int r = ((pixel >> 10) & 0x1f) * 255 / 31;
+    const int g = ((pixel >> 5) & 0x1f) * 255 / 31;
+    const int b = (pixel & 0x1f) * 255 / 31;
+    return qRgb(r, g, b);
+}
+
+// Copies a rectangle from SPICE's primary surface into the owned image. The
+// surface stride can be larger than the visible width and SPICE may send
+// 16-bit or 32-bit pixels, so a plain memcpy of the whole buffer is not valid.
+bool copySurfaceRegion(QImage &frame, const uchar *source, int stride, int format, int x, int y, int width, int height)
+{
+    if (!source || frame.isNull() || stride <= 0) {
+        return false;
+    }
+    const int bytesPerPixel = bytesPerPixelForFormat(format);
+    if (bytesPerPixel == 0) {
+        return false;
+    }
+
+    const int maxWidth = qMin(frame.width(), stride / bytesPerPixel);
+    const int left = qMax(0, x);
+    const int top = qMax(0, y);
+    const int right = qMin(maxWidth, x + width);
+    const int bottom = qMin(frame.height(), y + height);
+    if (left >= right || top >= bottom) {
+        return false;
+    }
+
+    if (format == SPICE_SURFACE_FMT_16_555) {
+        for (int row = top; row < bottom; ++row) {
+            const quint16 *src = reinterpret_cast<const quint16 *>(source + row * stride);
+            QRgb *dst = reinterpret_cast<QRgb *>(frame.scanLine(row));
+            for (int column = left; column < right; ++column) {
+                dst[column] = rgb555ToRgb(src[column]);
+            }
+        }
+        return true;
+    }
+
+    if (format == SPICE_SURFACE_FMT_32_xRGB || format == SPICE_SURFACE_FMT_32_ARGB) {
+        // QImage::Format_RGB32 requires an opaque alpha byte. SPICE's xRGB
+        // surfaces usually leave it zero, which would turn previews and
+        // texture uploads transparent.
+        for (int row = top; row < bottom; ++row) {
+            const uchar *src = source + row * stride + left * 4;
+            QRgb *dst = reinterpret_cast<QRgb *>(frame.scanLine(row));
+            for (int column = left; column < right; ++column) {
+                quint32 pixel = 0;
+                memcpy(&pixel, src + (column - left) * 4, sizeof(pixel));
+                dst[column] = pixel | 0xff000000u;
+            }
+        }
+        return true;
+    }
+
+    const int bytes = (right - left) * bytesPerPixel;
+    for (int row = top; row < bottom; ++row) {
+        memcpy(frame.scanLine(row) + left * bytesPerPixel, source + row * stride + left * bytesPerPixel, bytes);
+    }
+    return true;
+}
+} // namespace
 
 void PrimarySurfaceRenderer::attach(SpiceDisplayChannel *channel)
 {
@@ -40,6 +139,9 @@ void PrimarySurfaceRenderer::detach()
     QMutexLocker locker(&m_frameLock);
     m_frameSource = nullptr;
     m_frameStride = 0;
+    m_frameFormat = 0;
+    m_imageWidth = 0;
+    m_imageHeight = 0;
     m_frame = QImage();
     m_frameUpdated = false;
 }
@@ -54,34 +156,43 @@ void PrimarySurfaceRenderer::display_primary_create_callback(SpiceChannel *chann
                                                              gpointer user_data)
 {
     Q_UNUSED(channel);
-    Q_UNUSED(format);
     Q_UNUSED(shmid);
 
     auto *self = static_cast<PrimarySurfaceRenderer *>(user_data);
-    qCInfo(KARTON_DEBUG) << "SPICE: primary surface received! size:" << width << "x" << height;
-    qCInfo(KARTON_DEBUG) << "SPICE: format is:" << format;
+    qCInfo(KARTON_DEBUG) << "SPICE: primary surface received! size:" << width << "x" << height << "format:" << format;
 
+    bool sizeChanged = false;
     {
         QMutexLocker locker(&self->m_frameLock);
+        const QSize oldSize(self->m_imageWidth, self->m_imageHeight);
+        const QImage::Format imageFormat = imageFormatForSurface(format);
         self->m_frameSource = static_cast<const uchar *>(imgdata);
         self->m_frameStride = stride;
-        self->m_imageWidth = width;
-        self->m_imageHeight = height;
-        // Copy out of SPICE's framebuffer. The original memory is owned by
-        // SPICE and can be unmapped while the render thread is still creating
-        // a texture from it (Windows resizes the primary surface while
-        // booting), which used to crash QSGBatchRenderer.
-        self->m_frame = QImage(width, height, QImage::Format_RGB32);
-        if (!self->m_frame.isNull() && self->m_frameSource) {
-            const int bytesPerLine = qMin(stride, self->m_frame.bytesPerLine());
-            for (int y = 0; y < height; ++y) {
-                memcpy(self->m_frame.scanLine(y), self->m_frameSource + y * stride, bytesPerLine);
+        self->m_frameFormat = format;
+        self->m_frame = QImage();
+
+        if (imageFormat != QImage::Format_Invalid && width > 0 && height > 0 && imgdata) {
+            self->m_imageWidth = width;
+            self->m_imageHeight = height;
+            self->m_frame = QImage(width, height, imageFormat);
+            if (!self->m_frame.isNull()) {
+                copySurfaceRegion(self->m_frame, self->m_frameSource, stride, format, 0, 0, width, height);
+            } else {
+                self->m_imageWidth = 0;
+                self->m_imageHeight = 0;
             }
+        } else {
+            qCWarning(KARTON_DEBUG) << "Unsupported SPICE primary surface format:" << format;
+            self->m_imageWidth = 0;
+            self->m_imageHeight = 0;
         }
         self->m_frameUpdated = true;
+        sizeChanged = oldSize != QSize(self->m_imageWidth, self->m_imageHeight);
     }
 
-    Q_EMIT self->frameSizeChanged();
+    if (sizeChanged) {
+        Q_EMIT self->frameSizeChanged();
+    }
     Q_EMIT self->frameReady();
 }
 
@@ -89,30 +200,21 @@ void PrimarySurfaceRenderer::display_invalidate_callback(SpiceDisplayChannel *ch
 {
     Q_UNUSED(channel);
 
-    Q_UNUSED(x);
-    Q_UNUSED(y);
-    Q_UNUSED(width);
-    Q_UNUSED(height);
-
     auto *self = static_cast<PrimarySurfaceRenderer *>(user_data);
+    bool updated = false;
     {
         QMutexLocker locker(&self->m_frameLock);
         if (self->m_frameSource && !self->m_frame.isNull()) {
-            const int left = qBound(0, x, self->m_frame.width());
-            const int top = qBound(0, y, self->m_frame.height());
-            const int right = qBound(0, x + width, self->m_frame.width());
-            const int bottom = qBound(0, y + height, self->m_frame.height());
-            const int bytes = (right - left) * 4;
-            if (bytes > 0) {
-                for (int row = top; row < bottom; ++row) {
-                    memcpy(self->m_frame.scanLine(row) + left * 4, self->m_frameSource + row * self->m_frameStride + left * 4, bytes);
-                }
-            }
+            updated = copySurfaceRegion(self->m_frame, self->m_frameSource, self->m_frameStride, self->m_frameFormat, x, y, width, height);
         }
-        self->m_frameUpdated = true;
+        if (updated) {
+            self->m_frameUpdated = true;
+        }
     }
 
-    Q_EMIT self->frameReady();
+    if (updated) {
+        Q_EMIT self->frameReady();
+    }
 }
 
 void PrimarySurfaceRenderer::display_primary_destroy_callback(SpiceDisplayChannel *channel, gpointer user_data)
@@ -122,8 +224,17 @@ void PrimarySurfaceRenderer::display_primary_destroy_callback(SpiceDisplayChanne
     QMutexLocker locker(&self->m_frameLock);
     self->m_frameSource = nullptr;
     self->m_frameStride = 0;
+    self->m_frameFormat = 0;
+    self->m_imageWidth = 0;
+    self->m_imageHeight = 0;
     self->m_frame = QImage();
     self->m_frameUpdated = false;
+}
+
+QSize PrimarySurfaceRenderer::frameSize() const
+{
+    QMutexLocker locker(&m_frameLock);
+    return QSize(m_imageWidth, m_imageHeight);
 }
 
 QImage PrimarySurfaceRenderer::currentFrame() const
@@ -134,14 +245,24 @@ QImage PrimarySurfaceRenderer::currentFrame() const
 
 QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds)
 {
-    QMutexLocker locker(&m_frameLock);
+    const bool reusedNode = oldNode != nullptr;
+    auto *node = static_cast<QSGSimpleTextureNode *>(oldNode);
 
-    if (m_frame.isNull() || m_frame.width() <= 0 || m_frame.height() <= 0) {
-        delete oldNode;
-        return nullptr;
+    QImage frame;
+    bool updated = false;
+    {
+        QMutexLocker locker(&m_frameLock);
+        if (m_frame.isNull()) {
+            // The caller detaches and deletes the previous node.
+            return nullptr;
+        }
+        if (m_frameUpdated || !node || !node->texture()) {
+            frame = m_frame;
+            m_frameUpdated = false;
+            updated = true;
+        }
     }
 
-    auto *node = static_cast<QSGSimpleTextureNode *>(oldNode);
     if (!node) {
         node = new QSGSimpleTextureNode();
         node->setOwnsTexture(true);
@@ -150,17 +271,27 @@ QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *
     node->setRect(bounds);
     node->setFiltering(QSGTexture::Linear);
 
-    // Keep the existing texture when the frame did not change; deleting the
-    // node here used to make the VM display go black on unrelated repaints.
-    if (!m_frameUpdated && node->texture()) {
+    // Keep the existing texture when the frame did not change; recreating it
+    // here made the VM display go black on unrelated repaints.
+    if (!updated) {
         return node;
     }
 
-    QSGTexture *texture = window->createTextureFromImage(m_frame, QQuickWindow::TextureIsOpaque);
-    if (texture) {
-        node->setTexture(texture);
-        m_frameUpdated = false;
+    QSGTexture *texture = window->createTextureFromImage(frame, QQuickWindow::TextureIsOpaque);
+    if (!texture) {
+        {
+            QMutexLocker locker(&m_frameLock);
+            m_frameUpdated = true;
+        }
+        if (node->texture()) {
+            return node;
+        }
+        if (!reusedNode) {
+            delete node;
+        }
+        return nullptr;
     }
 
+    node->setTexture(texture);
     return node;
 }

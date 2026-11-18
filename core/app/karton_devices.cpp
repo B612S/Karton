@@ -7,9 +7,9 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -79,7 +79,7 @@ bool Karton::attachXmlDevice(const Domain *domain, const QString &xml)
         result = virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG);
     }
     if (result < 0) {
-        Q_EMIT errorOccurred(i18nc("The error message is supplied by libvirt", "Failed to add device: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_add_device_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     refreshDomainList();
@@ -209,7 +209,7 @@ bool Karton::attachInputDevice(const Domain *domain, const QString &type, const 
     }
     if (result < 0) {
         Q_EMIT errorOccurred(
-            i18nc("%1 is the device type, %2 is the error message", "Failed to add input device %1: %2", type, QString::fromUtf8(virGetLastErrorMessage())));
+            QCoreApplication::translate("Karton", "failed_to_add_input_device_1_2").arg(type).arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     refreshDomainList();
@@ -251,10 +251,8 @@ bool Karton::detachInputDevice(const Domain *domain, const QString &type, const 
             result = virDomainDetachDeviceFlags(domain->domainPtr(), deviceDocument.toString().toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG);
         }
         if (result < 0) {
-            Q_EMIT errorOccurred(i18nc("%1 is the device type, %2 is the error message",
-                                       "Failed to remove input device %1: %2",
-                                       type,
-                                       QString::fromUtf8(virGetLastErrorMessage())));
+            Q_EMIT errorOccurred(
+                QCoreApplication::translate("Karton", "failed_to_remove_input_device_1_2").arg(type).arg(QString::fromUtf8(virGetLastErrorMessage())));
             return false;
         }
         refreshDomainList();
@@ -301,7 +299,7 @@ bool Karton::detachXmlDevice(const Domain *domain, int index)
         result = virDomainDetachDeviceFlags(domain->domainPtr(), deviceDocument.toString().toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG);
     }
     if (result < 0) {
-        Q_EMIT errorOccurred(i18nc("The error message is supplied by libvirt", "Failed to remove device: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_remove_device_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     refreshDomainList();
@@ -329,7 +327,7 @@ bool Karton::setXmlDevice(const Domain *domain, const QString &tag, const QStrin
 
     QDomDocument deviceDocument;
     if (!deviceDocument.setContent(xml)) {
-        Q_EMIT errorOccurred(i18n("Invalid device XML."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_device_xml"));
         return false;
     }
     QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
@@ -354,8 +352,7 @@ bool Karton::setXmlDevice(const Domain *domain, const QString &tag, const QStrin
 
     virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
-        Q_EMIT errorOccurred(
-            i18nc("%1 is the device tag, %2 is the error message", "Failed to update %1: %2", tag, QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_1_2").arg(tag).arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     virDomainFree(redefined);
@@ -384,7 +381,7 @@ bool Karton::replaceXmlDevice(const Domain *domain, int index, const QString &xm
 
     QDomDocument deviceDocument;
     if (!deviceDocument.setContent(xml)) {
-        Q_EMIT errorOccurred(i18n("Invalid device XML."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_device_xml"));
         return false;
     }
     QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
@@ -407,7 +404,7 @@ bool Karton::replaceXmlDevice(const Domain *domain, int index, const QString &xm
 
     virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
-        Q_EMIT errorOccurred(i18nc("%1 is the error message", "Failed to update device: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_device_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     virDomainFree(redefined);
@@ -537,41 +534,43 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
         }
 
         if (tag == QStringLiteral("disk")) {
-            label = i18n("Disk");
+            label = QCoreApplication::translate("Karton", "disk");
             icon = QStringLiteral("drive-harddisk-symbolic");
         } else if (tag == QStringLiteral("interface")) {
-            label = i18n("Network interface");
+            label = QCoreApplication::translate("Karton", "network_interface");
             icon = QStringLiteral("network-wired-symbolic");
         } else if (tag == QStringLiteral("input")) {
             const QString inputType = device.attribute(QStringLiteral("type"));
-            label = inputType == QStringLiteral("tablet") ? i18n("Tablet")
-                : inputType == QStringLiteral("mouse")    ? i18n("Mouse")
-                : inputType == QStringLiteral("keyboard") ? i18n("Keyboard")
-                                                          : i18n("Input device");
+            label = inputType == QStringLiteral("tablet") ? QCoreApplication::translate("Karton", "tablet")
+                : inputType == QStringLiteral("mouse")    ? QCoreApplication::translate("Karton", "mouse")
+                : inputType == QStringLiteral("keyboard") ? QCoreApplication::translate("Karton", "keyboard")
+                                                          : QCoreApplication::translate("Karton", "input_device");
             icon = inputType == QStringLiteral("keyboard") ? QStringLiteral("input-keyboard-symbolic")
                 : inputType == QStringLiteral("mouse")     ? QStringLiteral("input-mouse-symbolic")
                                                            : QStringLiteral("input-tablet-symbolic");
         } else if (tag == QStringLiteral("video")) {
-            label = i18n("Video");
+            label = QCoreApplication::translate("Karton", "video");
             icon = QStringLiteral("video-display-symbolic");
         } else if (tag == QStringLiteral("sound")) {
-            label = i18n("Sound");
+            label = QCoreApplication::translate("Karton", "sound");
             icon = QStringLiteral("audio-card-symbolic");
         } else if (tag == QStringLiteral("hostdev")) {
-            label = device.attribute(QStringLiteral("type")) == QStringLiteral("usb") ? i18n("USB passthrough") : i18n("PCI passthrough");
+            label = device.attribute(QStringLiteral("type")) == QStringLiteral("usb") ? QCoreApplication::translate("Karton", "usb_passthrough")
+                                                                                      : QCoreApplication::translate("Karton", "pci_passthrough");
             icon = QStringLiteral("drive-removable-media-usb-symbolic");
         } else if (tag == QStringLiteral("tpm")) {
-            label = i18n("TPM");
+            label = QCoreApplication::translate("Karton", "tpm");
             icon = QStringLiteral("security-high-symbolic");
         } else if (tag == QStringLiteral("controller")) {
             const QString controllerType = device.attribute(QStringLiteral("type"));
-            label = controllerType == QStringLiteral("usb")                                           ? i18n("USB Controller")
-                : controllerType == QStringLiteral("pci") || controllerType == QStringLiteral("pcie") ? i18n("PCI Express Controller")
-                : controllerType == QStringLiteral("sata")                                            ? i18n("SATA Controller")
-                : controllerType == QStringLiteral("virtio-serial")                                   ? i18n("VirtIO Serial Controller")
-                : controllerType == QStringLiteral("scsi")                                            ? i18n("SCSI Controller")
-                : controllerType == QStringLiteral("ide")                                             ? i18n("IDE Controller")
-                                                                                                      : i18n("%1 Controller", controllerType);
+            label = controllerType == QStringLiteral("usb") ? QCoreApplication::translate("Karton", "usb_controller")
+                : controllerType == QStringLiteral("pci") || controllerType == QStringLiteral("pcie")
+                ? QCoreApplication::translate("Karton", "pci_express_controller")
+                : controllerType == QStringLiteral("sata")          ? QCoreApplication::translate("Karton", "sata_controller")
+                : controllerType == QStringLiteral("virtio-serial") ? QCoreApplication::translate("Karton", "virtio_serial_controller")
+                : controllerType == QStringLiteral("scsi")          ? QCoreApplication::translate("Karton", "scsi_controller")
+                : controllerType == QStringLiteral("ide")           ? QCoreApplication::translate("Karton", "ide_controller")
+                                                                    : QCoreApplication::translate("Karton", "s_1_controller").arg(controllerType);
             const QString controllerIndex = device.attribute(QStringLiteral("index"));
             if (!controllerIndex.isEmpty()) {
                 label += QStringLiteral(" %1").arg(controllerIndex.toInt() + 1);
@@ -579,64 +578,64 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
             detail.clear();
             icon = QStringLiteral("cpu-symbolic");
         } else if (tag == QStringLiteral("serial")) {
-            label = i18n("Serial Port");
+            label = QCoreApplication::translate("Karton", "serial_port");
             icon = QStringLiteral("network-wired-symbolic");
         } else if (tag == QStringLiteral("console")) {
-            label = i18n("Text Console");
+            label = QCoreApplication::translate("Karton", "text_console");
             icon = QStringLiteral("utilities-terminal-symbolic");
         } else if (tag == QStringLiteral("channel")) {
             const QString name = childText(QStringLiteral("target"), QStringLiteral("name"));
             if (name == QStringLiteral("org.qemu.guest_agent.0")) {
-                label = i18n("QEMU Guest Agent");
+                label = QCoreApplication::translate("Karton", "qemu_guest_agent");
             } else if (name == QStringLiteral("com.redhat.spice.0")) {
-                label = i18n("SPICE Agent");
+                label = QCoreApplication::translate("Karton", "spice_agent");
             } else if (name == QStringLiteral("org.spice-space.webdav.0")) {
-                label = i18n("SPICE WebDAV");
+                label = QCoreApplication::translate("Karton", "spice_webdav");
             } else {
-                label = i18n("VirtIO Channel (%1)", name);
+                label = QCoreApplication::translate("Karton", "virtio_channel_1").arg(name);
             }
             icon = QStringLiteral("network-connect-symbolic");
         } else if (tag == QStringLiteral("redirdev")) {
-            label = i18n("USB Redirection (SPICE)");
+            label = QCoreApplication::translate("Karton", "usb_redirection_spice");
             icon = QStringLiteral("drive-removable-media-usb-symbolic");
         } else if (tag == QStringLiteral("watchdog")) {
-            label = i18n("Watchdog");
+            label = QCoreApplication::translate("Karton", "watchdog");
             icon = QStringLiteral("security-medium-symbolic");
         } else if (tag == QStringLiteral("rng")) {
-            label = i18n("Random Number Generator");
+            label = QCoreApplication::translate("Karton", "random_number_generator");
             icon = QStringLiteral("security-high-symbolic");
         } else if (tag == QStringLiteral("memballoon")) {
-            label = i18n("Memory Balloon");
+            label = QCoreApplication::translate("Karton", "memory_balloon");
             icon = QStringLiteral("memory-symbolic");
         } else if (tag == QStringLiteral("panic")) {
-            label = i18n("Panic Device");
+            label = QCoreApplication::translate("Karton", "panic_device");
             icon = QStringLiteral("dialog-warning-symbolic");
         } else if (tag == QStringLiteral("shmem")) {
-            label = i18n("Shared Memory");
+            label = QCoreApplication::translate("Karton", "shared_memory");
             icon = QStringLiteral("memory-symbolic");
         } else if (tag == QStringLiteral("iommu")) {
-            label = i18n("IOMMU");
+            label = QCoreApplication::translate("Karton", "iommu");
             icon = QStringLiteral("cpu-symbolic");
         } else if (tag == QStringLiteral("vsock")) {
-            label = i18n("VSOCK");
+            label = QCoreApplication::translate("Karton", "vsock");
             icon = QStringLiteral("network-connect-symbolic");
         } else if (tag == QStringLiteral("filesystem")) {
-            label = i18n("Filesystem");
+            label = QCoreApplication::translate("Karton", "filesystem");
             icon = QStringLiteral("folder-symbolic");
         } else if (tag == QStringLiteral("smartcard")) {
-            label = i18n("Smart Card");
+            label = QCoreApplication::translate("Karton", "smart_card");
             icon = QStringLiteral("security-high-symbolic");
         } else if (tag == QStringLiteral("hub")) {
-            label = i18n("USB Hub");
+            label = QCoreApplication::translate("Karton", "usb_hub");
             icon = QStringLiteral("drive-removable-media-usb-symbolic");
         } else if (tag == QStringLiteral("emulator")) {
-            label = i18n("QEMU Emulator");
+            label = QCoreApplication::translate("Karton", "qemu_emulator");
             icon = QStringLiteral("computer-symbolic");
         } else if (tag == QStringLiteral("graphics")) {
-            label = i18n("Display");
+            label = QCoreApplication::translate("Karton", "display");
             icon = QStringLiteral("video-display-symbolic");
         } else if (tag == QStringLiteral("audio")) {
-            label = i18n("Audio backend");
+            label = QCoreApplication::translate("Karton", "audio_backend");
             icon = QStringLiteral("audio-card-symbolic");
         }
         QVariantMap info;
@@ -687,13 +686,14 @@ bool Karton::saveDomainXml(const Domain *domain, const QString &xml)
     QDomDocument document;
     const QDomDocument::ParseResult parseResult = document.setContent(xml);
     if (!parseResult || document.documentElement().tagName() != QStringLiteral("domain")) {
-        const QString parseError = parseResult.errorMessage.isEmpty() ? i18n("the root element must be <domain>") : parseResult.errorMessage;
+        const QString parseError =
+            parseResult.errorMessage.isEmpty() ? QCoreApplication::translate("Karton", "the_root_element_must_be_domain") : parseResult.errorMessage;
         Q_EMIT errorOccurred(
-            i18nc("XML parse error with line and column", "Invalid domain XML at %1:%2: %3", parseResult.errorLine, parseResult.errorColumn, parseError));
+            QCoreApplication::translate("Karton", "invalid_domain_xml_at_1_2_3").arg(parseResult.errorLine).arg(parseResult.errorColumn).arg(parseError));
         return false;
     }
     if (document.documentElement().firstChildElement(QStringLiteral("name")).text().trimmed().isEmpty()) {
-        Q_EMIT errorOccurred(i18n("Invalid domain XML: a domain name is required."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_domain_xml_a_domain_name_is_required"));
         return false;
     }
 
@@ -701,10 +701,9 @@ bool Karton::saveDomainXml(const Domain *domain, const QString &xml)
     // the root element. This is the same schema validation virt-manager uses.
     virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, xml.toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
-        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
-                                   "Failed to save XML for domain %1: %2",
-                                   domain->config()->name(),
-                                   QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_save_xml_for_domain_1_2")
+                                 .arg(domain->config()->name())
+                                 .arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     virDomainFree(redefined);

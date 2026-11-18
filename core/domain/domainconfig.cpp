@@ -32,7 +32,9 @@ DomainConfig::DomainConfig(const DomainConfigData &data)
     , m_diskFormat(data.diskFormat)
     , m_firmware(data.firmware)
     , m_networkModel(data.networkModel)
+    , m_networkName(data.networkName)
     , m_secureBoot(data.secureBoot)
+    , m_hasGraphics(data.hasGraphics)
     , m_screenshotPreviewPath(data.screenshotPreviewPath)
     , m_autostart(data.autostart)
     , m_enableAccel3d(data.enableAccel3d)
@@ -45,6 +47,7 @@ void DomainConfig::apply(const DomainConfigData &data)
     setActive(data.isActive);
     setPaused(data.isPaused);
     setHasSavedState(data.hasSavedState);
+    setHasGraphics(data.hasGraphics);
     setState(data.state);
     setMaxRam(data.maxRam);
     setRamUsage(data.ramUsage);
@@ -75,6 +78,14 @@ void DomainConfig::setHasSavedState(bool hasSavedState)
     if (m_hasSavedState != hasSavedState) {
         m_hasSavedState = hasSavedState;
         Q_EMIT hasSavedStateChanged(hasSavedState);
+    }
+}
+
+void DomainConfig::setHasGraphics(bool hasGraphics)
+{
+    if (m_hasGraphics != hasGraphics) {
+        m_hasGraphics = hasGraphics;
+        Q_EMIT hasGraphicsChanged(hasGraphics);
     }
 }
 

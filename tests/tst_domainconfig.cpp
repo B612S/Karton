@@ -34,6 +34,7 @@ void DomainConfigTest::defaults()
     QVERIFY(!config.isActive());
     QVERIFY(!config.isPaused());
     QVERIFY(!config.hasSavedState());
+    QVERIFY(!config.hasGraphics());
 }
 
 void DomainConfigTest::constructorCopiesEveryField()
@@ -61,6 +62,7 @@ void DomainConfigTest::constructorCopiesEveryField()
     data.firmware = QStringLiteral("efi");
     data.networkModel = QStringLiteral("e1000");
     data.secureBoot = true;
+    data.hasGraphics = true;
     data.screenshotPreviewPath = QStringLiteral("/tmp/preview.png");
     data.autostart = true;
     data.enableAccel3d = false;
@@ -88,6 +90,7 @@ void DomainConfigTest::constructorCopiesEveryField()
     QCOMPARE(config.firmware(), data.firmware);
     QCOMPARE(config.networkModel(), data.networkModel);
     QCOMPARE(config.secureBoot(), data.secureBoot);
+    QCOMPARE(config.hasGraphics(), data.hasGraphics);
     QCOMPARE(config.screenshotPreviewPath(), data.screenshotPreviewPath);
     QCOMPARE(config.autostart(), data.autostart);
     QCOMPARE(config.enableAccel3d(), data.enableAccel3d);
@@ -106,6 +109,7 @@ void DomainConfigTest::applyUpdatesMutableFields()
     QSignalSpy activeSpy(&config, &DomainConfig::isActiveChanged);
     QSignalSpy pausedSpy(&config, &DomainConfig::isPausedChanged);
     QSignalSpy savedSpy(&config, &DomainConfig::hasSavedStateChanged);
+    QSignalSpy graphicsSpy(&config, &DomainConfig::hasGraphicsChanged);
     QSignalSpy stateSpy(&config, &DomainConfig::stateChanged);
     QSignalSpy ramSpy(&config, &DomainConfig::maxRamChanged);
     QSignalSpy usageSpy(&config, &DomainConfig::ramUsageChanged);
@@ -119,6 +123,7 @@ void DomainConfigTest::applyUpdatesMutableFields()
     next.isActive = true;
     next.isPaused = true;
     next.hasSavedState = true;
+    next.hasGraphics = true;
     next.state = QStringLiteral("paused");
     next.maxRam = 8;
     next.ramUsage = 2;
@@ -136,6 +141,7 @@ void DomainConfigTest::applyUpdatesMutableFields()
     QVERIFY(config.isActive());
     QVERIFY(config.isPaused());
     QVERIFY(config.hasSavedState());
+    QVERIFY(config.hasGraphics());
     QCOMPARE(config.state(), next.state);
     QCOMPARE(config.maxRam(), next.maxRam);
     QCOMPARE(config.ramUsage(), next.ramUsage);
@@ -151,6 +157,7 @@ void DomainConfigTest::applyUpdatesMutableFields()
     QCOMPARE(activeSpy.count(), 1);
     QCOMPARE(pausedSpy.count(), 1);
     QCOMPARE(savedSpy.count(), 1);
+    QCOMPARE(graphicsSpy.count(), 1);
     QCOMPARE(stateSpy.count(), 1);
     QCOMPARE(ramSpy.count(), 1);
     QCOMPARE(usageSpy.count(), 1);

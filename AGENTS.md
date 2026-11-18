@@ -40,9 +40,11 @@ development or testing must pass `-c <same URI>` (usually
 | `core/os/osinfoconfig.{h,cpp}` | libosinfo wrapper (OS list, media detection, architecture). |
 | `core/os/osiconmapper.{h,cpp}` | Maps libosinfo OS IDs to flat family icons and display names. |
 | `img/os/` | Bundled flat OS family icons installed into hicolor. |
+| `locales/` | Qt `.ts` translation sources (`en`, `ru`), key-based. |
 | `core/viewer/domainviewer.{h,cpp}` | SPICE client `QQuickItem` used by the VM viewer window. |
 | `core/viewer/previewitem.{h,cpp}` | Painted item that displays the latest in-memory preview frame. |
 | `core/viewer/glscanoutrenderer.*`, `core/viewer/primarysurfacerenderer.*` | SPICE display rendering backends. |
+| `core/viewer/terminalview.*` | VT100/xterm terminal widget for the libvirt serial console. |
 | `core/libvirt/libvirtmonitor.*`, `core/libvirt/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `core/util/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `core/util/xmlhighlighter.*` | Theme-coloured XML syntax highlighter for the VM XML editor. |
@@ -72,7 +74,7 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 
 ## Build
 
-Required: CMake >= 3.20, a C++23 compiler, Qt 6, KF6 (Kirigami, I18n,
+Required: CMake >= 3.20, a C++23 compiler, Qt 6 (including Linguist tools `qt6-tools`), KF6 (Kirigami,
 CoreAddons, QQC2DesktopStyle, IconThemes), Kirigami Addons >= 1.11, libvirt,
 libosinfo, GLib, spice-client-glib, phodav, PipeWire, OpenGL/EGL (scene graph and
 SPICE scanout), and Extra CMake Modules (ECM) >= 6.0.
@@ -82,8 +84,8 @@ On Arch Linux, the relevant packages are roughly:
 ```sh
 sudo pacman -S --needed base-devel cmake ninja extra-cmake-modules \
     qt6-base qt6-declarative qt6-multimedia qt6-tools \
-    kirigami kirigami-addons kcoreaddons ki18n kiconthemes qqc2-desktop-style \
-    libvirt libosinfo spice-gtk phodav pipewire mesa
+    kirigami kirigami-addons kcoreaddons kiconthemes qqc2-desktop-style \
+    libvirt libosinfo spice-gtk phodav pipewire mesa acl wayland wayland-protocols
 ```
 
 Configure and build out-of-tree:
@@ -191,6 +193,29 @@ Every settings page must look and behave the same:
 - New pages must be added to `ecm_target_qml_sources()` and must pass
   `tst_qml_startup`; run `ctest` after every QML change.
 
+## UI style consistency
+
+Every dialog, settings page, wizard page and device form must follow the same
+Karton style; do not invent a separate layout for a new screen.
+
+- Use the shared patterns: `ScrollableSettingsView` for scrollable content,
+  16 px spacing, 15 px bold section labels with a 1 px rule, 24 px page margins.
+- Use two-column `GridLayout` rows: label on the left with `Layout.fillWidth`,
+  control on the right with `Layout.preferredWidth: 260`. Text values in that
+  right column must use `horizontalAlignment: Text.AlignRight`; do not leave a
+  value left-aligned inside its 260 px slot.
+- Checkboxes belong on the right of their label row. Buttons that belong to a
+  form are right-aligned and use symbolic icons.
+- Keep dialog widths consistent between related dialogs. Long notes must wrap
+  inside the dialog width instead of resizing the dialog; use an explicit
+  `width` when `Kirigami.Dialog` would otherwise size itself to a long label.
+- Match the established translucent/opaque background, radius, padding and
+  footer/action placement of neighbouring dialogs.
+- Long values (paths, UUIDs, disk targets) are elided or wrapped deliberately;
+  never let them push the layout or clip controls.
+- After UI changes, compare the result with the existing Settings/Add Hardware
+  screens and run `ctest`.
+
 ## Code conventions
 
 - C++23, Qt 6 / KF6 APIs. Prefer Qt/KF6 classes and `QStringLiteral` over
@@ -204,9 +229,12 @@ Every settings page must look and behave the same:
 - Formatting is enforced by the KDE clang-format configuration. Run
   `clang-format -i` on touched C++ files (the build wires up
   `kde_clang_format`).
-- User-visible strings must be translatable: use `i18n()` / `i18nc()` in C++
-  and QML, and add translation contexts as existing code does. Keep
-  `core/Messages.sh` and the root `CMakeLists.txt` in sync when adding files.
+- User-visible strings are key-based and translatable: use `qsTr("key")` in
+  QML and `QCoreApplication::translate("Context", "key")` in C++. Add every new
+  key to both `locales/en.ts` and `locales/ru.ts`; do not put English source
+  text in the code as a translation key. Keep the TS list in
+  `qt_add_translations()` and the `install(FILES ...)` list in `CMakeLists.txt`
+  in sync when adding a language.
 - Use the `KARTON_DEBUG` logging category (`qCInfo(KARTON_DEBUG)`,
   `qCWarning(KARTON_DEBUG)`, ...) rather than raw `qDebug()`.
 - Use monochrome `*-symbolic` icon names in QML actions and buttons so the UI
@@ -241,12 +269,27 @@ Every settings page must look and behave the same:
   (currently cached `qemu-img info` queries). VM creation and disk resizing use
   the asynchronous path and report completion through `domainCreated` /
   `domainEdited`.
+- Localization follows Luma: translations are stored as keys in
+  `locales/en.ts`/`locales/ru.ts`, compiled by `qt_add_translations()` into
+  embedded `:/i18n/<lang>.qm` resources and installed to
+  `share/karton/translations`. The language is stored as `ui/language`
+  (`auto`/`en`/`ru`); `auto` follows `QLocale::system().name().left(2)` and
+  falls back to English. `Karton::language`/`setLanguage` drive
+  `Karton::resolveLanguage()` and a `QTranslator`; `main.cpp` reloads it and
+  calls `QQmlApplicationEngine::retranslate()` on change. QML must use `qsTr`
+  and C++ `QCoreApplication::translate`, never KDE `i18n`/`i18nc`.
 - The QML dialogs keep themselves open while an asynchronous create/edit is in
   flight; do not close them optimistically after calling `Karton`.
 - `ApplicationSettingsDialog.qml` is the window-attached Luma-style global
   settings overlay. Its Application page edits the libvirt connection URI; its
-  Libvirt Networks page manages host networks (start/stop, autostart, NAT and
-  delete); its About page shows the application version and links.
+  Console page sets the default serial-console font size; its Libvirt Networks
+  page manages host networks (start/stop, autostart, NAT and delete); its About
+  page shows the application version and links. The Application page also
+  selects the UI language (System/English/Русский) and has a Maintenance section
+  that can clear all preview images. Data for deleted VMs
+  is cleaned automatically: runtime removals call `removeDomainCache()`, and a
+  per-connection `knownDomains/<hash>` UUID list cleans VMs deleted while
+  Karton was closed without affecting other libvirt connections.
 - Libvirt network management lives on `Karton` (`networks()`, `startNetwork()`,
   `stopNetwork()`, `createNatNetwork()`, `attachNetwork()`, `detachNetwork()`)
   and is exposed inline by the Network page of `qml/SettingsDialog.qml`. The
@@ -278,14 +321,32 @@ Every settings page must look and behave the same:
   detached from the host.
 - VM cloning is implemented by `Karton::cloneDomain()`, with the UI in
   `qml/CloneDialog.qml`. It copies local file-backed disks with `qemu-img
-  convert -U`, strips the UUID, MAC addresses, hostdevs, NVRAM and Karton
-  metadata, and defines a stopped clone. The copy runs asynchronously through
+  convert -U`, lets the user choose the destination folder, strips the UUID,
+  MAC addresses, hostdevs, NVRAM and Karton metadata (but preserves
+  libosinfo/OS metadata so the clone keeps its OS icon), and defines a stopped
+  clone. A clone of a BitLocker VM gets a fresh TPM state and will require the
+  BitLocker recovery key, so decrypt/suspend BitLocker before cloning. The copy runs asynchronously through
   `CommandRunner`; partial destination files are removed on failure.
 - Disk/ISO hotplug is exposed through `Karton::domainDisks()`, `addDisk()`,
-  `attachDiskImage()`, `attachIso()` and `detachDisk()`, with the UI inline in
-  the Disks page of `qml/SettingsDialog.qml`. New disks are created with
-  `qemu-img create` and attached as virtio devices; ISO images are attached as
-  read-only SATA cdroms. The page uses FileDialog pickers for images/ISOs.
+  `attachDiskImage()`, `attachIso()`, `setDiskMedia()` and `detachDisk()`, with
+  the UI inline in the Disks page of `qml/SettingsDialog.qml`. New disks are
+  created with `qemu-img create` and attached as virtio devices; ISO images are
+  attached as read-only SATA cdroms. An empty CD-ROM row has an Insert… action
+  (Change… when media is present); `attachIso()` reuses an existing empty
+  CD-ROM instead of creating a second one. The Add Hardware Storage page starts
+  with a Storage type selector (Existing image, CD-ROM, New disk) and shows
+  only the matching form. Existing image/CD-ROM forms contain only a path
+  picker; their primary Attach action lives in the fixed footer. New disk shows
+  the folder/name/size/format/bus/cache/discard form and a Create disk footer
+  action, so the action is always visible without scrolling.
+  Disk edit options include an editable Path row (Media for CD-ROM) with a
+  Change… picker, so an existing disk can be repointed without detaching and
+  re-adding it. For a running VM the path change is saved to the inactive
+  configuration and applies on the next start; CD-ROM media changes are applied
+  live. CD-ROM edit options are limited to Media and the always-enabled
+  read-only flag; shareable, serial, cache and discard are not shown and
+  `editDomainDiskAdvanced()` ignores them for an optical drive. The page uses
+  FileDialog pickers for images/ISOs.
 - The viewer discovers the SPICE URI from the domain XML
   (`virDomainGetXMLDesc()`), not by spawning `virsh`. Application Settings has a
   global SPICE TLS preference (`spice/tls`, default enabled) and a CA
@@ -302,10 +363,32 @@ Every settings page must look and behave the same:
   disk. Preserve unknown metadata when rewriting XML —
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
-- `DomainConfig::virtualDiskPaths` contains every `<disk device='disk'>` path
+- `Karton::deleteDomain()` undefines with
+  `VIR_DOMAIN_UNDEFINE_NVRAM | SNAPSHOTS_METADATA | CHECKPOINTS_METADATA`
+  (plus `MANAGED_SAVE` when needed), so UEFI VMs with an NVRAM/varstore can be
+  removed; older libvirt falls back to NVRAM-only and then legacy undefine.
+  `DomainConfig::virtualDiskPaths` contains every `<disk device='disk'>` path
   found in the domain XML; deleting a VM with "Delete Disk" removes all of
   them. Creating a new VM still creates a single data disk, and size editing
   operates on the first disk (`virtualDiskPath`).
+- The default VM image folder is `storage/imagesDirectory` in `karton.conf`,
+  falling back to `$XDG_DATA_HOME/libvirt/images`. Application Settings →
+  Storage changes it, the create-VM wizard can override the folder/name for a
+  single VM, and Add Hardware's storage page can choose a folder/name for a new
+  disk. `Karton::checkDiskDirectoryAccess()` validates the current user and,
+  for `qemu:///system`, the `libvirt-qemu` ACL access (using `getfacl`); it only
+  reports problems. `Karton::grantDiskDirectoryAccess()` runs after the
+  automatic permission confirmation dialog (create wizard Next, Add Hardware
+  create/attach, disk path save, Storage folder choice). The dialog is shown
+  before an error message; the error appears only if the user cancels or the
+  grant fails. Granting adds only a named-user ACL (`x` on parent directories,
+  `rwx` on the target), never chmod/chown, refuses root/home/system/sensitive
+  targets and paths owned by another user, and verifies the result. Granted
+  target folders are listed in Application Settings → Storage and can be
+  cleared there with `revokeGrantedDiskAccess()`, which removes only the tracked
+  ACL entries. Never grant broad access to `/`, `$HOME` or other critical
+  directories; the checks reject the filesystem root and the home directory
+  itself.
 - New virtual disks can be created as `qcow2` (default), `raw` or `vmdk`.
   The format is stored in the domain XML `<driver type="…"/>` and exposed as
   `DomainConfig::diskFormat`; editing an existing domain does not convert its
@@ -333,30 +416,58 @@ Every settings page must look and behave the same:
   `deleteSavedState()`, with `Domain::hasSavedState` driving the VM page
   actions. `startDomain()` restores a saved state automatically through
   `virDomainCreate()`; never call `virDomainManagedSaveRemove()` while the
-  domain is running.
+  domain is running. A managed-save image also restores the old device set:
+  after editing XML/adding devices, use Delete Hibernation before starting if
+  the new hardware must be present immediately.
 - Application icons are installed under the reverse-DNS name
   `org.kde.karton`, matching `org.kde.karton.desktop` and `QGuiApplication`'s
   window icon lookup.
-- `InstallationDialog.qml` is a three-step wizard: installation source,
-  resources (memory/storage/format) and system (firmware/network/CPU/
-  acceleration). Keep the content of each step short; the previous single long
-  form triggered a `Kirigami.Dialog` binding loop on `y`.
+- `InstallationDialog.qml` is a four-step wizard with a step indicator:
+  installation source, resources (memory/storage/format), system (firmware/
+  network/CPU/acceleration) and a read-only summary. Back/Next live in the
+  dialog footer and the final step creates the domain. Its pages use the same
+  `ScrollableSettingsView`, 15 px section headings, 1 px rules and two-column
+  label/260 px control rows as the settings pages. The installation image and
+  OS variant are optional: leaving them empty creates a generic VM with an
+  empty CD-ROM drive and a data disk, and `DomainXmlBuilder` falls back to the
+  host architecture (with no libosinfo metadata) instead of refusing to define
+  the domain.
 - Window sizes are persisted in the same `karton.conf`: one main-window size and
   a separate viewer size keyed by each VM UUID, saved after resize and on close.
+  Closing the main window while VM viewers are open only hides it, so the VMs
+  and their viewer windows stay alive; the application quits when the last
+  viewer is closed. Relaunching Karton raises the hidden main window through
+  the single-instance socket.
   The Sound settings page stores per-VM playback and microphone enable flags
   (`audio/<uuid>/playback|microphone`); the viewer applies them to SPICE
   playback and record channels. The Display settings page also stores an optional fixed guest resolution per
   VM (`display/<uuid>/width|height`), with presets and a Custom width/height
   pair. When set, the viewer requests that exact
-  SPICE resolution, scales the content to fit the screen, and locks the window
-  size; Auto restores normal auto-resize. In fullscreen the fixed resolution is
-  ignored so the guest can follow the screen. The Display page also exposes QXL
-  video memory (`vgamem`, 16–256 MiB) for higher guest resolutions; the change
-  is written to the inactive domain XML and applies after a VM restart.
+  SPICE resolution, opens at the matching window size and scales the content to
+  fit the screen; Auto restores normal auto-resize. The window size is not
+  enforced with min/max hints, because KWin keeps a client's maximum size for
+  the fullscreen surface (the guest then stayed at the fixed 1920x1126 instead
+  of following a 3440x1440 output). In fullscreen the fixed resolution is
+  ignored; `updateDisplayResolution()` uses the full `QScreen` geometry rather
+  than the page size so the guest follows the output even if the page has not
+  been resized yet. The Display page also exposes QXL
+  video memory (`vgamem`, 16–256 MiB) for higher guest resolutions; libvirt
+  requires `vgamem` to be a power of two, so the page offers only those preset
+  sizes and the backend rounds defensively. The change
+  is written to the inactive domain XML and applies after a VM restart. Its
+  Serial console section overrides the application console font size for this
+  VM (`console/<uuid>/fontSize`); the per-VM value takes priority over the
+  global `console/fontSize`.
 - The VM list uses `Karton::domainOsIcon()`/`domainOsName()` and flat
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
-  macOS and DOS), installed into hicolor. The VM page uses Luma-style
-  transparent details rows and a rounded preview frame.
+  macOS and DOS), installed into hicolor. Unknown guests use Karton's own
+  `karton-os-generic` layered-window icon, not the plain symbolic monitor. The
+  VM page uses Luma-style transparent details rows and a rounded preview frame.
+  Around New Year (`Karton::holidayMode`, 25 December through 7 January) Linux
+  guests use `karton-os-linux-newyear`, which adds a static snow drift under
+  Tux. There is no snowfall animation and no window-wide snow. For testing,
+  `KARTON_HOLIDAY_MODE=1` forces the seasonal icon on and `KARTON_HOLIDAY_MODE=0`
+  forces it off; without the variable the current local date decides.
 - `ClipboardManager` (`core/viewer/clipboardmanager.*`) owns the Qt/SPICE
   clipboard bridge: host clipboard events, guest clipboard requests, ownership
   state and clipboard modes. `DomainViewer` only attaches it to the main
@@ -408,9 +519,15 @@ Every settings page must look and behave the same:
   libvirt's domain schema (`VIR_DOMAIN_DEFINE_VALIDATE`). Invalid or unsupported
   XML is rejected, reported, and the editor reverts to the last valid version.
   There are no separate Storage/Networks/PCI/USB menu actions.
-- New domains use user-mode networking with a `virtio` (default) or `e1000`
-  interface, or no network at all. The model is stored in
-  `DomainConfig::networkModel` and read back from the domain XML.
+- New domains choose a named libvirt host network such as
+  `br0-network`/`default` (`<interface type='network'><source network='…'/>`)
+  or no network; only active libvirt networks are listed, and the wizard does
+  not expose a separate QEMU user-mode option because networks are managed in
+  Application Settings. The NIC driver is a
+  separate choice (`virtio` default or `e1000`), stored in
+  `DomainConfig::networkModel`; the selected libvirt network is passed as
+  `networkName` and validated with `virNetworkLookupByName()` before defining
+  the domain.
 - The screenshot preview path defaults to
   `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
   `VMPage.qml` polls `Karton::refreshDomainPreview()` every second while the
@@ -428,10 +545,26 @@ Every settings page must look and behave the same:
   mouse mode sends no SPICE `cursor-move` events, so the host cursor follows the
   local pointer instead of the initial `(0, 0)` cursor position.
 - The viewer's `DomainViewer` must receive keyboard focus after the window
-  opens (`forceActiveFocus` in `VMViewerWindow.qml` and on click). Scancodes are
-  normalized to evdev by subtracting the X11/xkb keycode offset of 8 on both
-  `xcb` and `wayland`; subtracting it only on Wayland made keys map to unrelated
-  PC XT scancodes under XWayland.
+  opens (`forceActiveFocus` in `VMViewerWindow.qml` and on click), and after
+  toolbar/menu/dialog interaction. Scancodes are normalized to evdev by
+  subtracting the X11/xkb keycode offset of 8 on both `xcb` and `wayland`;
+  subtracting it only on Wayland made keys map to unrelated PC XT scancodes
+  under XWayland. Extended keys must keep the SPICE 0x100 prefix (Up is
+  `0x148`); truncating the converted scancode to 8 bits turned arrows, Home,
+  Delete and right-side modifiers into keypad keys. Ctrl+Alt releases the
+  pointer so Escape reaches the guest. While a running viewer is active,
+  `ShortcutInhibitor` inhibits desktop shortcuts through the Wayland
+  `zwp_keyboard_shortcuts_inhibit_manager_v1` protocol, or an X11 keyboard
+  grab on `xcb`, so application and desktop shortcuts such as Ctrl+Q reach the
+  guest instead of closing the viewer. Capture is tied to the active running
+  viewer while the pointer is over the guest area (not to the pointer grab),
+  and it disables Kirigami's application-wide quit action as well as the
+  compositor shortcuts. Moving the pointer to the toolbar or title bar restores
+  the normal shortcuts. It is released on
+  deactivation, stop, close and app exit. A stopped viewer keeps normal Karton
+  shortcuts. Seats
+  and compositor grabs that never reach the client (for example some
+  Meta/Super combinations) still cannot be intercepted.
 - `DomainViewer::updateDisplayResolution()` calls
   `spice_main_channel_update_display()` with the complete viewer area in
   device pixels on page resize and when the SPICE agent connects; it enables
@@ -446,6 +579,17 @@ Every settings page must look and behave the same:
   through the agent (spice-vdagent / Windows guest tools); without an agent the
   request is a no-op. `fitGuestToWindow()` forces a fresh request even if the
   target size did not change.
+- The "Guest agent is not connected" hint is delayed by a 60-second grace
+  period so it does not appear while a VM boots or reboots. Once the agent
+  connects for a VM, `guestAgent/<uuid>/seen` is stored in `karton.conf` and
+  the hint is not shown while that image is in use. Showing the hint also
+  stores `guestAgent/<uuid>/warningShown`, so it appears at most once per
+  image. Both flags are tied to a fingerprint of the UUID, OS metadata, first
+  data disk path, disk format and firmware; changing the image or OS through
+  Karton invalidates them and re-enables the hint. If the agent was seen but
+  stays absent for three minutes (removed guest tools, replaced image at the
+  same path, slow boot), the cached state is cleared and the hint can appear
+  again after the normal grace period.
 - The guest cursor is installed as the actual host cursor and no scene-graph
   cursor overlay is painted, so pointer motion must not call
   `QQuickItem::update()`; doing so repainted the whole viewer at pointer rate.
@@ -456,23 +600,45 @@ Every settings page must look and behave the same:
   `QImage`. The original buffer is unmapped by spice-gtk when the guest changes
   resolution (notably while Windows boots); creating/using a texture from that
   pointer on the render thread used to crash `QSGBatchRenderer::prepareRenderPass`.
-  `updatePaintNode()` must also clear its cached `m_displayNode`/`m_cursorNode`
-  pointers when Qt passes a null root after deleting the scene graph. Display
-  textures use `QSGTexture::Linear` filtering so fonts stay readable when the
-  guest resolution does not exactly match the viewer size.
+  It converts 32-bit xRGB/ARGB and 16-bit 555/565 surfaces into RGB32/RGB16
+  images and honours the row stride for damage copies. `updatePaintNode()` must
+  also clear its cached `m_displayNode`/`m_cursorNode` pointers when Qt passes a
+  null root after deleting the scene graph. Renderers return `nullptr` instead
+  of deleting a node that is already attached; `DomainViewer` detaches the old
+  display node from its root and deletes it. Display textures use
+  `QSGTexture::Linear` filtering so fonts stay readable when the guest
+  resolution does not exactly match the viewer size.
+- If a domain has no usable SPICE display (for example a VM with
+  `<graphics>` removed and `-display none`), `DomainViewer` falls back to the
+  first libvirt console stream (`virDomainOpenConsole()` +
+  `virStreamEventAddCallback()`); `serialConsoleActive` switches the viewer to
+  `TerminalView`, which implements the VT100 subset needed by a Linux text
+  console (cursor addressing, scrolling, SGR colors, alternate screen and
+  common key sequences). Text-only VMs therefore open their tty in Karton just
+  like in virt-manager. `TerminalView::fontSize` is configurable globally in
+  Application Settings → Console and can be overridden per VM in its Display
+  settings; the terminal never scales the font to fill the window. The console
+  stream must be created with
+  `VIR_STREAM_NONBLOCK`: a blocking `virStreamRecv()` runs a nested libvirt
+  GLib main loop from inside the stream callback and aborts the process during
+  a guest reboot. Stream teardown is deferred with `QTimer::singleShot(0)` and
+  a generation check instead of aborting/freeing the stream from the callback.
 - `VMViewerWindow.qml` registers itself with `Karton::registerViewer()`.
   Opening the same VM again focuses/raises the existing window instead of
   creating a duplicate. Its toolbar has the same split actions as the VM page:
   Shut Down/Start with a separate arrow for Power Off, Pause (no extra menu),
-  Reboot with a separate arrow for Reset, fullscreen and a More menu containing
-  Actual Size, Fit Guest to Window, USB Devices, Hibernate, Settings and
-  Snapshots. Custom menus also close when the window frame is clicked or the
+  Reboot with a separate arrow for Reset, a More menu (Actual Size, Fit Guest
+  to Window, USB Devices, Hibernate, Settings and Snapshots) and fullscreen,
+  in that order. The fullscreen floating bar orders the window controls as
+  More, minimize, restore/exit fullscreen and close (all monochrome symbolic
+  icons). Custom menus also close when the window frame is clicked or the
   application loses focus. "Fit to Window" was deliberately removed. A stopped VM opens the
   viewer without starting it and shows only a large clickable start triangle;
   it is started only when the user asks. When a running VM stops, the viewer
   closes automatically. Opening the menu releases the pointer grab first. There
   is no explicit grab/release-pointer action: clicking the display grabs the
-  pointer and Esc releases it. A double-click on a VM list row opens that VM's
+  pointer and Ctrl+Alt releases it (Esc is sent to the guest). A double-click
+  on a VM list row opens that VM's
   viewer, whether it is running or stopped. UI icons use the monochrome
   `*-symbolic` variants. PCI and Storage have no separate menu actions; they are
   managed inline from SettingsDialog.
@@ -482,9 +648,13 @@ Every settings page must look and behave the same:
   supported: Qt 6.12's Vulkan/Wayland swapchain stops presenting after the
   first fullscreen transition on NVIDIA, leaving the viewer window stale.
   `KARTON_GRAPHICS_API=software` forces the software renderer for
-  headless/offscreen use. `GlScanoutRenderer` imports virtio-gpu GL scanouts
-  through EGL; QXL/TCP guests use `PrimarySurfaceRenderer`. New domains can use
-  3D acceleration through the GL scanout path.
+  headless/offscreen use. The renderer is selected from the domain XML:
+  `GlScanoutRenderer` is used only for a local (unix socket) SPICE display with
+  `<gl enable='yes'/>`, because GL scanout is not available over TCP. All other
+  displays use `PrimarySurfaceRenderer`. `GlScanoutRenderer` imports the
+  scanout dmabuf through EGL (including DRM modifiers from
+  `spice_display_channel_get_gl_scanout2()`) and performs all EGL/GL teardown on
+  the render thread (`releaseResources()`), never in `detach()`.
 - Suspend/undefine/define events can arrive while a QML page is open; check for
   valid domain pointers and handle missing files gracefully.
 

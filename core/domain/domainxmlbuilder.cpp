@@ -13,6 +13,7 @@
 #include <QRandomGenerator>
 #include <QStandardPaths>
 #include <QString>
+#include <QSysInfo>
 #include <QUuid>
 #include <net/ethernet.h>
 
@@ -46,11 +47,26 @@ bool DomainXmlBuilder::setupDomain(virConnectPtr conn, const DomainConfig *confi
 QString DomainXmlBuilder::generateXML(const DomainConfig *config)
 {
     OsinfoConfig osinfo;
-    const QString osId = osinfo.getOsIdFromShortId(config->shortOsId());
-    const QString osArchitecture = osinfo.getOsArchitecture(osId);
+    QString osId;
+    if (!config->shortOsId().isEmpty()) {
+        osId = osinfo.getOsIdFromShortId(config->shortOsId());
+    }
+    QString osArchitecture;
+    if (!osId.isEmpty()) {
+        osArchitecture = osinfo.getOsArchitecture(osId);
+    }
     if (osArchitecture.isEmpty()) {
-        qCCritical(KARTON_DEBUG) << "Warning no specified architecture!";
-        return QString();
+        // Creating a VM without an installation image/OS variant is valid; use
+        // the host architecture so libvirt can still define the domain.
+        osArchitecture = QSysInfo::currentCpuArchitecture();
+        if (osArchitecture == QStringLiteral("arm64")) {
+            osArchitecture = QStringLiteral("aarch64");
+        } else if (osArchitecture == QStringLiteral("i386")) {
+            osArchitecture = QStringLiteral("i686");
+        } else if (osArchitecture.isEmpty()) {
+            osArchitecture = QStringLiteral("x86_64");
+        }
+        qCInfo(KARTON_DEBUG) << "No OS variant selected; using architecture" << osArchitecture;
     }
 
     QDomDocument document;
@@ -81,14 +97,16 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
     kartonData[QStringLiteral("screenshotPreviewPath")] = QStringLiteral("%1/previews/%2.png").arg(dataDir).arg(uuidString);
     addElementWithAttributes(document, karton, QStringLiteral("karton:data"), QString(), kartonData);
 
-    // metadata->LIBOSINFO
-    QDomElement libosinfo = document.createElement(QStringLiteral("libosinfo:libosinfo"));
-    libosinfo.setAttribute(QStringLiteral("xmlns:libosinfo"), QStringLiteral("http://libosinfo.org/xmlns/libvirt/domain/1.0"));
-    metadata.appendChild(libosinfo);
-    QMap<QString, QString> libosinfoId;
-    libosinfoId[QStringLiteral("id")] = osId;
-    libosinfoId[QStringLiteral("short-id")] = config->shortOsId();
-    addElementWithAttributes(document, libosinfo, QStringLiteral("libosinfo:os"), QString(), libosinfoId);
+    // metadata->LIBOSINFO (only when an OS variant was selected)
+    if (!osId.isEmpty()) {
+        QDomElement libosinfo = document.createElement(QStringLiteral("libosinfo:libosinfo"));
+        libosinfo.setAttribute(QStringLiteral("xmlns:libosinfo"), QStringLiteral("http://libosinfo.org/xmlns/libvirt/domain/1.0"));
+        metadata.appendChild(libosinfo);
+        QMap<QString, QString> libosinfoId;
+        libosinfoId[QStringLiteral("id")] = osId;
+        libosinfoId[QStringLiteral("short-id")] = config->shortOsId();
+        addElementWithAttributes(document, libosinfo, QStringLiteral("libosinfo:os"), QString(), libosinfoId);
+    }
 
     // memory and vcpu elements
     addHardwareElements(document, root, config->maxRam(), config->cpus());
@@ -169,7 +187,15 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
     // devices->network interfaces element
     // Userspace connection https://libvirt.org/formatdomain.html#id44
     if (config->networkModel() != QStringLiteral("none")) {
-        addNetworkInterfaceDevices(document, devices, {.type = QStringLiteral("user"), .mac = genMac(), .source = QString(), .model = config->networkModel()});
+        if (!config->networkName().isEmpty()) {
+            addNetworkInterfaceDevices(document,
+                                       devices,
+                                       {.type = QStringLiteral("network"), .mac = genMac(), .source = config->networkName(), .model = config->networkModel()});
+        } else {
+            addNetworkInterfaceDevices(document,
+                                       devices,
+                                       {.type = QStringLiteral("user"), .mac = genMac(), .source = QString(), .model = config->networkModel()});
+        }
     }
 
     // devices->graphics element

@@ -32,6 +32,7 @@ Kirigami.Dialog {
     property var parentWindow: null
     property bool saving: false
     property string pendingName: ""
+    property string mediaTargetDev: ""
     // Baseline of the values that the footer Save button writes. The button
     // stays disabled until one of them actually differs, so simply opening
     // the dialog (or reverting an edit) does not enable it.
@@ -53,25 +54,25 @@ Kirigami.Dialog {
     property bool optionalUpdating: false
     readonly property var categoryPages: [0, 1, 2, 3, 4, 5, 6, 10, 7, 8, 9, 15, 11, 12, 13, 16, 14]
     readonly property var categoryModel: [
-        { label: i18n("Overview"), visible: true },
-        { label: i18n("CPUs & Memory"), visible: true },
-        { label: i18n("Boot Options"), visible: true },
-        { label: i18n("Disks"), visible: true },
-        { label: i18n("Network"), visible: true },
-        { label: i18n("Display"), visible: true },
-        { label: i18n("Sound"), visible: true },
-        { label: i18n("Input"), visible: root.inputDevices.length > 0 },
-        { label: i18n("USB"), visible: root.usbDevices.length > 0 },
-        { label: i18n("PCI"), visible: root.pciDevices.length > 0 },
-        { label: i18n("TPM"), visible: true },
-        { label: i18n("Filesystem"), visible: root.xmlDevices.some(function(device) { return device.tag === "filesystem"; }) },
-        { label: i18n("Controllers"), visible: root.xmlDevices.some(function(device) { return device.tag === "controller"; }) },
-        { label: i18n("Serial & Console"), visible: root.xmlDevices.some(function(device) {
+        { label: qsTr("overview"), visible: true },
+        { label: qsTr("cpus_memory"), visible: true },
+        { label: qsTr("boot_options"), visible: true },
+        { label: qsTr("disks"), visible: true },
+        { label: qsTr("network"), visible: true },
+        { label: qsTr("display"), visible: true },
+        { label: qsTr("sound"), visible: true },
+        { label: qsTr("input"), visible: root.inputDevices.length > 0 },
+        { label: qsTr("usb"), visible: root.usbDevices.length > 0 },
+        { label: qsTr("pci"), visible: root.pciDevices.length > 0 },
+        { label: qsTr("tpm"), visible: true },
+        { label: qsTr("filesystem"), visible: root.xmlDevices.some(function(device) { return device.tag === "filesystem"; }) },
+        { label: qsTr("controllers"), visible: root.xmlDevices.some(function(device) { return device.tag === "controller"; }) },
+        { label: qsTr("serial_console"), visible: root.xmlDevices.some(function(device) {
             return device.tag === "serial" || device.tag === "channel" || device.tag === "console";
         }) },
-        { label: i18n("Other devices"), visible: true },
-        { label: i18n("Clipboard"), visible: true },
-        { label: i18n("XML"), visible: true }
+        { label: qsTr("other_devices"), visible: true },
+        { label: qsTr("clipboard"), visible: true },
+        { label: qsTr("xml"), visible: true }
     ]
     property string xmlContent: ""
     property string xmlLastValid: ""
@@ -79,22 +80,29 @@ Kirigami.Dialog {
     property var inputDevices: []
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
-    readonly property var bootLabels: [i18n("Hard Disk"), i18n("CD-ROM"), i18n("Network")]
+    readonly property var bootLabels: [qsTr("hard_disk"), qsTr("cd_rom"), qsTr("network")]
     readonly property var videoModels: ["qxl", "virtio", "vga"]
     readonly property var videoLabels: ["QXL", "VirtIO", "VGA"]
+    // libvirt requires QXL vgamem to be a power of two, so expose only sizes
+    // that can actually be saved. The same presets are used for the generic
+    // vram of the other video models to keep the control consistent.
+    readonly property var videoMemoryOptions: [16, 32, 64, 128, 256]
+    readonly property var videoMemoryLabels: videoMemoryOptions.map(function(memoryMiB) {
+        return qsTr("s_1_mib").arg(memoryMiB);
+    })
     readonly property var soundModels: ["ich9", "ac97", "none"]
-    readonly property var soundLabels: ["ich9", "AC97", i18n("None")]
+    readonly property var soundLabels: ["ich9", "AC97", qsTr("none")]
     readonly property var displayResolutions: [
-        { label: i18n("Auto (fit window)"), width: 0, height: 0 },
+        { label: qsTr("auto_fit_window"), width: 0, height: 0 },
         { label: "1280 × 720", width: 1280, height: 720 },
         { label: "1600 × 900", width: 1600, height: 900 },
         { label: "1920 × 1080", width: 1920, height: 1080 },
         { label: "2560 × 1440", width: 2560, height: 1440 },
         { label: "3840 × 2160", width: 3840, height: 2160 },
-        { label: i18n("Custom…"), width: -1, height: -1 }
+        { label: qsTr("custom"), width: -1, height: -1 }
     ]
 
-    title: domain ? i18n("Settings — %1", domain.config.name) : i18n("Settings")
+    title: domain ? qsTr("settings_1").arg(domain.config.name) : qsTr("settings")
 
     function refresh() {
         if (!domain) {
@@ -124,18 +132,12 @@ Kirigami.Dialog {
         bootCombo.currentIndex = Math.max(0, bootDevices.indexOf(hardware.bootDev));
         videoCombo.currentIndex = Math.max(0, videoModels.indexOf(hardware.videoModel));
         videoHeadsSpin.value = Math.max(1, hardware.videoHeads || 1);
-        videoMemorySpin.value = Math.max(16, Math.min(256, Math.round((hardware.videoMemoryKiB || 16384) / 1024)));
+        videoMemoryCombo.currentIndex = Math.max(0, videoMemoryOptions.indexOf(nearestVideoMemory((hardware.videoMemoryKiB || 16384) / 1024)));
         accel3dCheck.checked = hardware.accel3d === true;
         soundCombo.currentIndex = Math.max(0, soundModels.indexOf(hardware.soundModel));
         soundOutputCheck.checked = Karton.audioPlaybackEnabled(domain);
         microphoneCheck.checked = Karton.microphoneEnabled(domain);
         descriptionField.text = hardware.description || "";
-        if (disks.length > 0) {
-            if (diskTargetCombo.currentIndex < 0) {
-                diskTargetCombo.currentIndex = 0;
-            }
-            Qt.callLater(function() { root.refreshDiskAdvanced(); });
-        }
         tpmEnabledCheck.checked = hardware.tpmEnabled === true;
         tpmModelCombo.currentIndex = Math.max(0, ["tpm-crb", "tpm-tis"].indexOf(hardware.tpmModel));
         tpmVersionCombo.currentIndex = Math.max(0, ["2.0", "1.2"].indexOf(hardware.tpmVersion));
@@ -177,6 +179,9 @@ Kirigami.Dialog {
             displayCustomHeight.value = resolution.height;
         }
         displayResolutionCombo.currentIndex = resolutionIndex;
+        const consoleOverride = Karton.domainConsoleFontSize(domain);
+        consoleUseGlobalCheck.checked = consoleOverride <= 0;
+        consoleFontSizeSpin.value = consoleOverride > 0 ? consoleOverride : Karton.globalConsoleFontSize();
         clipboardTextCombo.currentIndex = Karton.clipboardTextMode();
         clipboardFilesCombo.currentIndex = Karton.clipboardFilesMode();
         markSettingsSaved();
@@ -206,7 +211,7 @@ Kirigami.Dialog {
             bootDev: bootDevices[Math.max(0, bootCombo.currentIndex)],
             videoModel: videoModels[Math.max(0, videoCombo.currentIndex)],
             videoHeads: videoHeadsSpin.value,
-            videoMemory: videoMemorySpin.value,
+            videoMemory: root.videoMemoryOptions[Math.max(0, videoMemoryCombo.currentIndex)],
             accel3d: accel3dCheck.checked,
             soundModel: soundModels[Math.max(0, soundCombo.currentIndex)],
             tpmEnabled: tpmEnabledCheck.checked,
@@ -215,6 +220,7 @@ Kirigami.Dialog {
             description: descriptionField.text,
             resolutionWidth: resolutionWidth,
             resolutionHeight: resolutionHeight,
+            consoleFontSize: consoleUseGlobalCheck.checked ? 0 : consoleFontSizeSpin.value,
             autostart: autostartCheck.checked,
             audioPlayback: soundOutputCheck.checked,
             microphone: microphoneCheck.checked,
@@ -222,6 +228,16 @@ Kirigami.Dialog {
             clipboardFiles: clipboardFilesCombo.currentIndex,
             memoryBacking: memoryBackingCheck.checked
         };
+    }
+
+    function nearestVideoMemory(memoryMiB) {
+        let best = root.videoMemoryOptions[0];
+        for (let i = 1; i < root.videoMemoryOptions.length; ++i) {
+            if (Math.abs(root.videoMemoryOptions[i] - memoryMiB) < Math.abs(best - memoryMiB)) {
+                best = root.videoMemoryOptions[i];
+            }
+        }
+        return best;
     }
 
     function markSettingsSaved() {
@@ -345,6 +361,7 @@ Kirigami.Dialog {
         filesystemEditDialog.shareDriver = device.driver;
         filesystemEditDialog.shareAccess = device.accessmode;
         filesystemEditDialog.shareReadonly = device.readonly;
+        filesystemEditDialog.prepare();
         filesystemEditDialog.open();
     }
 
@@ -363,18 +380,6 @@ Kirigami.Dialog {
             path = path.substring(7);
         }
         return decodeURIComponent(path);
-    }
-
-    function refreshDiskAdvanced() {
-        if (!root.domain || !diskTargetCombo.currentText) {
-            return;
-        }
-        const advanced = Karton.domainDiskAdvanced(root.domain, diskTargetCombo.currentText);
-        diskReadonlyCheck.checked = advanced.readonly === true;
-        diskShareableCheck.checked = advanced.shareable === true;
-        diskSerialField.text = advanced.serial || "";
-        diskCacheCombo.currentIndex = Math.max(0, ["", "none", "writethrough", "writeback", "directsync", "unsafe"].indexOf(advanced.cache || ""));
-        diskDiscardCombo.currentIndex = Math.max(0, ["", "unmap", "ignore"].indexOf(advanced.discard || ""));
     }
 
     onOpened: {
@@ -448,7 +453,7 @@ Kirigami.Dialog {
             bootDev: bootDevices[bootCombo.currentIndex],
             videoModel: videoModels[videoCombo.currentIndex],
             videoHeads: videoHeadsSpin.value,
-            videoMemory: videoMemorySpin.value,
+            videoMemory: root.videoMemoryOptions[Math.max(0, videoMemoryCombo.currentIndex)],
             accel3d: accel3dCheck.checked,
             soundModel: soundModels[soundCombo.currentIndex],
             tpmEnabled: tpmEnabledCheck.checked,
@@ -473,6 +478,7 @@ Kirigami.Dialog {
             resolutionHeight = resolution.height;
         }
         Karton.saveDomainDisplayResolution(domain, resolutionWidth, resolutionHeight);
+        Karton.saveDomainConsoleFontSize(domain, consoleUseGlobalCheck.checked ? 0 : consoleFontSizeSpin.value);
 
         const name = nameField.text.trim();
         const changed = name !== domain.config.name
@@ -482,7 +488,7 @@ Kirigami.Dialog {
         if (!changed) {
             // Keep the dialog open; the user may want to adjust more settings.
             refresh();
-            applicationWindow().showPassiveNotification(i18n("Settings saved"));
+            applicationWindow().showPassiveNotification(qsTr("settings_saved"));
             return;
         }
 
@@ -511,27 +517,27 @@ Kirigami.Dialog {
             if (success) {
                 // Do not close on save: refresh the form and stay open.
                 root.refresh();
-                applicationWindow().showPassiveNotification(i18n("Settings saved"));
+                applicationWindow().showPassiveNotification(qsTr("settings_saved"));
             }
         }
     }
 
     customFooterActions: [
         Kirigami.Action {
-            text: i18n("Add…")
+            text: qsTr("add")
             icon.name: "list-add-symbolic"
             enabled: root.domain !== null
             onTriggered: addHardwareDialog.open()
         },
         Kirigami.Action {
-            text: i18n("Save")
+            text: qsTr("save")
             icon.name: "dialog-ok-symbolic"
             enabled: !root.saving && root.domain !== null && root.hasChanges
                 && nameField.text.trim() !== ""
             onTriggered: root.save()
         },
         Kirigami.Action {
-            text: i18n("Close")
+            text: qsTr("close")
             icon.name: "dialog-cancel-symbolic"
             onTriggered: root.close()
         }
@@ -552,7 +558,7 @@ Kirigami.Dialog {
         Layout.rightMargin: 12
 
         Controls.Label {
-            text: i18n("Settings")
+            text: qsTr("settings")
             font.pixelSize: 16
             font.weight: Font.DemiBold
             Layout.alignment: Qt.AlignVCenter
@@ -685,7 +691,7 @@ Kirigami.Dialog {
                     spacing: 16
 
                     Controls.Label {
-                        text: i18n("General")
+                        text: qsTr("general")
                         font.pixelSize: 15
                         font.weight: Font.Bold
                         Layout.fillWidth: true
@@ -702,7 +708,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("Name")
+                            text: qsTr("name")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -716,7 +722,7 @@ Kirigami.Dialog {
                             }
                         }
                         Controls.Label {
-                            text: i18n("Start on boot")
+                            text: qsTr("start_on_boot")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -726,7 +732,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Description")
+                            text: qsTr("description")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -739,7 +745,7 @@ Kirigami.Dialog {
                     }
 
                     Controls.Label {
-                        text: i18n("Details")
+                        text: qsTr("details")
                         font.pixelSize: 15
                         font.weight: Font.Bold
                         Layout.fillWidth: true
@@ -757,7 +763,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("UUID")
+                            text: qsTr("uuid")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -770,7 +776,7 @@ Kirigami.Dialog {
                             elide: Text.ElideRight
                         }
                         Controls.Label {
-                            text: i18n("State")
+                            text: qsTr("state")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -784,7 +790,7 @@ Kirigami.Dialog {
                     }
 
                     Controls.Label {
-                        text: i18n("Operating System")
+                        text: qsTr("operating_system")
                         font.pixelSize: 15
                         font.weight: Font.Bold
                         Layout.fillWidth: true
@@ -802,7 +808,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("OS ID")
+                            text: qsTr("os_id")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -817,7 +823,7 @@ Kirigami.Dialog {
                             onLinkActivated: Qt.openUrlExternally(link)
                         }
                         Controls.Label {
-                            text: i18n("Short OS ID")
+                            text: qsTr("short_os_id")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -832,7 +838,7 @@ Kirigami.Dialog {
                     }
 
                     Controls.Label {
-                        text: i18n("Performance")
+                        text: qsTr("performance")
                         font.pixelSize: 15
                         font.weight: Font.Bold
                         Layout.fillWidth: true
@@ -850,35 +856,35 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("CPU Usage")
+                            text: qsTr("cpu_usage")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
                         Controls.Label {
-                            text: root.performance.cpuPercent !== undefined ? i18n("%1 %", root.performance.cpuPercent.toFixed(1)) : "—"
+                            text: root.performance.cpuPercent !== undefined ? qsTr("s_1").arg(root.performance.cpuPercent.toFixed(1)) : "—"
                             opacity: 0.7
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Memory Usage")
+                            text: qsTr("memory_usage")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
                         Controls.Label {
                             text: root.performance.memoryUsedKiB !== undefined
-                                ? i18n("%1 MiB of %2 MiB used", (root.performance.memoryUsedKiB / 1024).toFixed(0), (root.performance.memoryTotalKiB / 1024).toFixed(0))
+                                ? qsTr("s_1_mib_of_2_mib_used").arg((root.performance.memoryUsedKiB / 1024).toFixed(0)).arg((root.performance.memoryTotalKiB / 1024).toFixed(0))
                                 : (root.performance.memoryKiB !== undefined
-                                    ? i18n("%1 MiB allocated", (root.performance.memoryKiB / 1024).toFixed(0))
+                                    ? qsTr("s_1_mib_allocated").arg((root.performance.memoryKiB / 1024).toFixed(0))
                                     : "—")
                             opacity: 0.7
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("vCPUs")
+                            text: qsTr("vcpus")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -909,7 +915,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("Memory (GB)")
+                            text: qsTr("memory_gb")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -922,7 +928,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("CPUs")
+                            text: qsTr("cpus")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -940,7 +946,7 @@ Kirigami.Dialog {
                         wrapMode: Text.WordWrap
                         opacity: 0.65
                         font.pixelSize: 12
-                        text: i18n("Changing memory or CPU count applies after the VM is restarted.")
+                        text: qsTr("changing_memory_or_cpu_count_applies_after_the_vm_is_restarted")
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -955,7 +961,7 @@ Kirigami.Dialog {
                     spacing: 16
 
                     Controls.Label {
-                        text: i18n("Boot Options")
+                        text: qsTr("boot_options")
                         font.pixelSize: 15
                         font.weight: Font.Bold
                         Layout.fillWidth: true
@@ -972,7 +978,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("Firmware")
+                            text: qsTr("firmware")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -986,7 +992,7 @@ Kirigami.Dialog {
                         }
                         Controls.Label {
                             visible: firmwareCombo.currentIndex === 1
-                            text: i18n("Secure Boot")
+                            text: qsTr("secure_boot")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -997,7 +1003,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Boot device")
+                            text: qsTr("boot_device")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1014,7 +1020,7 @@ Kirigami.Dialog {
                         wrapMode: Text.WordWrap
                         opacity: 0.65
                         font.pixelSize: 12
-                        text: i18n("Firmware and boot order are written to the persistent VM configuration.")
+                        text: qsTr("firmware_and_boot_order_are_written_to_the_persistent_vm_configuration")
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -1029,7 +1035,7 @@ Kirigami.Dialog {
                     spacing: 16
 
                     Controls.Label {
-                        text: i18n("Disks and CD-ROMs")
+                        text: qsTr("disks_and_cd_roms")
                         font.pixelSize: 15
                         font.weight: Font.Bold
                         Layout.fillWidth: true
@@ -1055,7 +1061,7 @@ Kirigami.Dialog {
                                     spacing: 0
                                     Controls.Label {
                                         Layout.fillWidth: true
-                                        text: (modelData.device === "cdrom" ? i18n("CD-ROM") : i18n("Disk")) + " · " + modelData.target
+                                        text: (modelData.device === "cdrom" ? qsTr("cd_rom") : qsTr("disk")) + " · " + modelData.target
                                         elide: Text.ElideRight
                                     }
                                     Controls.Label {
@@ -1066,7 +1072,24 @@ Kirigami.Dialog {
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Detach")
+                                    visible: modelData.device === "cdrom"
+                                    text: modelData.source.length > 0 ? qsTr("change") : qsTr("insert")
+                                    icon.name: "media-optical-symbolic"
+                                    onClicked: {
+                                        root.mediaTargetDev = modelData.target;
+                                        mediaFileDialog.open();
+                                    }
+                                }
+                                Controls.Button {
+                                    text: qsTr("edit")
+                                    icon.name: "document-edit-symbolic"
+                                    onClicked: {
+                                        editDiskDialog.prepare(modelData.target);
+                                        editDiskDialog.open();
+                                    }
+                                }
+                                Controls.Button {
+                                    text: qsTr("detach")
                                     icon.name: "list-remove-symbolic"
                                     onClicked: {
                                         if (Karton.detachDisk(root.domain, modelData.target, false)) {
@@ -1077,116 +1100,12 @@ Kirigami.Dialog {
                             }
                         }
                     }
-
                     Controls.Label {
-                        text: i18n("Advanced disk options")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
                         Layout.fillWidth: true
-                        Layout.topMargin: 8
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
-                    GridLayout {
-                        columns: 2
-                        columnSpacing: 16
-                        rowSpacing: 16
-                        Layout.fillWidth: true
-
-                        Controls.Label {
-                            text: i18n("Disk")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.ComboBox {
-                            id: diskTargetCombo
-                            model: root.disks.filter(function(disk) { return disk.device === "disk"; }).map(function(disk) { return disk.target; })
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                            onCurrentTextChanged: root.refreshDiskAdvanced()
-                        }
-                        Controls.Label {
-                            text: i18n("Read-only")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.CheckBox {
-                            id: diskReadonlyCheck
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label {
-                            text: i18n("Shareable")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.CheckBox {
-                            id: diskShareableCheck
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label {
-                            text: i18n("Serial")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.TextField {
-                            id: diskSerialField
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label {
-                            text: i18n("Cache mode")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.ComboBox {
-                            id: diskCacheCombo
-                            model: [i18n("Hypervisor default"), "none", "writethrough", "writeback", "directsync", "unsafe"]
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label {
-                            text: i18n("Discard mode")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.ComboBox {
-                            id: diskDiscardCombo
-                            model: [i18n("Hypervisor default"), "unmap", "ignore"]
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Item {
-                            Layout.columnSpan: 2
-                            Layout.fillWidth: true
-                        }
-                        Controls.Button {
-                            text: i18n("Apply disk options")
-                            icon.name: "dialog-ok-symbolic"
-                            Layout.columnSpan: 2
-                            Layout.alignment: Qt.AlignRight
-                            enabled: diskTargetCombo.currentText.length > 0
-                            onClicked: {
-                                const advanced = {
-                                    readonly: diskReadonlyCheck.checked,
-                                    shareable: diskShareableCheck.checked,
-                                    serial: diskSerialField.text,
-                                    cache: diskCacheCombo.currentIndex === 0 ? "" : diskCacheCombo.currentText,
-                                    discard: diskDiscardCombo.currentIndex === 0 ? "" : diskDiscardCombo.currentText
-                                };
-                                if (Karton.editDomainDiskAdvanced(root.domain, diskTargetCombo.currentText, advanced)) {
-                                    root.refresh();
-                                }
-                            }
-                        }
+                        wrapMode: Text.WordWrap
+                        opacity: 0.65
+                        font.pixelSize: 12
+                        text: qsTr("disk_option_changes_are_applied_to_the_persistent_configuration_restart_the_vm_to_use_them")
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -1201,7 +1120,7 @@ Kirigami.Dialog {
                     spacing: 16
 
                     Controls.Label {
-                        text: i18n("VM interfaces")
+                        text: qsTr("vm_interfaces")
                         font.pixelSize: 15
                         font.weight: Font.Bold
                         Layout.fillWidth: true
@@ -1241,17 +1160,16 @@ Kirigami.Dialog {
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Edit")
+                                    text: qsTr("edit")
                                     icon.name: "document-edit-symbolic"
                                     enabled: modelData.mac.length > 0
                                     onClicked: {
-                                        editInterfaceDialog.originalMac = modelData.mac;
-                                        editInterfaceDialog.model = modelData.model || "virtio";
+                                        editInterfaceDialog.prepare(modelData.mac, modelData.model || "virtio");
                                         editInterfaceDialog.open();
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Detach")
+                                    text: qsTr("detach")
                                     icon.name: "list-remove-symbolic"
                                     enabled: modelData.mac.length > 0
                                     onClicked: {
@@ -1268,7 +1186,7 @@ Kirigami.Dialog {
                         wrapMode: Text.WordWrap
                         opacity: 0.65
                         font.pixelSize: 12
-                        text: i18n("MAC and model changes are applied to the persistent configuration; restart the VM to use them.")
+                        text: qsTr("mac_and_model_changes_are_applied_to_the_persistent_configuration_restart_the_vm_to_use_th")
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -1289,7 +1207,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("Video model")
+                            text: qsTr("video_model")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1301,22 +1219,19 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Video memory (MiB)")
+                            text: qsTr("video_memory_mib")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        Controls.SpinBox {
-                            id: videoMemorySpin
-                            from: 16
-                            to: 256
-                            stepSize: 8
-                            editable: true
+                        Controls.ComboBox {
+                            id: videoMemoryCombo
+                            model: root.videoMemoryLabels
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Heads")
+                            text: qsTr("heads")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1329,7 +1244,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Resolution")
+                            text: qsTr("resolution")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1343,7 +1258,7 @@ Kirigami.Dialog {
                         }
                         Controls.Label {
                             visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
-                            text: i18n("Width")
+                            text: qsTr("width")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1360,7 +1275,7 @@ Kirigami.Dialog {
                         }
                         Controls.Label {
                             visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
-                            text: i18n("Height")
+                            text: qsTr("height")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1376,7 +1291,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("3D acceleration")
+                            text: qsTr("s_3d_acceleration")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1384,6 +1299,60 @@ Kirigami.Dialog {
                         Controls.CheckBox {
                             id: accel3dCheck
                             Layout.alignment: Qt.AlignRight
+                        }
+                    }
+
+                    Controls.Label {
+                        text: qsTr("serial_console_2")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
+                        Layout.topMargin: 8
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 16
+                        rowSpacing: 16
+                        Layout.fillWidth: true
+
+                        Controls.Label {
+                            text: qsTr("use_application_default")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.CheckBox {
+                            id: consoleUseGlobalCheck
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            text: qsTr("font_size")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                            enabled: !consoleUseGlobalCheck.checked
+                        }
+                        Controls.SpinBox {
+                            id: consoleFontSizeSpin
+                            from: 8
+                            to: 96
+                            editable: true
+                            enabled: !consoleUseGlobalCheck.checked
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            opacity: 0.65
+                            font.pixelSize: 12
+                            text: qsTr("overrides_the_application_wide_console_font_size_the_default_is_configured_in_application")
                         }
                     }
                     Item { Layout.fillHeight: true }
@@ -1405,7 +1374,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("Sound model")
+                            text: qsTr("sound_model")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1417,7 +1386,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Sound output")
+                            text: qsTr("sound_output")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1427,7 +1396,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("Microphone")
+                            text: qsTr("microphone")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1450,7 +1419,7 @@ Kirigami.Dialog {
 
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("Persistent USB devices")
+                        text: qsTr("persistent_usb_devices")
                         font.bold: true
                     }
                     ListView {
@@ -1471,7 +1440,7 @@ Kirigami.Dialog {
                                     elide: Text.ElideRight
                                 }
                                 Controls.Button {
-                                    text: i18n("Detach")
+                                    text: qsTr("detach")
                                     icon.name: "list-remove-symbolic"
                                     onClicked: {
                                         if (Karton.detachUsbDevicePersistent(root.domain, modelData.vendor, modelData.product, modelData.bus, modelData.device)) {
@@ -1488,7 +1457,7 @@ Kirigami.Dialog {
                         Layout.margins: Kirigami.Units.largeSpacing
                         wrapMode: Text.WordWrap
                         opacity: 0.7
-                        text: i18n("Devices attached here are stored in the persistent VM configuration. For live passthrough while the VM is running, use USB Devices in the viewer menu.")
+                        text: qsTr("devices_attached_here_are_stored_in_the_persistent_vm_configuration_for_live_passthrough_w")
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -1503,7 +1472,7 @@ Kirigami.Dialog {
 
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
-                        text: i18n("Attached PCI devices")
+                        text: qsTr("attached_pci_devices")
                         font.bold: true
                     }
                     ListView {
@@ -1524,7 +1493,7 @@ Kirigami.Dialog {
                                     elide: Text.ElideRight
                                 }
                                 Controls.Button {
-                                    text: i18n("Detach")
+                                    text: qsTr("detach")
                                     icon.name: "list-remove-symbolic"
                                     onClicked: {
                                         if (Karton.detachPciDevice(root.domain, modelData.pciDomain, modelData.bus, modelData.slot, modelData.function)) {
@@ -1539,7 +1508,7 @@ Kirigami.Dialog {
                     Controls.Label {
                         Layout.margins: Kirigami.Units.largeSpacing
                         Layout.fillWidth: true
-                        text: i18n("Attaching a PCI device detaches it from the host. Devices without an IOMMU group cannot be attached.")
+                        text: qsTr("attaching_a_pci_device_detaches_it_from_the_host_devices_without_an_iommu_group_cannot_be")
                         opacity: 0.7
                         wrapMode: Text.WordWrap
                     }
@@ -1562,7 +1531,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
-                            text: i18n("Enable TPM")
+                            text: qsTr("enable_tpm")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1572,7 +1541,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("TPM model")
+                            text: qsTr("tpm_model")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1584,7 +1553,7 @@ Kirigami.Dialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: i18n("TPM version")
+                            text: qsTr("tpm_version")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1601,7 +1570,7 @@ Kirigami.Dialog {
                         wrapMode: Text.WordWrap
                         opacity: 0.65
                         font.pixelSize: 12
-                        text: i18n("TPM emulation requires swtpm in the host and is applied to the persistent VM configuration.")
+                        text: qsTr("tpm_emulation_requires_swtpm_in_the_host_and_is_applied_to_the_persistent_vm_configuration")
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -1614,7 +1583,7 @@ Kirigami.Dialog {
                 spacing: 12
 
                 Controls.Label {
-                    text: i18n("Input devices")
+                    text: qsTr("input_devices")
                     font.pixelSize: 15
                     font.weight: Font.Bold
                     Layout.fillWidth: true
@@ -1634,7 +1603,7 @@ Kirigami.Dialog {
                                 Layout.fillWidth: true
                             }
                             Controls.Button {
-                                text: i18n("Detach")
+                                text: qsTr("detach")
                                 icon.name: "list-remove-symbolic"
                                 onClicked: {
                                     if (Karton.detachInputDevice(root.domain, modelData.type, modelData.bus)) {
@@ -1673,7 +1642,7 @@ Kirigami.Dialog {
                                 Layout.fillWidth: true
                             }
                             Controls.Button {
-                                text: i18n("Detach")
+                                text: qsTr("detach")
                                 icon.name: "list-remove-symbolic"
                                 onClicked: {
                                     if (Karton.detachXmlDevice(root.domain, modelData.index)) {
@@ -1714,7 +1683,7 @@ Kirigami.Dialog {
                                 Layout.fillWidth: true
                             }
                             Controls.Button {
-                                text: i18n("Detach")
+                                text: qsTr("detach")
                                 icon.name: "list-remove-symbolic"
                                 enabled: modelData.tag !== "emulator"
                                 onClicked: {
@@ -1738,7 +1707,7 @@ Kirigami.Dialog {
                     spacing: 16
 
                 Controls.Label {
-                    text: i18n("System devices")
+                    text: qsTr("system_devices")
                     font.pixelSize: 15
                     font.weight: Font.Bold
                     Layout.fillWidth: true
@@ -1754,13 +1723,13 @@ Kirigami.Dialog {
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Controls.Label { text: i18n("Watchdog"); Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("watchdog"); Layout.fillWidth: true }
                     Controls.CheckBox {
                         id: watchdogCheck
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("watchdog", checked, root.watchdogXml())
                     }
-                    Controls.Label { text: i18n("Model"); enabled: watchdogCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("model"); enabled: watchdogCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogModelCombo
                         enabled: watchdogCheck.checked
@@ -1768,7 +1737,7 @@ Kirigami.Dialog {
                         model: ["i6300esb", "ib700"]
                         onCurrentIndexChanged: root.applyOptionalSettings("watchdog", root.watchdogXml())
                     }
-                    Controls.Label { text: i18n("Action"); enabled: watchdogCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("action"); enabled: watchdogCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: watchdogActionCombo
                         enabled: watchdogCheck.checked
@@ -1784,13 +1753,13 @@ Kirigami.Dialog {
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Controls.Label { text: i18n("Random Number Generator"); Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("random_number_generator"); Layout.fillWidth: true }
                     Controls.CheckBox {
                         id: rngCheck
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("rng", checked, root.rngXml())
                     }
-                    Controls.Label { text: i18n("Backend"); enabled: rngCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("backend"); enabled: rngCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: rngBackendCombo
                         enabled: rngCheck.checked
@@ -1806,13 +1775,13 @@ Kirigami.Dialog {
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Controls.Label { text: i18n("Panic notifier"); Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("panic_notifier"); Layout.fillWidth: true }
                     Controls.CheckBox {
                         id: panicCheck
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("panic", checked, root.panicXml())
                     }
-                    Controls.Label { text: i18n("Model"); enabled: panicCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("model"); enabled: panicCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: panicModelCombo
                         enabled: panicCheck.checked
@@ -1828,7 +1797,7 @@ Kirigami.Dialog {
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Controls.Label { text: i18n("VirtIO VSOCK"); Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("virtio_vsock"); Layout.fillWidth: true }
                     Controls.CheckBox {
                         id: vsockCheck
                         Layout.alignment: Qt.AlignRight
@@ -1842,13 +1811,13 @@ Kirigami.Dialog {
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Controls.Label { text: i18n("Shared memory device (IVSHMEM)"); Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("shared_memory_device_ivshmem"); Layout.fillWidth: true }
                     Controls.CheckBox {
                         id: shmemCheck
                         Layout.alignment: Qt.AlignRight
                         onToggled: root.updateOptionalDevice("shmem", checked, root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Name"); enabled: shmemCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("name"); enabled: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.TextField {
                         id: shmemNameField
                         enabled: shmemCheck.checked
@@ -1856,7 +1825,7 @@ Kirigami.Dialog {
                         text: "karton"
                         onEditingFinished: root.applyOptionalSettings("shmem", root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Size (MiB)"); enabled: shmemCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("size_mib"); enabled: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.SpinBox {
                         id: shmemSizeSpin
                         enabled: shmemCheck.checked
@@ -1866,7 +1835,7 @@ Kirigami.Dialog {
                         Layout.preferredWidth: 260
                         onValueChanged: root.applyOptionalSettings("shmem", root.shmemXml())
                     }
-                    Controls.Label { text: i18n("Model"); enabled: shmemCheck.checked; Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("model"); enabled: shmemCheck.checked; Layout.fillWidth: true }
                     Controls.ComboBox {
                         id: shmemModelCombo
                         enabled: shmemCheck.checked
@@ -1882,7 +1851,7 @@ Kirigami.Dialog {
                     columnSpacing: 16
                     rowSpacing: 16
                     Layout.fillWidth: true
-                    Controls.Label { text: i18n("Shared memory backing (virtiofs)"); Layout.fillWidth: true }
+                    Controls.Label { text: qsTr("shared_memory_backing_virtiofs"); Layout.fillWidth: true }
                     Controls.CheckBox {
                         id: memoryBackingCheck
                         Layout.alignment: Qt.AlignRight
@@ -1890,7 +1859,7 @@ Kirigami.Dialog {
                 }
 
                 Controls.Label {
-                    text: i18n("Additional XML devices")
+                    text: qsTr("additional_xml_devices")
                     font.pixelSize: 15
                     font.weight: Font.Bold
                     Layout.fillWidth: true
@@ -1906,7 +1875,7 @@ Kirigami.Dialog {
                     wrapMode: Text.WordWrap
                     opacity: 0.65
                     font.pixelSize: 12
-                    text: i18n("Other devices declared in the domain XML, such as shared memory, IOMMU, filesystem and USB redirection devices.")
+                    text: qsTr("other_devices_declared_in_the_domain_xml_such_as_shared_memory_iommu_filesystem_and_usb_re")
                 }
                 ListView {
                     Layout.fillWidth: true
@@ -1931,7 +1900,7 @@ Kirigami.Dialog {
                                 Layout.fillWidth: true
                             }
                             Controls.Button {
-                                text: i18n("Detach")
+                                text: qsTr("detach")
                                 icon.name: "list-remove-symbolic"
                                 enabled: modelData.tag !== "emulator"
                                 onClicked: {
@@ -1956,13 +1925,13 @@ Kirigami.Dialog {
                     RowLayout {
                         Layout.fillWidth: true
                         Controls.Label {
-                            text: i18n("Domain XML")
+                            text: qsTr("domain_xml")
                             font.pixelSize: 15
                             font.weight: Font.Bold
                             Layout.fillWidth: true
                         }
                         Controls.Label {
-                            text: i18n("Edit")
+                            text: qsTr("edit")
                             font.pixelSize: 13
                         }
                         Controls.Switch {
@@ -1984,7 +1953,7 @@ Kirigami.Dialog {
                         wrapMode: Text.WordWrap
                         opacity: 0.65
                         font.pixelSize: 12
-                        text: i18n("Read-only by default. Enable editing only when you need to change the domain XML directly.")
+                        text: qsTr("read_only_by_default_enable_editing_only_when_you_need_to_change_the_domain_xml_directly")
                     }
                     Rectangle {
                         Layout.fillWidth: true
@@ -2029,7 +1998,7 @@ Kirigami.Dialog {
                         }
                     }
                     Controls.Button {
-                        text: i18n("Apply XML")
+                        text: qsTr("apply_xml")
                         icon.name: "dialog-ok-symbolic"
                         enabled: xmlEditSwitch.checked && root.xmlDirty
                         Layout.alignment: Qt.AlignRight
@@ -2057,14 +2026,14 @@ Kirigami.Dialog {
                     spacing: 16
 
                     Controls.Label {
-                        text: i18n("Shared folders are added from Add Hardware. Each share is mounted in the guest under its mount tag.")
+                        text: qsTr("shared_folders_are_added_from_add_hardware_each_share_is_mounted_in_the_guest_under_its_mo")
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         opacity: 0.65
                         font.pixelSize: 12
                     }
                     Controls.Button {
-                        text: i18n("How to mount…")
+                        text: qsTr("how_to_mount")
                         icon.name: "help-about-symbolic"
                         Layout.alignment: Qt.AlignLeft
                         onClicked: filesystemHelpDialog.open()
@@ -2091,23 +2060,23 @@ Kirigami.Dialog {
                                     Layout.fillWidth: true
                                     spacing: 0
                                     Controls.Label {
-                                        text: (modelData.target.length > 0 ? modelData.target : i18n("Filesystem")) + " · " + modelData.source
+                                        text: (modelData.target.length > 0 ? modelData.target : qsTr("filesystem")) + " · " + modelData.source
                                         elide: Text.ElideRight
                                         Layout.fillWidth: true
                                     }
                                     Controls.Label {
-                                        text: (modelData.driver.length > 0 ? modelData.driver : "9p") + (modelData.readonly ? " · " + i18n("read-only") : "")
+                                        text: (modelData.driver.length > 0 ? modelData.driver : "9p") + (modelData.readonly ? " · " + qsTr("read_only") : "")
                                         opacity: 0.65
                                         font.pixelSize: 11
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Edit")
+                                    text: qsTr("edit")
                                     icon.name: "document-edit-symbolic"
                                     onClicked: root.openFilesystemEditor(modelData)
                                 }
                                 Controls.Button {
-                                    text: i18n("Detach")
+                                    text: qsTr("detach")
                                     icon.name: "list-remove-symbolic"
                                     onClicked: {
                                         if (Karton.detachXmlDevice(root.domain, modelData.index)) {
@@ -2120,7 +2089,7 @@ Kirigami.Dialog {
                     }
                     Controls.Label {
                         visible: root.xmlDevices.filter(function(device) { return device.tag === "filesystem"; }).length === 0
-                        text: i18n("No filesystem shares configured.")
+                        text: qsTr("no_filesystem_shares_configured")
                         opacity: 0.65
                         Layout.fillWidth: true
                     }
@@ -2137,7 +2106,7 @@ Kirigami.Dialog {
                     spacing: 16
 
                     Controls.Label {
-                        text: i18n("Clipboard synchronization between this computer and the guest.")
+                        text: qsTr("clipboard_synchronization_between_this_computer_and_the_guest")
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         opacity: 0.65
@@ -2148,31 +2117,31 @@ Kirigami.Dialog {
                         columnSpacing: 16
                         rowSpacing: 16
                         Layout.fillWidth: true
-                        Controls.Label { text: i18n("Text"); Layout.fillWidth: true }
+                        Controls.Label { text: qsTr("text"); Layout.fillWidth: true }
                         Controls.ComboBox {
                             id: clipboardTextCombo
                             Layout.preferredWidth: 260
                             model: [
-                                i18n("Disabled"),
-                                i18n("Host to guest"),
-                                i18n("Guest to host"),
-                                i18n("Bidirectional")
+                                qsTr("disabled"),
+                                qsTr("host_to_guest"),
+                                qsTr("guest_to_host"),
+                                qsTr("bidirectional")
                             ]
                         }
-                        Controls.Label { text: i18n("Files"); Layout.fillWidth: true }
+                        Controls.Label { text: qsTr("files"); Layout.fillWidth: true }
                         Controls.ComboBox {
                             id: clipboardFilesCombo
                             Layout.preferredWidth: 260
                             model: [
-                                i18n("Disabled"),
-                                i18n("Host to guest"),
-                                i18n("Guest to host"),
-                                i18n("Bidirectional")
+                                qsTr("disabled"),
+                                qsTr("host_to_guest"),
+                                qsTr("guest_to_host"),
+                                qsTr("bidirectional")
                             ]
                         }
                     }
                     Controls.Label {
-                        text: i18n("Text clipboard requires spice-vdagent in the guest. On Wayland the viewer window must have focus. File clipboard additionally requires guest support.")
+                        text: qsTr("text_clipboard_requires_spice_vdagent_in_the_guest_on_wayland_the_viewer_window_must_have")
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         opacity: 0.65
@@ -2192,7 +2161,7 @@ Kirigami.Dialog {
 
     Kirigami.Dialog {
         id: filesystemHelpDialog
-        title: i18n("Mounting Filesystem Shares")
+        title: qsTr("mounting_filesystem_shares")
         modal: true
         padding: Kirigami.Units.largeSpacing
         preferredWidth: Kirigami.Units.gridUnit * 42
@@ -2210,12 +2179,12 @@ Kirigami.Dialog {
             spacing: 10
 
             Controls.Label {
-                text: i18n("Use the mount tag from the Filesystem page as the name of the share.")
+                text: qsTr("use_the_mount_tag_from_the_filesystem_page_as_the_name_of_the_share")
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
             }
             Controls.Label {
-                text: i18n("Linux — 9p")
+                text: qsTr("linux_9p")
                 font.pixelSize: 15
                 font.weight: Font.Bold
                 Layout.fillWidth: true
@@ -2228,7 +2197,7 @@ Kirigami.Dialog {
                 wrapMode: Text.WrapAnywhere
             }
             Controls.Label {
-                text: i18n("Linux — virtiofs")
+                text: qsTr("linux_virtiofs")
                 font.pixelSize: 15
                 font.weight: Font.Bold
                 Layout.fillWidth: true
@@ -2241,19 +2210,19 @@ Kirigami.Dialog {
                 wrapMode: Text.WrapAnywhere
             }
             Controls.Label {
-                text: i18n("Windows")
+                text: qsTr("windows")
                 font.pixelSize: 15
                 font.weight: Font.Bold
                 Layout.fillWidth: true
                 Layout.topMargin: 4
             }
             Controls.Label {
-                text: i18n("9p is not supported natively. For virtiofs, install the VirtIO FS driver from virtio-win and WinFsp, then use the shared tag in the VirtIO FS client. Alternatively use a Windows/SMB share.")
+                text: qsTr("s_9p_is_not_supported_natively_for_virtiofs_install_the_virtio_fs_driver_from_virtio_win_a")
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
             }
             Controls.Label {
-                text: i18n("macOS and BSD variants need a guest driver for the selected filesystem type; 9p support depends on the guest kernel.")
+                text: qsTr("macos_and_bsd_variants_need_a_guest_driver_for_the_selected_filesystem_type_9p_support_dep")
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 opacity: 0.65
@@ -2263,7 +2232,7 @@ Kirigami.Dialog {
 
         customFooterActions: [
             Kirigami.Action {
-                text: i18n("Close")
+                text: qsTr("close")
                 icon.name: "dialog-cancel-symbolic"
                 onTriggered: filesystemHelpDialog.close()
             }
@@ -2272,7 +2241,7 @@ Kirigami.Dialog {
 
     Kirigami.Dialog {
         id: filesystemEditDialog
-        title: i18n("Edit Filesystem Share")
+        title: qsTr("edit_filesystem_share")
         modal: true
         padding: Kirigami.Units.largeSpacing
         preferredWidth: Kirigami.Units.gridUnit * 32
@@ -2302,7 +2271,7 @@ Kirigami.Dialog {
             border.color: "transparent"
         }
 
-        onOpened: {
+        function prepare() {
             fsEditSource.text = shareSource;
             fsEditTarget.text = shareTarget;
             fsEditDriver.currentIndex = Math.max(0, ["9p", "virtiofs"].indexOf(shareDriver));
@@ -2320,29 +2289,29 @@ Kirigami.Dialog {
                 columnSpacing: 12
                 rowSpacing: 12
                 Layout.fillWidth: true
-                Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
+                Controls.Label { text: qsTr("driver"); Layout.fillWidth: true }
                 Controls.ComboBox {
                     id: fsEditDriver
                     Layout.preferredWidth: 220
                     model: ["9p", "virtiofs"]
                 }
-                Controls.Label { text: i18n("Source path"); Layout.fillWidth: true }
+                Controls.Label { text: qsTr("source_path"); Layout.fillWidth: true }
                 Controls.TextField {
                     id: fsEditSource
                     Layout.preferredWidth: 220
                 }
-                Controls.Label { text: i18n("Name / mount tag"); Layout.fillWidth: true }
+                Controls.Label { text: qsTr("name_mount_tag"); Layout.fillWidth: true }
                 Controls.TextField {
                     id: fsEditTarget
                     Layout.preferredWidth: 220
                 }
-                Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
+                Controls.Label { text: qsTr("access_mode"); Layout.fillWidth: true }
                 Controls.ComboBox {
                     id: fsEditAccess
                     Layout.preferredWidth: 220
                     model: ["passthrough", "mapped", "squash"]
                 }
-                Controls.Label { text: i18n("Read-only"); Layout.fillWidth: true }
+                Controls.Label { text: qsTr("read_only_2"); Layout.fillWidth: true }
                 Controls.CheckBox {
                     id: fsEditReadonly
                     Layout.alignment: Qt.AlignRight
@@ -2352,7 +2321,7 @@ Kirigami.Dialog {
 
         customFooterActions: [
             Kirigami.Action {
-                text: i18n("Save")
+                text: qsTr("save")
                 icon.name: "dialog-ok-symbolic"
                 enabled: fsEditSource.text.trim().length > 0
                     && savedState.length > 0
@@ -2376,7 +2345,7 @@ Kirigami.Dialog {
                 }
             },
             Kirigami.Action {
-                text: i18n("Cancel")
+                text: qsTr("cancel")
                 icon.name: "dialog-cancel-symbolic"
                 onTriggered: filesystemEditDialog.close()
             }
@@ -2390,14 +2359,249 @@ Kirigami.Dialog {
             root.refresh();
             categoryList.currentIndex = categoryIndex;
             if (applicationWindow()) {
-                applicationWindow().showPassiveNotification(i18n("Device added"));
+                applicationWindow().showPassiveNotification(qsTr("device_added"));
             }
         }
     }
 
     Kirigami.Dialog {
+        id: editDiskDialog
+        title: isCdrom ? qsTr("cd_rom_options") : qsTr("advanced_disk_options")
+        padding: Kirigami.Units.largeSpacing
+        width: Kirigami.Units.gridUnit * 34
+        property string targetDev: ""
+        property string savedState: ""
+        property bool isCdrom: false
+        property bool sourceEditable: true
+        property string sourcePath: ""
+        property string originalSource: ""
+        property string diskEditError: ""
+
+        function currentState() {
+            return JSON.stringify({
+                source: sourcePath.trim(),
+                readonly: diskEditReadonlyCheck.checked,
+                shareable: isCdrom ? false : diskEditShareableCheck.checked,
+                serial: isCdrom ? "" : diskEditSerialField.text.trim(),
+                cache: isCdrom ? 0 : diskEditCacheCombo.currentIndex,
+                discard: isCdrom ? 0 : diskEditDiscardCombo.currentIndex
+            });
+        }
+
+        function applySettings() {
+            const cacheIndex = diskEditCacheCombo.currentIndex;
+            const discardIndex = diskEditDiscardCombo.currentIndex;
+            const advanced = {
+                source: sourcePath.trim(),
+                readonly: diskEditReadonlyCheck.checked,
+                shareable: diskEditShareableCheck.checked,
+                serial: diskEditSerialField.text.trim(),
+                cache: cacheIndex === 0 ? "" : diskEditCacheCombo.model[cacheIndex],
+                discard: discardIndex === 0 ? "" : diskEditDiscardCombo.model[discardIndex]
+            };
+            if (Karton.editDomainDiskAdvanced(root.domain, targetDev, advanced)) {
+                close();
+                root.refresh();
+            }
+        }
+
+        background: Rectangle {
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                           Kirigami.Theme.backgroundColor.g,
+                           Kirigami.Theme.backgroundColor.b, 1.0)
+            radius: 8
+            border.color: "transparent"
+        }
+
+        function prepare(dev) {
+            targetDev = dev;
+            const advanced = Karton.domainDiskAdvanced(root.domain, targetDev);
+            isCdrom = advanced.device === "cdrom";
+            sourcePath = advanced.source || "";
+            originalSource = sourcePath;
+            sourceEditable = true;
+            diskEditError = "";
+            diskEditReadonlyCheck.checked = isCdrom ? true : advanced.readonly === true;
+            diskEditReadonlyCheck.enabled = !isCdrom;
+            diskEditShareableCheck.checked = advanced.shareable === true;
+            diskEditSerialField.text = advanced.serial || "";
+            diskEditCacheCombo.currentIndex = Math.max(0, diskEditCacheCombo.model.indexOf(advanced.cache || ""));
+            diskEditDiscardCombo.currentIndex = Math.max(0, diskEditDiscardCombo.model.indexOf(advanced.discard || ""));
+            savedState = currentState();
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 16
+
+            GridLayout {
+                columns: 2
+                columnSpacing: 16
+                rowSpacing: 16
+                Layout.fillWidth: true
+
+                Controls.Label {
+                    text: qsTr("disk")
+                    font.pixelSize: 14
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+                Controls.Label {
+                    text: editDiskDialog.targetDev
+                    opacity: 0.7
+                    Layout.preferredWidth: 260
+                    Layout.alignment: Qt.AlignRight
+                    horizontalAlignment: Text.AlignRight
+                }
+                Controls.Label {
+                    text: editDiskDialog.isCdrom ? qsTr("media") : qsTr("path")
+                    font.pixelSize: 14
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+                RowLayout {
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 8
+                    Controls.TextField {
+                        id: diskEditPathField
+                        Layout.fillWidth: true
+                        text: editDiskDialog.sourcePath
+                        readOnly: !editDiskDialog.sourceEditable
+                        placeholderText: qsTr("none")
+                        onTextEdited: editDiskDialog.sourcePath = text
+                    }
+                    Controls.Button {
+                        text: qsTr("change")
+                        icon.name: "folder-open-symbolic"
+                        enabled: editDiskDialog.sourceEditable
+                        onClicked: diskSourceFileDialog.open()
+                    }
+                }
+                Controls.Label {
+                    text: qsTr("read_only_2")
+                    font.pixelSize: 14
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+                Controls.CheckBox {
+                    id: diskEditReadonlyCheck
+                    Layout.alignment: Qt.AlignRight
+                }
+                Controls.Label {
+                    visible: !editDiskDialog.isCdrom
+                    text: qsTr("shareable")
+                    font.pixelSize: 14
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+                Controls.CheckBox {
+                    id: diskEditShareableCheck
+                    visible: !editDiskDialog.isCdrom
+                    Layout.alignment: Qt.AlignRight
+                }
+                Controls.Label {
+                    visible: !editDiskDialog.isCdrom
+                    text: qsTr("serial")
+                    font.pixelSize: 14
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+                Controls.TextField {
+                    id: diskEditSerialField
+                    visible: !editDiskDialog.isCdrom
+                    Layout.preferredWidth: 260
+                    Layout.alignment: Qt.AlignRight
+                }
+                Controls.Label {
+                    visible: !editDiskDialog.isCdrom
+                    text: qsTr("cache_mode")
+                    font.pixelSize: 14
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+                Controls.ComboBox {
+                    id: diskEditCacheCombo
+                    visible: !editDiskDialog.isCdrom
+                    model: ["", "none", "writethrough", "writeback", "directsync", "unsafe"]
+                    displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                    Layout.preferredWidth: 260
+                    Layout.alignment: Qt.AlignRight
+                }
+                Controls.Label {
+                    visible: !editDiskDialog.isCdrom
+                    text: qsTr("discard_mode")
+                    font.pixelSize: 14
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+                Controls.ComboBox {
+                    id: diskEditDiscardCombo
+                    visible: !editDiskDialog.isCdrom
+                    model: ["", "unmap", "ignore"]
+                    displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                    Layout.preferredWidth: 260
+                    Layout.alignment: Qt.AlignRight
+                }
+            }
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                type: Kirigami.MessageType.Error
+                visible: editDiskDialog.diskEditError.length > 0
+                text: editDiskDialog.diskEditError
+            }
+            Controls.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.65
+                font.pixelSize: 12
+                visible: !editDiskDialog.isCdrom && root.domain && root.domain.isActive
+                text: qsTr("the_new_path_is_saved_for_the_next_start_the_running_vm_keeps_using_the_old_file")
+            }
+            Controls.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.65
+                font.pixelSize: 12
+                visible: editDiskDialog.isCdrom
+                text: qsTr("cd_rom_media_is_always_read_only_shareable_serial_cache_and_discard_options_do_not_apply")
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: qsTr("cancel")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: editDiskDialog.close()
+            },
+            Kirigami.Action {
+                text: qsTr("save")
+                icon.name: "dialog-ok-symbolic"
+                enabled: editDiskDialog.savedState.length > 0 && editDiskDialog.currentState() !== editDiskDialog.savedState
+                onTriggered: {
+                    const path = editDiskDialog.sourcePath.trim();
+                    if (path.length > 0 && path !== editDiskDialog.originalSource) {
+                        const slash = path.lastIndexOf("/");
+                        if (slash > 0) {
+                            const directory = path.substring(0, slash);
+                            const error = Karton.checkDiskDirectoryAccess(directory);
+                            if (error.length > 0) {
+                                editDiskDialog.diskEditError = "";
+                                diskPathGrantDialog.openFor(directory);
+                                return;
+                            }
+                        }
+                    }
+                    editDiskDialog.applySettings();
+                }
+            }
+        ]
+    }
+
+    Kirigami.Dialog {
         id: editInterfaceDialog
-        title: i18n("Edit Network Interface")
+        title: qsTr("edit_network_interface")
         padding: Kirigami.Units.largeSpacing
         preferredWidth: Kirigami.Units.gridUnit * 28
         property string originalMac: ""
@@ -2419,7 +2623,9 @@ Kirigami.Dialog {
             border.color: "transparent"
         }
 
-        onOpened: {
+        function prepare(macAddress, networkModel) {
+            originalMac = macAddress;
+            model = networkModel;
             macField.text = originalMac;
             modelCombo.currentIndex = Math.max(0, modelCombo.model.indexOf(model));
             savedState = currentState();
@@ -2429,12 +2635,12 @@ Kirigami.Dialog {
             Layout.fillWidth: true
             spacing: 16
 
-            Controls.Label { text: i18n("MAC address"); font.pixelSize: 14 }
+            Controls.Label { text: qsTr("mac_address"); font.pixelSize: 14 }
             Controls.TextField {
                 id: macField
                 Layout.fillWidth: true
             }
-            Controls.Label { text: i18n("Model"); font.pixelSize: 14; Layout.topMargin: 8 }
+            Controls.Label { text: qsTr("model"); font.pixelSize: 14; Layout.topMargin: 8 }
             Controls.ComboBox {
                 id: modelCombo
                 model: ["virtio", "e1000"]
@@ -2444,12 +2650,12 @@ Kirigami.Dialog {
 
         customFooterActions: [
             Kirigami.Action {
-                text: i18n("Cancel")
+                text: qsTr("cancel")
                 icon.name: "dialog-cancel-symbolic"
                 onTriggered: editInterfaceDialog.close()
             },
             Kirigami.Action {
-                text: i18n("Save")
+                text: qsTr("save")
                 icon.name: "dialog-ok-symbolic"
                 enabled: macField.text.trim().length > 0
                     && savedState.length > 0
@@ -2463,6 +2669,45 @@ Kirigami.Dialog {
                 }
             }
         ]
+    }
+
+    FileDialog {
+        id: mediaFileDialog
+        title: qsTr("choose_cd_rom_media")
+        nameFilters: [qsTr("disk_images_iso_img_raw"), qsTr("all_files")]
+        onAccepted: {
+            if (Karton.setDiskMedia(root.domain, root.mediaTargetDev, root.localPath(selectedFile))) {
+                root.refresh();
+            }
+        }
+    }
+
+    PermissionGrantDialog {
+        id: diskPathGrantDialog
+        onCancelled: {
+            editDiskDialog.diskEditError = Karton.checkDiskDirectoryAccess(targetPath);
+        }
+        onConfirmed: {
+            const error = Karton.grantDiskDirectoryAccess(targetPath);
+            if (error.length > 0) {
+                editDiskDialog.diskEditError = error;
+                return;
+            }
+            const check = Karton.checkDiskDirectoryAccess(targetPath);
+            editDiskDialog.diskEditError = check;
+            if (check.length === 0) {
+                editDiskDialog.applySettings();
+            }
+        }
+    }
+
+    FileDialog {
+        id: diskSourceFileDialog
+        title: editDiskDialog.isCdrom ? qsTr("choose_cd_rom_media") : qsTr("choose_disk_image")
+        nameFilters: editDiskDialog.isCdrom
+            ? [qsTr("disk_images_iso_img_raw"), qsTr("all_files")]
+            : [qsTr("disk_images_qcow2_raw_img_vdi_vmdk"), qsTr("all_files")]
+        onAccepted: editDiskDialog.sourcePath = root.localPath(selectedFile)
     }
 
     Connections {

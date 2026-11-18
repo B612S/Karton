@@ -7,9 +7,9 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -108,7 +108,7 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
 
     const QString name = requestedName.trimmed();
     if (!isValidDomainName(name)) {
-        Q_EMIT errorOccurred(i18n("A snapshot name may only contain letters, digits, dots, underscores and dashes."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_snapshot_name_may_only_contain_letters_digits_dots_underscores_and_dashes"));
         return false;
     }
     if (domain->isActive() && !includeMemory) {
@@ -117,14 +117,14 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
         // per data disk and switches the live domain to the overlay.
         char *domainXml = virDomainGetXMLDesc(domain->domainPtr(), 0);
         if (!domainXml) {
-            Q_EMIT errorOccurred(i18n("Could not read the VM configuration for the snapshot."));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "could_not_read_the_vm_configuration_for_the_snapshot"));
             return false;
         }
 
         QDomDocument domainDocument;
         if (!domainDocument.setContent(QString::fromUtf8(domainXml))) {
             free(domainXml);
-            Q_EMIT errorOccurred(i18n("Could not parse the VM configuration for the snapshot."));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "could_not_parse_the_vm_configuration_for_the_snapshot"));
             return false;
         }
         free(domainXml);
@@ -177,7 +177,7 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
                 for (const QString &path : std::as_const(overlayPaths)) {
                     QFile::remove(path);
                 }
-                Q_EMIT errorOccurred(i18nc("%1 is a file path", "Snapshot overlay already exists: %1", overlayPath));
+                Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "snapshot_overlay_already_exists_1").arg(overlayPath));
                 return false;
             }
 
@@ -199,7 +199,7 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
         }
 
         if (overlayPaths.isEmpty()) {
-            Q_EMIT errorOccurred(i18n("The VM has no local data disks to snapshot."));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_vm_has_no_local_data_disks_to_snapshot"));
             return false;
         }
 
@@ -211,7 +211,7 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
                 QFile::remove(path);
             }
             Q_EMIT errorOccurred(
-                i18nc("%1 is a snapshot name, %2 is an error", "Failed to create snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage())));
+                QCoreApplication::translate("Karton", "failed_to_create_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage())));
             return false;
         }
 
@@ -241,7 +241,7 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
     virDomainSnapshotPtr snapshot = virDomainSnapshotCreateXML(domain->domainPtr(), document.toString().toUtf8().constData(), 0);
     if (!snapshot) {
         const QString errorMsg =
-            i18nc("%1 is a snapshot name, %2 is an error", "Failed to create snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_create_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
@@ -259,7 +259,7 @@ bool Karton::deleteSnapshot(const Domain *domain, const QString &name)
     virDomainSnapshotPtr snapshot = virDomainSnapshotLookupByName(domain->domainPtr(), name.toUtf8().constData(), 0);
     if (!snapshot) {
         const QString errorMsg =
-            i18nc("%1 is a snapshot name, %2 is an error", "Failed to find snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_find_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
@@ -278,7 +278,7 @@ bool Karton::deleteSnapshot(const Domain *domain, const QString &name)
     const bool success = virDomainSnapshotDelete(snapshot, external ? 0 : VIR_DOMAIN_SNAPSHOT_DELETE_CHILDREN) == 0;
     if (!success) {
         const QString errorMsg =
-            i18nc("%1 is a snapshot name, %2 is an error", "Failed to delete snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_delete_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
     virDomainSnapshotFree(snapshot);
@@ -297,7 +297,7 @@ bool Karton::revertSnapshot(const Domain *domain, const QString &name)
     virDomainSnapshotPtr snapshot = virDomainSnapshotLookupByName(domain->domainPtr(), name.toUtf8().constData(), 0);
     if (!snapshot) {
         const QString errorMsg =
-            i18nc("%1 is a snapshot name, %2 is an error", "Failed to find snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_find_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
@@ -305,7 +305,7 @@ bool Karton::revertSnapshot(const Domain *domain, const QString &name)
     const bool success = virDomainRevertToSnapshot(snapshot, 0) == 0;
     if (!success) {
         const QString errorMsg =
-            i18nc("%1 is a snapshot name, %2 is an error", "Failed to revert to snapshot %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_revert_to_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
     virDomainSnapshotFree(snapshot);

@@ -7,9 +7,9 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -258,11 +258,11 @@ bool Karton::attachUsbDevice(const Domain *domain, const QString &vendor, const 
         return false;
     }
     if (vendor.isEmpty() || product.isEmpty() || bus.isEmpty() || device.isEmpty()) {
-        Q_EMIT errorOccurred(i18n("USB vendor, product, bus and device are required."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "usb_vendor_product_bus_and_device_are_required"));
         return false;
     }
     if (hasUsbHostdev(domain, vendor, product, bus, device)) {
-        Q_EMIT errorOccurred(i18n("This USB device is already attached."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "this_usb_device_is_already_attached"));
         return false;
     }
 
@@ -270,10 +270,9 @@ bool Karton::attachUsbDevice(const Domain *domain, const QString &vendor, const 
     bool success = false;
     if (domain->isActive()) {
         if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
-            const QString errorMsg = i18nc("%1 is a USB device, %2 is an error",
-                                           "Failed to attach USB device %1: %2",
-                                           vendor + QLatin1Char(':') + product,
-                                           QString::fromUtf8(virGetLastErrorMessage()));
+            const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_attach_usb_device_1_2")
+                                         .arg(vendor + QLatin1Char(':') + product)
+                                         .arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
         } else {
             success = true;
@@ -285,10 +284,9 @@ bool Karton::attachUsbDevice(const Domain *domain, const QString &vendor, const 
     } else if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) == 0) {
         success = true;
     } else {
-        const QString errorMsg = i18nc("%1 is a USB device, %2 is an error",
-                                       "Failed to attach USB device %1: %2",
-                                       vendor + QLatin1Char(':') + product,
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_attach_usb_device_1_2")
+                                     .arg(vendor + QLatin1Char(':') + product)
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
 
@@ -307,17 +305,16 @@ bool Karton::detachUsbDevice(const Domain *domain, const QString &vendor, const 
     const QString liveXml = usbHostdevXmlForDevice(domain->domainPtr(), vendor, product, bus, device, 0);
     const QString configXml = usbHostdevXmlForDevice(domain->domainPtr(), vendor, product, bus, device, VIR_DOMAIN_XML_INACTIVE);
     if (liveXml.isEmpty() && configXml.isEmpty()) {
-        Q_EMIT errorOccurred(i18nc("%1 is a USB device", "No matching USB device %1 was found.", vendor + QLatin1Char(':') + product));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "no_matching_usb_device_1_was_found").arg(vendor + QLatin1Char(':') + product));
         return false;
     }
 
     bool success = true;
     if (domain->isActive() && !liveXml.isEmpty()) {
         if (virDomainDetachDeviceFlags(domain->domainPtr(), liveXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
-            const QString errorMsg = i18nc("%1 is a USB device, %2 is an error",
-                                           "Failed to detach USB device %1: %2",
-                                           vendor + QLatin1Char(':') + product,
-                                           QString::fromUtf8(virGetLastErrorMessage()));
+            const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_detach_usb_device_1_2")
+                                         .arg(vendor + QLatin1Char(':') + product)
+                                         .arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
             success = false;
         }
@@ -325,10 +322,9 @@ bool Karton::detachUsbDevice(const Domain *domain, const QString &vendor, const 
 
     if (!configXml.isEmpty()) {
         if (virDomainDetachDeviceFlags(domain->domainPtr(), configXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
-            const QString errorMsg = i18nc("%1 is a USB device, %2 is an error",
-                                           "Failed to detach persistent USB device %1: %2",
-                                           vendor + QLatin1Char(':') + product,
-                                           QString::fromUtf8(virGetLastErrorMessage()));
+            const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_detach_persistent_usb_device_1_2")
+                                         .arg(vendor + QLatin1Char(':') + product)
+                                         .arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
             success = false;
         }
@@ -346,15 +342,14 @@ bool Karton::attachUsbDevicePersistent(const Domain *domain, const QString &vend
         return false;
     }
     if (hasUsbHostdev(domain, vendor, product, bus, device)) {
-        Q_EMIT errorOccurred(i18n("This USB device is already attached."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "this_usb_device_is_already_attached"));
         return false;
     }
     const QString xml = usbHostdevXml(vendor, product, bus, device);
     if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
-        Q_EMIT errorOccurred(i18nc("%1 is a USB device, %2 is an error",
-                                   "Failed to persist USB device %1: %2",
-                                   vendor + QLatin1Char(':') + product,
-                                   QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_persist_usb_device_1_2")
+                                 .arg(vendor + QLatin1Char(':') + product)
+                                 .arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     refreshDomain(domain->domainPtr());
@@ -368,10 +363,9 @@ bool Karton::detachUsbDevicePersistent(const Domain *domain, const QString &vend
     }
     const QString xml = usbHostdevXml(vendor, product, bus, device);
     if (virDomainDetachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
-        Q_EMIT errorOccurred(i18nc("%1 is a USB device, %2 is an error",
-                                   "Failed to remove persisted USB device %1: %2",
-                                   vendor + QLatin1Char(':') + product,
-                                   QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_remove_persisted_usb_device_1_2")
+                                 .arg(vendor + QLatin1Char(':') + product)
+                                 .arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     refreshDomain(domain->domainPtr());

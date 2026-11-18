@@ -7,6 +7,7 @@
 #include <array>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QPainter>
 
@@ -124,6 +125,20 @@ void Domain::updateLivePreviewFrame(QImage frame)
         frame = frame.scaledToWidth(640, Qt::SmoothTransformation);
     }
     m_previewFrame = std::move(frame);
+    Q_EMIT previewFrameChanged();
+    Q_EMIT previewChanged();
+}
+
+void Domain::clearPreviewFrame()
+{
+    const QString previewPath = m_config->screenshotPreviewPath();
+    if (!previewPath.isEmpty()) {
+        QFile::remove(previewPath);
+    }
+    if (m_previewFrame.isNull()) {
+        return;
+    }
+    m_previewFrame = QImage();
     Q_EMIT previewFrameChanged();
     Q_EMIT previewChanged();
 }

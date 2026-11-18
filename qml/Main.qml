@@ -21,7 +21,7 @@ Kirigami.ApplicationWindow {
     pageStack.columnView.columnResizeMode: isWidescreen ? Kirigami.ColumnView.FixedColumns : Kirigami.ColumnView.SingleColumn
     pageStack.columnView.columnWidth: Kirigami.Units.gridUnit * 16
 
-    title: i18nc("@title:window", "Karton Virtual Machine Manager")
+    title: qsTr("karton_virtual_machine_manager")
 
     pageStack.initialPage: VMListPage { }
 
@@ -39,13 +39,29 @@ Kirigami.ApplicationWindow {
     onClosing: (close) => {
         // Destroying the platform window from inside the close event deadlocks
         // in QWaylandWindow::reset() (Qt Wayland) and aborts Karton. Ignore the
-        // event, hide the window, close the viewers and leave the event loop;
-        // aboutToQuit exits the process before Qt tears its windows down.
+        // event and hide the window instead.
         close.accepted = false;
         Karton.saveMainWindowSize(width, height);
-        Karton.closeAllViewers();
+        if (Karton.viewerCount > 0) {
+            // Keep the VM viewer windows (and the VM displays) alive. The
+            // application quits when the last viewer is closed.
+            root.hide();
+            return;
+        }
+        // aboutToQuit exits the process before Qt tears its windows down.
         root.hide();
         Qt.quit();
+    }
+
+    Connections {
+        target: Karton
+        function onViewerCountChanged() {
+            // The main window is hidden and the last VM viewer was closed;
+            // there is no window left to interact with.
+            if (Karton.viewerCount === 0 && !root.visible) {
+                Qt.quit();
+            }
+        }
     }
 
     Timer {

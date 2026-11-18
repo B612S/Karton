@@ -7,9 +7,9 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -251,11 +251,11 @@ bool parseNetworkConfig(const QVariantMap &config, NetworkConfigData *data, QStr
 {
     data->name = config.value(QStringLiteral("name")).toString().trimmed();
     if (data->name.isEmpty()) {
-        *error = i18n("The network name cannot be empty.");
+        *error = QCoreApplication::translate("Karton", "the_network_name_cannot_be_empty");
         return false;
     }
     if (!isValidDomainName(data->name)) {
-        *error = i18n("A network name may only contain letters, digits, dots, underscores and dashes.");
+        *error = QCoreApplication::translate("Karton", "a_network_name_may_only_contain_letters_digits_dots_underscores_and_dashes");
         return false;
     }
 
@@ -266,7 +266,7 @@ bool parseNetworkConfig(const QVariantMap &config, NetworkConfigData *data, QStr
                                       QStringLiteral("open"),
                                       QStringLiteral("bridge")};
     if (!modes.contains(data->mode)) {
-        *error = i18n("Unsupported network mode.");
+        *error = QCoreApplication::translate("Karton", "unsupported_network_mode");
         return false;
     }
 
@@ -274,17 +274,17 @@ bool parseNetworkConfig(const QVariantMap &config, NetworkConfigData *data, QStr
     data->bridgeName = config.value(QStringLiteral("bridgeName")).toString().trimmed();
     data->domainName = config.value(QStringLiteral("domainName")).toString().trimmed();
     if (!data->domainName.isEmpty() && (data->domainName.size() > 253 || data->domainName.contains(QRegularExpression(QStringLiteral("\\s"))))) {
-        *error = i18n("The DNS domain name is invalid.");
+        *error = QCoreApplication::translate("Karton", "the_dns_domain_name_is_invalid");
         return false;
     }
 
     if (data->mode == QStringLiteral("bridge")) {
         if (data->bridgeName.isEmpty()) {
-            *error = i18n("A bridge name is required for bridge networks.");
+            *error = QCoreApplication::translate("Karton", "a_bridge_name_is_required_for_bridge_networks");
             return false;
         }
         if (!isValidDomainName(data->bridgeName)) {
-            *error = i18n("The bridge name is invalid.");
+            *error = QCoreApplication::translate("Karton", "the_bridge_name_is_invalid");
             return false;
         }
         // Bridge networks get their addressing from the host bridge.
@@ -297,7 +297,7 @@ bool parseNetworkConfig(const QVariantMap &config, NetworkConfigData *data, QStr
     data->ipv4Enabled = config.value(QStringLiteral("ipv4Enabled"), false).toBool();
     if (data->ipv4Enabled) {
         if (!parseIpv4Cidr(config.value(QStringLiteral("ipv4")).toString(), &data->ipv4Network, &data->ipv4Prefix)) {
-            *error = i18n("The IPv4 network must be a valid CIDR such as 192.168.100.0/24.");
+            *error = QCoreApplication::translate("Karton", "the_ipv4_network_must_be_a_valid_cidr_such_as_192_168_100_0_24");
             return false;
         }
         data->ipv4Gateway = ipv4DefaultGateway(data->ipv4Network, data->ipv4Prefix, config.value(QStringLiteral("ipv4Gateway")).toString());
@@ -315,7 +315,7 @@ bool parseNetworkConfig(const QVariantMap &config, NetworkConfigData *data, QStr
                 || !ipv4InNetwork(data->ipv4DhcpStart, data->ipv4Network, data->ipv4Prefix)
                 || !ipv4InNetwork(data->ipv4DhcpEnd, data->ipv4Network, data->ipv4Prefix) || data->ipv4DhcpStart > data->ipv4DhcpEnd
                 || data->ipv4DhcpStart == data->ipv4Gateway || data->ipv4DhcpEnd == data->ipv4Gateway) {
-                *error = i18n("The DHCPv4 range is invalid for this network.");
+                *error = QCoreApplication::translate("Karton", "the_dhcpv4_range_is_invalid_for_this_network");
                 return false;
             }
         }
@@ -324,12 +324,12 @@ bool parseNetworkConfig(const QVariantMap &config, NetworkConfigData *data, QStr
     data->ipv6Enabled = config.value(QStringLiteral("ipv6Enabled"), false).toBool();
     if (data->ipv6Enabled) {
         if (!parseIpv6Cidr(config.value(QStringLiteral("ipv6")).toString(), &data->ipv6Network, &data->ipv6Prefix)) {
-            *error = i18n("The IPv6 network must be a valid CIDR such as fd00::/64.");
+            *error = QCoreApplication::translate("Karton", "the_ipv6_network_must_be_a_valid_cidr_such_as_fd00_64");
             return false;
         }
         const QString gateway = ipv6DefaultGateway(data->ipv6Network, data->ipv6Prefix, config.value(QStringLiteral("ipv6Gateway")).toString());
         if (!parseIpv6Address(gateway, &data->ipv6Gateway)) {
-            *error = i18n("The IPv6 gateway is invalid.");
+            *error = QCoreApplication::translate("Karton", "the_ipv6_gateway_is_invalid");
             return false;
         }
         data->ipv6Dhcp = config.value(QStringLiteral("ipv6Dhcp"), false).toBool();
@@ -344,7 +344,7 @@ bool parseNetworkConfig(const QVariantMap &config, NetworkConfigData *data, QStr
             }
             if (startText.isEmpty() || endText.isEmpty() || !parseIpv6Address(startText, &data->ipv6DhcpStart)
                 || !parseIpv6Address(endText, &data->ipv6DhcpEnd)) {
-                *error = i18n("The DHCPv6 range is invalid for this network.");
+                *error = QCoreApplication::translate("Karton", "the_dhcpv6_range_is_invalid_for_this_network");
                 return false;
             }
         }
@@ -677,7 +677,7 @@ bool Karton::createNetwork(const QVariantMap &config)
     virNetworkPtr existing = virNetworkLookupByName(m_conn, data.name.toUtf8().constData());
     if (existing) {
         virNetworkFree(existing);
-        Q_EMIT errorOccurred(i18nc("%1 is a network name", "Network %1 already exists.", data.name));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_already_exists").arg(data.name));
         return false;
     }
 
@@ -690,13 +690,13 @@ bool Karton::createNetwork(const QVariantMap &config)
     virNetworkPtr network = virNetworkDefineXML(m_conn, document.toString().toUtf8().constData());
     if (!network) {
         Q_EMIT errorOccurred(
-            i18nc("%1 is a network name, %2 is an error", "Failed to define network %1: %2", data.name, QString::fromUtf8(virGetLastErrorMessage())));
+            QCoreApplication::translate("Karton", "failed_to_define_network_1_2").arg(data.name).arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
 
     if (virNetworkCreate(network) != 0) {
         Q_EMIT errorOccurred(
-            i18nc("%1 is a network name, %2 is an error", "Failed to start network %1: %2", data.name, QString::fromUtf8(virGetLastErrorMessage())));
+            QCoreApplication::translate("Karton", "failed_to_start_network_1_2").arg(data.name).arg(QString::fromUtf8(virGetLastErrorMessage())));
         virNetworkUndefine(network);
         virNetworkFree(network);
         return false;
@@ -704,10 +704,9 @@ bool Karton::createNetwork(const QVariantMap &config)
 
     const bool autostart = config.value(QStringLiteral("autostart"), false).toBool();
     if (virNetworkSetAutostart(network, autostart ? 1 : 0) != 0) {
-        Q_EMIT errorOccurred(i18nc("%1 is a network name, %2 is an error",
-                                   "Failed to change autostart for network %1: %2",
-                                   data.name,
-                                   QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_change_autostart_for_network_1_2")
+                                 .arg(data.name)
+                                 .arg(QString::fromUtf8(virGetLastErrorMessage())));
     }
 
     virNetworkFree(network);
@@ -730,7 +729,7 @@ bool Karton::updateNetwork(const QVariantMap &config)
 
     virNetworkPtr oldNetwork = virNetworkLookupByName(m_conn, data.name.toUtf8().constData());
     if (!oldNetwork) {
-        Q_EMIT errorOccurred(i18nc("%1 is a network name", "Network %1 was not found.", data.name));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(data.name));
         return false;
     }
     const bool wasActive = virNetworkIsActive(oldNetwork) == 1;
@@ -743,7 +742,7 @@ bool Karton::updateNetwork(const QVariantMap &config)
     if (!xml || !document.setContent(QString::fromUtf8(xml))) {
         free(xml);
         virNetworkFree(oldNetwork);
-        Q_EMIT errorOccurred(i18nc("%1 is a network name", "Failed to read the configuration of network %1.", data.name));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_read_the_configuration_of_network_1").arg(data.name));
         return false;
     }
     free(xml);
@@ -758,7 +757,7 @@ bool Karton::updateNetwork(const QVariantMap &config)
     virNetworkFree(oldNetwork);
     if (!newNetwork) {
         Q_EMIT errorOccurred(
-            i18nc("%1 is a network name, %2 is an error", "Failed to update network %1: %2", data.name, QString::fromUtf8(virGetLastErrorMessage())));
+            QCoreApplication::translate("Karton", "failed_to_update_network_1_2").arg(data.name).arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
 
@@ -767,10 +766,9 @@ bool Karton::updateNetwork(const QVariantMap &config)
         // restart is required because libvirt cannot change a live network's
         // addressing in place.
         if (virNetworkDestroy(newNetwork) != 0 || virNetworkCreate(newNetwork) != 0) {
-            Q_EMIT errorOccurred(i18nc("%1 is a network name, %2 is an error",
-                                       "Network %1 was updated but could not be restarted: %2",
-                                       data.name,
-                                       QString::fromUtf8(virGetLastErrorMessage())));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_updated_but_could_not_be_restarted_2")
+                                     .arg(data.name)
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage())));
             virNetworkFree(newNetwork);
             return false;
         }
@@ -778,10 +776,9 @@ bool Karton::updateNetwork(const QVariantMap &config)
 
     const bool autostart = config.value(QStringLiteral("autostart"), false).toBool();
     if (virNetworkSetAutostart(newNetwork, autostart ? 1 : 0) != 0) {
-        Q_EMIT errorOccurred(i18nc("%1 is a network name, %2 is an error",
-                                   "Failed to change autostart for network %1: %2",
-                                   data.name,
-                                   QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_change_autostart_for_network_1_2")
+                                 .arg(data.name)
+                                 .arg(QString::fromUtf8(virGetLastErrorMessage())));
     }
 
     virNetworkFree(newNetwork);
@@ -797,8 +794,7 @@ bool Karton::startNetwork(const QString &name)
 
     virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
     if (!network) {
-        const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to find network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_find_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
@@ -806,7 +802,7 @@ bool Karton::startNetwork(const QString &name)
     const bool success = virNetworkCreate(network) == 0;
     if (!success) {
         const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to start network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_start_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
     virNetworkFree(network);
@@ -824,16 +820,14 @@ bool Karton::stopNetwork(const QString &name)
 
     virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
     if (!network) {
-        const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to find network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_find_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
 
     const bool success = virNetworkDestroy(network) == 0;
     if (!success) {
-        const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to stop network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_stop_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
     virNetworkFree(network);
@@ -847,8 +841,7 @@ bool Karton::setNetworkAutostart(const QString &name, bool autostart)
 {
     virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
     if (!network) {
-        const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to find network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_find_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
@@ -856,7 +849,7 @@ bool Karton::setNetworkAutostart(const QString &name, bool autostart)
     const bool success = virNetworkSetAutostart(network, autostart ? 1 : 0) == 0;
     if (!success) {
         const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to change autostart for network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_change_autostart_for_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
     virNetworkFree(network);
@@ -877,14 +870,14 @@ bool Karton::createNatNetwork(const QString &requestedName)
         name = QStringLiteral("karton-nat");
     }
     if (!isValidDomainName(name)) {
-        Q_EMIT errorOccurred(i18n("A network name may only contain letters, digits, dots, underscores and dashes."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_network_name_may_only_contain_letters_digits_dots_underscores_and_dashes"));
         return false;
     }
 
     virNetworkPtr existing = virNetworkLookupByName(m_conn, name.toUtf8().constData());
     if (existing) {
         virNetworkFree(existing);
-        Q_EMIT errorOccurred(i18nc("%1 is a network name", "Network %1 already exists.", name));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_already_exists").arg(name));
         return false;
     }
 
@@ -931,7 +924,7 @@ bool Karton::createNatNetwork(const QString &requestedName)
         }
     }
     if (subnet == 0) {
-        Q_EMIT errorOccurred(i18n("Could not find a free 192.168.x.0/24 subnet for the new network."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "could_not_find_a_free_192_168_x_0_24_subnet_for_the_new_network"));
         return false;
     }
 
@@ -950,14 +943,14 @@ bool Karton::createNatNetwork(const QString &requestedName)
     virNetworkPtr network = virNetworkDefineXML(m_conn, xml.toUtf8().constData());
     if (!network) {
         const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to define network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_define_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
 
     if (virNetworkCreate(network) != 0) {
         const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to start network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_start_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
         virNetworkUndefine(network);
         virNetworkFree(network);
@@ -1087,7 +1080,7 @@ bool Karton::deleteNetwork(const QString &name)
     }
     virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
     if (!network) {
-        Q_EMIT errorOccurred(i18nc("%1 is a network name", "Network %1 was not found.", name));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(name));
         return false;
     }
     const int active = virNetworkIsActive(network);
@@ -1096,8 +1089,7 @@ bool Karton::deleteNetwork(const QString &name)
     }
     const bool ok = virNetworkUndefine(network) == 0;
     if (!ok) {
-        Q_EMIT errorOccurred(
-            i18nc("%1 is a network name, %2 is the error message", "Failed to delete network %1: %2", name, QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_delete_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage())));
     }
     virNetworkFree(network);
     if (ok) {
@@ -1112,7 +1104,7 @@ bool Karton::attachNetwork(const Domain *domain, const QString &network, const Q
         return false;
     }
     if (!isValidDomainName(network)) {
-        Q_EMIT errorOccurred(i18n("Invalid network name."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_network_name"));
         return false;
     }
 
@@ -1135,7 +1127,7 @@ bool Karton::attachNetwork(const Domain *domain, const QString &network, const Q
     if (domain->isActive()) {
         if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
             const QString errorMsg =
-                i18nc("%1 is a network name, %2 is an error", "Failed to attach network %1: %2", network, QString::fromUtf8(virGetLastErrorMessage()));
+                QCoreApplication::translate("Karton", "failed_to_attach_network_1_2").arg(network).arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
         } else {
             success = true;
@@ -1151,7 +1143,7 @@ bool Karton::attachNetwork(const Domain *domain, const QString &network, const Q
         success = true;
     } else {
         const QString errorMsg =
-            i18nc("%1 is a network name, %2 is an error", "Failed to attach network %1: %2", network, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_attach_network_1_2").arg(network).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
 
@@ -1170,7 +1162,7 @@ bool Karton::detachNetwork(const Domain *domain, const QString &mac)
     const QString liveXml = interfaceXmlForMac(domain->domainPtr(), mac, 0);
     const QString configXml = interfaceXmlForMac(domain->domainPtr(), mac, VIR_DOMAIN_XML_INACTIVE);
     if (liveXml.isEmpty() && configXml.isEmpty()) {
-        Q_EMIT errorOccurred(i18nc("%1 is a MAC address", "No interface with MAC address %1 was found.", mac));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "no_interface_with_mac_address_1_was_found").arg(mac));
         return false;
     }
 
@@ -1178,7 +1170,7 @@ bool Karton::detachNetwork(const Domain *domain, const QString &mac)
     if (domain->isActive() && !liveXml.isEmpty()) {
         if (virDomainDetachDeviceFlags(domain->domainPtr(), liveXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
             const QString errorMsg =
-                i18nc("%1 is a MAC address, %2 is an error", "Failed to detach interface %1: %2", mac, QString::fromUtf8(virGetLastErrorMessage()));
+                QCoreApplication::translate("Karton", "failed_to_detach_interface_1_2").arg(mac).arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
             success = false;
         }
@@ -1187,7 +1179,7 @@ bool Karton::detachNetwork(const Domain *domain, const QString &mac)
     if (!configXml.isEmpty()) {
         if (virDomainDetachDeviceFlags(domain->domainPtr(), configXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
             const QString errorMsg =
-                i18nc("%1 is a MAC address, %2 is an error", "Failed to detach persistent interface %1: %2", mac, QString::fromUtf8(virGetLastErrorMessage()));
+                QCoreApplication::translate("Karton", "failed_to_detach_persistent_interface_1_2").arg(mac).arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
             success = false;
         }
@@ -1207,13 +1199,13 @@ bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, cons
 
     char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
     if (!xml) {
-        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain", "Failed to read configuration for domain: %1", domain->config()->name()));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_read_configuration_for_domain_1").arg(domain->config()->name()));
         return false;
     }
     QDomDocument document;
     if (!document.setContent(QString::fromUtf8(xml))) {
         free(xml);
-        Q_EMIT errorOccurred(i18n("Failed to parse the virtual machine configuration."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_parse_the_virtual_machine_configuration"));
         return false;
     }
     free(xml);
@@ -1239,10 +1231,9 @@ bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, cons
 
         virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
         if (!redefined) {
-            Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to update interface for domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage())));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_interface_for_domain_1_2")
+                                     .arg(domain->config()->name())
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage())));
             return false;
         }
         virDomainFree(redefined);
@@ -1250,6 +1241,6 @@ bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, cons
         return true;
     }
 
-    Q_EMIT errorOccurred(i18nc("%1 is a MAC address", "No interface with MAC address %1 was found.", mac));
+    Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "no_interface_with_mac_address_1_was_found").arg(mac));
     return false;
 }

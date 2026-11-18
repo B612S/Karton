@@ -25,23 +25,23 @@ Kirigami.Dialog {
     modal: true
     padding: 0
     readonly property real cardWidth: applicationWindow() ? Math.min(680, applicationWindow().width - 48) : 680
-    readonly property real cardHeight: applicationWindow() ? Math.min(560, applicationWindow().height - 48) : 560
+    readonly property real cardHeight: applicationWindow() ? Math.min(680, applicationWindow().height - 48) : 680
     width: cardWidth
     height: cardHeight
     header: Item {}
 
     readonly property var categories: [
-        { label: i18n("Storage") },
-        { label: i18n("Network") },
-        { label: i18n("Input") },
-        { label: i18n("Controller") },
-        { label: i18n("Serial") },
-        { label: i18n("Console") },
-        { label: i18n("Channel") },
-        { label: i18n("USB Host Device") },
-        { label: i18n("PCI Host Device") },
-        { label: i18n("Redirection") },
-        { label: i18n("Filesystem") }
+        { label: qsTr("storage") },
+        { label: qsTr("network") },
+        { label: qsTr("input") },
+        { label: qsTr("controller") },
+        { label: qsTr("serial") },
+        { label: qsTr("console") },
+        { label: qsTr("channel") },
+        { label: qsTr("usb_host_device") },
+        { label: qsTr("pci_host_device") },
+        { label: qsTr("redirection") },
+        { label: qsTr("filesystem") }
     ]
 
     background: Rectangle {
@@ -64,6 +64,11 @@ Kirigami.Dialog {
         categoryIndex = initialCategory;
         message = "";
         messageIsError = false;
+        addDiskFolderField.text = Karton.imagesDirectory();
+        addDiskFileNameField.text = "";
+        diskImagePathField.text = "";
+        isoPathField.text = "";
+        storageTypeCombo.currentIndex = 0;
     }
     onClosed: {
         initialCategory = 0;
@@ -76,6 +81,78 @@ Kirigami.Dialog {
         networks = Karton.networks();
         usbHostDevices = Karton.usbDevices();
         pciHostDevices = Karton.pciDevices();
+    }
+
+    function attachImage() {
+        const path = diskImagePathField.text;
+        if (path.length === 0) {
+            return;
+        }
+        const slash = path.lastIndexOf("/");
+        if (slash > 0) {
+            const error = Karton.checkDiskDirectoryAccess(path.substring(0, slash));
+            if (error.length > 0) {
+                root.pendingGrantError = error;
+                root.pendingGrantAction = "image";
+                root.message = "";
+                root.messageIsError = false;
+                permissionGrantDialog.openFor(path.substring(0, slash));
+                return;
+            }
+        }
+        if (Karton.attachDiskImage(root.domain, path, "qcow2")) {
+            root.added();
+        }
+    }
+
+    function attachCdrom() {
+        const path = isoPathField.text;
+        if (path.length === 0) {
+            return;
+        }
+        const slash = path.lastIndexOf("/");
+        if (slash > 0) {
+            const error = Karton.checkDiskDirectoryAccess(path.substring(0, slash));
+            if (error.length > 0) {
+                root.pendingGrantError = error;
+                root.pendingGrantAction = "cdrom";
+                root.message = "";
+                root.messageIsError = false;
+                permissionGrantDialog.openFor(path.substring(0, slash));
+                return;
+            }
+        }
+        if (Karton.attachIso(root.domain, path)) {
+            root.added();
+        }
+    }
+
+    function createDisk() {
+        const directory = addDiskFolderField.text.trim() !== "" ? addDiskFolderField.text.trim() : Karton.imagesDirectory();
+        const accessError = Karton.checkDiskDirectoryAccess(directory);
+        if (accessError.length > 0) {
+            root.pendingGrantError = accessError;
+            root.pendingGrantAction = "create";
+            root.message = "";
+            root.messageIsError = false;
+            permissionGrantDialog.openFor(directory);
+            return;
+        }
+        const cacheIndex = addDiskCache.currentIndex;
+        const discardIndex = addDiskDiscard.currentIndex;
+        const options = {
+            directory: directory,
+            filename: addDiskFileNameField.text.trim(),
+            bus: addDiskBus.currentText,
+            cache: cacheIndex === 0 ? "" : addDiskCache.model[cacheIndex],
+            discard: discardIndex === 0 ? "" : addDiskDiscard.model[discardIndex],
+            readonly: addDiskReadonly.checked,
+            shareable: addDiskShareable.checked,
+            serial: addDiskSerial.text.trim()
+        };
+        if (Karton.addDisk(root.domain, addDiskSize.value, addDiskFormat.currentText, options)) {
+            root.added();
+        }
     }
 
     function settingsCategoryFor(category) {
@@ -102,7 +179,7 @@ Kirigami.Dialog {
     function addFilesystem() {
         const source = fsSourceField.text.trim();
         if (source.length === 0) {
-            message = i18n("Choose a source directory first.");
+            message = qsTr("choose_a_source_directory_first");
             messageIsError = true;
             return;
         }
@@ -122,7 +199,7 @@ Kirigami.Dialog {
 
     function added() {
         refresh();
-        message = i18n("Device added");
+        message = qsTr("device_added");
         messageIsError = false;
         // Close the wizard and let Settings show the page where the new
         // device can be seen and edited.
@@ -166,7 +243,7 @@ Kirigami.Dialog {
                 Layout.leftMargin: 24
                 Layout.rightMargin: 12
                 Controls.Label {
-                    text: i18n("Add New Virtual Hardware")
+                    text: qsTr("add_new_virtual_hardware")
                     font.pixelSize: 16
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
@@ -281,50 +358,280 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 0
                                 Layout.fillWidth: true
                                 spacing: 12
-                                GridLayout {
-                                    columns: 2
-                                    columnSpacing: 16
-                                    rowSpacing: 12
+
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    Controls.Label { text: i18n("Disk image"); Layout.fillWidth: true }
-                                    Controls.Button {
-                                        text: i18n("Choose…")
-                                        icon.name: "document-open-symbolic"
-                                        Layout.preferredWidth: 220
-                                        onClicked: diskFileDialog.open()
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("storage_type")
+                                        Layout.fillWidth: true
                                     }
-                                    Controls.Label { text: i18n("ISO image"); Layout.fillWidth: true }
-                                    Controls.Button {
-                                        text: i18n("Choose…")
-                                        icon.name: "media-optical-symbolic"
-                                        Layout.preferredWidth: 220
-                                        onClicked: isoFileDialog.open()
+                                    Controls.ComboBox {
+                                        id: storageTypeCombo
+                                        Layout.preferredWidth: 260
+                                        model: [qsTr("existing_image"), qsTr("cd_rom"), qsTr("new_disk")]
                                     }
-                                    Controls.Label { text: i18n("New disk"); Layout.fillWidth: true }
+                                }
+                            }
+                            ColumnLayout {
+                                visible: root.categoryIndex === 0 && storageTypeCombo.currentIndex === 0
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Controls.Label {
+                                    text: qsTr("attach_existing_image")
+                                    font.pixelSize: 15
+                                    font.weight: Font.Bold
+                                    Layout.fillWidth: true
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("image")
+                                        Layout.fillWidth: true
+                                    }
                                     RowLayout {
-                                        Layout.preferredWidth: 220
-                                        spacing: 6
-                                        Controls.SpinBox {
-                                            id: addDiskSize
-                                            from: 1
-                                            to: 2048
-                                            value: 8
+                                        Layout.preferredWidth: 260
+                                        Layout.maximumWidth: 260
+                                        spacing: 8
+                                        Controls.TextField {
+                                            id: diskImagePathField
                                             Layout.fillWidth: true
-                                        }
-                                        Controls.ComboBox {
-                                            id: addDiskFormat
-                                            model: ["qcow2", "raw", "vmdk"]
-                                            Layout.preferredWidth: 90
+                                            readOnly: true
+                                            placeholderText: qsTr("none")
                                         }
                                         Controls.Button {
-                                            text: i18n("Create")
-                                            icon.name: "list-add-symbolic"
-                                            onClicked: {
-                                                if (Karton.addDisk(root.domain, addDiskSize.value, addDiskFormat.currentText)) {
-                                                    root.added();
-                                                }
-                                            }
+                                            text: qsTr("choose")
+                                            icon.name: "document-open-symbolic"
+                                            onClicked: diskFileDialog.open()
                                         }
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                visible: root.categoryIndex === 0 && storageTypeCombo.currentIndex === 1
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Controls.Label {
+                                    text: qsTr("cd_rom")
+                                    font.pixelSize: 15
+                                    font.weight: Font.Bold
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 8
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("image")
+                                        Layout.fillWidth: true
+                                    }
+                                    RowLayout {
+                                        Layout.preferredWidth: 260
+                                        Layout.maximumWidth: 260
+                                        spacing: 8
+                                        Controls.TextField {
+                                            id: isoPathField
+                                            Layout.fillWidth: true
+                                            readOnly: true
+                                            placeholderText: qsTr("none")
+                                        }
+                                        Controls.Button {
+                                            text: qsTr("choose")
+                                            icon.name: "media-optical-symbolic"
+                                            onClicked: isoFileDialog.open()
+                                        }
+                                    }
+                                }
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    opacity: 0.65
+                                    font.pixelSize: 12
+                                    text: qsTr("choose_an_iso_image_the_cd_rom_is_read_only_no_size_or_format_options_are_needed")
+                                }
+                            }
+
+                            ColumnLayout {
+                                visible: root.categoryIndex === 0 && storageTypeCombo.currentIndex === 2
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Controls.Label {
+                                    text: qsTr("create_new_disk")
+                                    font.pixelSize: 15
+                                    font.weight: Font.Bold
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 8
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("size_gib")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.SpinBox {
+                                        id: addDiskSize
+                                        from: 1
+                                        to: 2048
+                                        value: 8
+                                        Layout.preferredWidth: 260
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("format")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.ComboBox {
+                                        id: addDiskFormat
+                                        model: ["qcow2", "raw", "vmdk"]
+                                        Layout.preferredWidth: 260
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("folder")
+                                        Layout.fillWidth: true
+                                    }
+                                    RowLayout {
+                                        Layout.preferredWidth: 260
+                                        Layout.maximumWidth: 260
+                                        spacing: 8
+                                        Controls.TextField {
+                                            id: addDiskFolderField
+                                            Layout.fillWidth: true
+                                            readOnly: true
+                                            placeholderText: Karton.imagesDirectory()
+                                        }
+                                        Controls.Button {
+                                            text: qsTr("choose")
+                                            icon.name: "folder-open-symbolic"
+                                            onClicked: addDiskFolderDialog.open()
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("file_name")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.TextField {
+                                        id: addDiskFileNameField
+                                        Layout.preferredWidth: 260
+                                        placeholderText: qsTr("automatic")
+                                        validator: RegularExpressionValidator {
+                                            regularExpression: /^[A-Za-z0-9._-]*$/
+                                        }
+                                    }
+                                }
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    opacity: 0.65
+                                    font.pixelSize: 12
+                                    text: qsTr("leave_the_file_name_empty_to_use_the_automatic_name_the_1_extension_is_added_automatically").arg(addDiskFormat.currentText)
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("bus")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.ComboBox {
+                                        id: addDiskBus
+                                        model: ["virtio", "sata", "scsi", "ide"]
+                                        Layout.preferredWidth: 260
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("cache_mode")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.ComboBox {
+                                        id: addDiskCache
+                                        model: ["", "none", "writethrough", "writeback", "directsync", "unsafe"]
+                                        displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                                        Layout.preferredWidth: 260
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("discard_mode")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.ComboBox {
+                                        id: addDiskDiscard
+                                        model: ["", "unmap", "ignore"]
+                                        displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                                        Layout.preferredWidth: 260
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("read_only")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.CheckBox {
+                                        id: addDiskReadonly
+                                        Layout.alignment: Qt.AlignRight
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("shareable")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.CheckBox {
+                                        id: addDiskShareable
+                                        Layout.alignment: Qt.AlignRight
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 16
+                                    Controls.Label {
+                                        text: qsTr("serial")
+                                        Layout.fillWidth: true
+                                    }
+                                    Controls.TextField {
+                                        id: addDiskSerial
+                                        Layout.preferredWidth: 260
                                     }
                                 }
                             }
@@ -339,21 +646,21 @@ Kirigami.Dialog {
                                     columnSpacing: 16
                                     rowSpacing: 12
                                     Layout.fillWidth: true
-                                    Controls.Label { text: i18n("Network"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("network"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: networkCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: root.networks.map(function(network) { return network.name; })
                                     }
-                                    Controls.Label { text: i18n("Model"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("model"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: networkModelCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: ["virtio", "e1000"]
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Add network interface")
+                                    text: qsTr("add_network_interface")
                                     icon.name: "list-add-symbolic"
                                     enabled: networkCombo.count > 0
                                     Layout.alignment: Qt.AlignRight
@@ -375,23 +682,23 @@ Kirigami.Dialog {
                                     columnSpacing: 16
                                     rowSpacing: 12
                                     Layout.fillWidth: true
-                                    Controls.Label { text: i18n("Device"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("device"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: inputTypeCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: ["tablet", "mouse", "keyboard"]
                                     }
-                                    Controls.Label { text: i18n("Bus"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("bus"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: inputBusCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: ["usb", "ps2", "virtio"]
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Add input device")
+                                    text: qsTr("add_input_device")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
+                                    Layout.alignment: Qt.AlignRight
                                     onClicked: {
                                         if (Karton.attachInputDevice(root.domain, inputTypeCombo.currentText, inputBusCombo.currentText)) {
                                             root.added();
@@ -410,17 +717,17 @@ Kirigami.Dialog {
                                     columnSpacing: 16
                                     rowSpacing: 12
                                     Layout.fillWidth: true
-                                    Controls.Label { text: i18n("Type"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("type"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: controllerTypeCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: ["usb", "pci", "sata", "virtio-serial"]
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Add controller")
+                                    text: qsTr("add_controller")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
+                                    Layout.alignment: Qt.AlignRight
                                     onClicked: {
                                         if (Karton.addController(root.domain, controllerTypeCombo.currentText)) {
                                             root.added();
@@ -434,11 +741,11 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 4
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("Add a serial port"); Layout.fillWidth: true }
+                                Controls.Label { text: qsTr("add_a_serial_port"); Layout.fillWidth: true }
                                 Controls.Button {
-                                    text: i18n("Add serial port")
+                                    text: qsTr("add_serial_port")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
+                                    Layout.alignment: Qt.AlignRight
                                     onClicked: {
                                         if (Karton.addSerialPort(root.domain)) {
                                             root.added();
@@ -452,11 +759,11 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 5
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("Add a text console"); Layout.fillWidth: true }
+                                Controls.Label { text: qsTr("add_a_text_console"); Layout.fillWidth: true }
                                 Controls.Button {
-                                    text: i18n("Add text console")
+                                    text: qsTr("add_text_console")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
+                                    Layout.alignment: Qt.AlignRight
                                     onClicked: {
                                         if (Karton.addTextConsole(root.domain)) {
                                             root.added();
@@ -475,22 +782,22 @@ Kirigami.Dialog {
                                     columnSpacing: 16
                                     rowSpacing: 12
                                     Layout.fillWidth: true
-                                    Controls.Label { text: i18n("Channel"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("channel"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: channelCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: [
-                                            { label: i18n("QEMU Guest Agent"), name: "org.qemu.guest_agent.0" },
-                                            { label: i18n("SPICE Agent"), name: "com.redhat.spice.0" },
-                                            { label: i18n("SPICE WebDAV"), name: "org.spice-space.webdav.0" }
+                                            { label: qsTr("qemu_guest_agent"), name: "org.qemu.guest_agent.0" },
+                                            { label: qsTr("spice_agent"), name: "com.redhat.spice.0" },
+                                            { label: qsTr("spice_webdav"), name: "org.spice-space.webdav.0" }
                                         ]
                                         textRole: "label"
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Add channel")
+                                    text: qsTr("add_channel")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
+                                    Layout.alignment: Qt.AlignRight
                                     onClicked: {
                                         if (Karton.addChannel(root.domain, channelCombo.model[channelCombo.currentIndex].name)) {
                                             root.added();
@@ -504,7 +811,7 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 7
                                 Layout.fillWidth: true
                                 spacing: 8
-                                Controls.Label { text: i18n("USB host devices"); Layout.fillWidth: true }
+                                Controls.Label { text: qsTr("usb_host_devices"); Layout.fillWidth: true }
                                 Repeater {
                                     model: root.usbHostDevices
                                     Controls.ItemDelegate {
@@ -516,7 +823,7 @@ Kirigami.Dialog {
                                                 Layout.fillWidth: true
                                             }
                                             Controls.Button {
-                                                text: i18n("Attach")
+                                                text: qsTr("attach")
                                                 icon.name: "list-add-symbolic"
                                                 enabled: !modelData.hub
                                                 onClicked: {
@@ -535,7 +842,7 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 8
                                 Layout.fillWidth: true
                                 spacing: 8
-                                Controls.Label { text: i18n("PCI host devices"); Layout.fillWidth: true }
+                                Controls.Label { text: qsTr("pci_host_devices"); Layout.fillWidth: true }
                                 Repeater {
                                     model: root.pciHostDevices
                                     Controls.ItemDelegate {
@@ -552,7 +859,7 @@ Kirigami.Dialog {
                                                 }
                                             }
                                             Controls.Button {
-                                                text: i18n("Attach")
+                                                text: qsTr("attach")
                                                 icon.name: "list-add-symbolic"
                                                 enabled: modelData.iommuGroup.length > 0
                                                 onClicked: {
@@ -571,11 +878,11 @@ Kirigami.Dialog {
                                 visible: root.categoryIndex === 9
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Controls.Label { text: i18n("USB redirection over SPICE"); Layout.fillWidth: true }
+                                Controls.Label { text: qsTr("usb_redirection_over_spice"); Layout.fillWidth: true }
                                 Controls.Button {
-                                    text: i18n("Add redirection device")
+                                    text: qsTr("add_redirection_device")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
+                                    Layout.alignment: Qt.AlignRight
                                     onClicked: root.addXml("<redirdev bus='usb' type='spicevmc'/>")
                                 }
                             }
@@ -586,7 +893,7 @@ Kirigami.Dialog {
                                 Layout.fillWidth: true
                                 spacing: 12
                                 Controls.Label {
-                                    text: i18n("Share a host directory with the guest.")
+                                    text: qsTr("share_a_host_directory_with_the_guest")
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     opacity: 0.65
@@ -597,15 +904,15 @@ Kirigami.Dialog {
                                     columnSpacing: 16
                                     rowSpacing: 12
                                     Layout.fillWidth: true
-                                    Controls.Label { text: i18n("Driver"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("driver"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: fsDriverCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: ["9p", "virtiofs"]
                                     }
-                                    Controls.Label { text: i18n("Source path"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("source_path"); Layout.fillWidth: true }
                                     RowLayout {
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         spacing: 6
                                         Controls.TextField {
                                             id: fsSourceField
@@ -613,33 +920,33 @@ Kirigami.Dialog {
                                             placeholderText: "/home/user/Shared"
                                         }
                                         Controls.Button {
-                                            text: i18n("Browse…")
+                                            text: qsTr("browse")
                                             icon.name: "document-open-symbolic"
                                             onClicked: fsFolderDialog.open()
                                         }
                                     }
-                                    Controls.Label { text: i18n("Name / mount tag"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("name_mount_tag"); Layout.fillWidth: true }
                                     Controls.TextField {
                                         id: fsTargetField
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         text: "share"
                                     }
-                                    Controls.Label { text: i18n("Access mode"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("access_mode"); Layout.fillWidth: true }
                                     Controls.ComboBox {
                                         id: fsAccessCombo
-                                        Layout.preferredWidth: 220
+                                        Layout.preferredWidth: 260
                                         model: ["passthrough", "mapped", "squash"]
                                     }
-                                    Controls.Label { text: i18n("Read-only"); Layout.fillWidth: true }
+                                    Controls.Label { text: qsTr("read_only"); Layout.fillWidth: true }
                                     Controls.CheckBox {
                                         id: fsReadonlyCheck
                                         Layout.alignment: Qt.AlignRight
                                     }
                                 }
                                 Controls.Button {
-                                    text: i18n("Add filesystem")
+                                    text: qsTr("add_filesystem")
                                     icon.name: "list-add-symbolic"
-                                    Layout.alignment: Qt.AlignLeft
+                                    Layout.alignment: Qt.AlignRight
                                     onClicked: root.addFilesystem()
                                 }
                             }
@@ -661,7 +968,27 @@ Kirigami.Dialog {
                 contentItem: RowLayout {
                     Item { Layout.fillWidth: true }
                     Controls.Button {
-                        text: i18n("Close")
+                        visible: root.categoryIndex === 0 && storageTypeCombo.currentIndex === 0
+                        text: qsTr("attach_image")
+                        icon.name: "list-add-symbolic"
+                        enabled: diskImagePathField.text.length > 0
+                        onClicked: root.attachImage()
+                    }
+                    Controls.Button {
+                        visible: root.categoryIndex === 0 && storageTypeCombo.currentIndex === 1
+                        text: qsTr("attach_cd_rom")
+                        icon.name: "list-add-symbolic"
+                        enabled: isoPathField.text.length > 0
+                        onClicked: root.attachCdrom()
+                    }
+                    Controls.Button {
+                        visible: root.categoryIndex === 0 && storageTypeCombo.currentIndex === 2
+                        text: qsTr("create_disk")
+                        icon.name: "list-add-symbolic"
+                        onClicked: root.createDisk()
+                    }
+                    Controls.Button {
+                        text: qsTr("close")
                         icon.name: "dialog-cancel-symbolic"
                         onClicked: root.close()
                     }
@@ -670,33 +997,64 @@ Kirigami.Dialog {
         }
     }
 
+    PermissionGrantDialog {
+        id: permissionGrantDialog
+        onCancelled: {
+            root.message = root.pendingGrantError;
+            root.messageIsError = root.pendingGrantError.length > 0;
+        }
+        onConfirmed: {
+            const error = Karton.grantDiskDirectoryAccess(targetPath);
+            if (error.length > 0) {
+                root.message = error;
+                root.messageIsError = true;
+                return;
+            }
+            const action = root.pendingGrantAction;
+            root.pendingGrantAction = "";
+            root.message = "";
+            root.messageIsError = false;
+            if (action === "image") {
+                root.attachImage();
+            } else if (action === "cdrom") {
+                root.attachCdrom();
+            } else {
+                root.createDisk();
+            }
+        }
+    }
+
     FileDialog {
         id: diskFileDialog
-        title: i18n("Choose a disk image")
-        nameFilters: [i18n("Disk images (*.qcow2 *.img *.raw *.vmdk)"), i18n("All files (*)")]
+        title: qsTr("choose_a_disk_image")
+        nameFilters: [qsTr("disk_images_qcow2_img_raw_vmdk"), qsTr("all_files")]
         onAccepted: {
-            if (Karton.attachDiskImage(root.domain, root.localPath(selectedFile), "qcow2")) {
-                root.added();
-            }
+            diskImagePathField.text = root.localPath(selectedFile);
         }
     }
 
     FileDialog {
         id: isoFileDialog
-        title: i18n("Choose an ISO image")
-        nameFilters: [i18n("ISO images (*.iso)"), i18n("All files (*)")]
+        title: qsTr("choose_an_iso_image")
+        nameFilters: [qsTr("iso_images_iso"), qsTr("all_files")]
         onAccepted: {
-            if (Karton.attachIso(root.domain, root.localPath(selectedFile))) {
-                root.added();
-            }
+            isoPathField.text = root.localPath(selectedFile);
         }
     }
 
     FolderDialog {
         id: fsFolderDialog
-        title: i18n("Choose a shared directory")
+        title: qsTr("choose_a_shared_directory")
         onAccepted: {
             fsSourceField.text = decodeURIComponent(selectedFolder.toString().replace(/^file:\/\//, ""));
+        }
+    }
+
+    FolderDialog {
+        id: addDiskFolderDialog
+        title: qsTr("choose_disk_folder")
+        onAccepted: {
+            addDiskFolderField.text = decodeURIComponent(addDiskFolderDialog.selectedFolder.toString().replace(/^file:\/\//, ""));
         }
     }
 }

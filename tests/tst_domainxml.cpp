@@ -23,6 +23,7 @@ private Q_SLOTS:
     void readerUsesQcow2WhenDriverIsMissing();
     void readerParsesFirmware();
     void readerParsesSecureBoot();
+    void readerDetectsGraphics();
     void builderGeneratesUefiRawDomain();
     void builderCanDisableNetwork();
     void builderUpdatesHardwareAndPreservesMetadata();
@@ -132,6 +133,7 @@ void DomainXmlTest::readerDefaultsForMinimalXml()
     QCOMPARE(info.firmware, QStringLiteral("bios"));
     QCOMPARE(info.networkModel, QStringLiteral("none"));
     QVERIFY(!info.secureBoot);
+    QVERIFY(!info.hasGraphics);
     QVERIFY(info.virtualDiskPaths.isEmpty());
     QVERIFY(info.isoDiskPath.isEmpty());
 }
@@ -187,6 +189,28 @@ void DomainXmlTest::readerParsesSecureBoot()
     const DomainXmlReader::XmlInfo info = DomainXmlReader::parseXml(xml);
     QCOMPARE(info.firmware, QStringLiteral("efi"));
     QVERIFY(info.secureBoot);
+}
+
+void DomainXmlTest::readerDetectsGraphics()
+{
+    const QByteArray spice = R"(<domain type='kvm'>
+  <devices><graphics type='spice' autoport='yes'/></devices>
+</domain>)";
+    QVERIFY(DomainXmlReader::parseXml(spice).hasGraphics);
+
+    const QByteArray videoOnly = R"(<domain type='kvm'>
+  <devices><video><model type='qxl'/></video></devices>
+</domain>)";
+    QVERIFY(DomainXmlReader::parseXml(videoOnly).hasGraphics);
+
+    // A serial-console-only VM has no framebuffer to screenshot.
+    const QByteArray serialOnly = R"(<domain type='kvm'>
+  <devices>
+    <serial type='pty'><target port='0'/></serial>
+    <console type='pty'><target type='serial' port='0'/></console>
+  </devices>
+</domain>)";
+    QVERIFY(!DomainXmlReader::parseXml(serialOnly).hasGraphics);
 }
 
 void DomainXmlTest::readerParsesRawDiskFormat()

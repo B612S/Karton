@@ -7,9 +7,9 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -248,7 +248,7 @@ bool Karton::attachPciDevice(const Domain *domain, const QString &pciDomain, con
     const QString normalizedSlot = pciHexValue(slot, 2);
     const QString normalizedFunction = pciHexValue(function, 1);
     if (normalizedDomain.isEmpty() || normalizedBus.isEmpty() || normalizedSlot.isEmpty() || normalizedFunction.isEmpty()) {
-        Q_EMIT errorOccurred(i18n("Invalid PCI address."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_pci_address"));
         return false;
     }
     for (const QVariant &entry : domainPciDevices(domain)) {
@@ -257,7 +257,7 @@ bool Karton::attachPciDevice(const Domain *domain, const QString &pciDomain, con
             && info.value(QStringLiteral("bus")).toString().compare(normalizedBus, Qt::CaseInsensitive) == 0
             && info.value(QStringLiteral("slot")).toString().compare(normalizedSlot, Qt::CaseInsensitive) == 0
             && info.value(QStringLiteral("function")).toString().compare(normalizedFunction, Qt::CaseInsensitive) == 0) {
-            Q_EMIT errorOccurred(i18n("This PCI device is already attached."));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "this_pci_device_is_already_attached"));
             return false;
         }
     }
@@ -268,7 +268,7 @@ bool Karton::attachPciDevice(const Domain *domain, const QString &pciDomain, con
     if (domain->isActive()) {
         if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
             const QString errorMsg =
-                i18nc("%1 is a PCI address, %2 is an error", "Failed to attach PCI device %1: %2", label, QString::fromUtf8(virGetLastErrorMessage()));
+                QCoreApplication::translate("Karton", "failed_to_attach_pci_device_1_2").arg(label).arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
         } else {
             success = true;
@@ -281,7 +281,7 @@ bool Karton::attachPciDevice(const Domain *domain, const QString &pciDomain, con
         success = true;
     } else {
         const QString errorMsg =
-            i18nc("%1 is a PCI address, %2 is an error", "Failed to attach PCI device %1: %2", label, QString::fromUtf8(virGetLastErrorMessage()));
+            QCoreApplication::translate("Karton", "failed_to_attach_pci_device_1_2").arg(label).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
     }
 
@@ -307,7 +307,7 @@ bool Karton::detachPciDevice(const Domain *domain, const QString &pciDomain, con
     const QString configXml =
         pciHostdevXmlForAddress(domain->domainPtr(), normalizedDomain, normalizedBus, normalizedSlot, normalizedFunction, VIR_DOMAIN_XML_INACTIVE);
     if (liveXml.isEmpty() && configXml.isEmpty()) {
-        Q_EMIT errorOccurred(i18nc("%1 is a PCI address", "No matching PCI device %1 was found.", label));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "no_matching_pci_device_1_was_found").arg(label));
         return false;
     }
 
@@ -315,7 +315,7 @@ bool Karton::detachPciDevice(const Domain *domain, const QString &pciDomain, con
     if (domain->isActive() && !liveXml.isEmpty()) {
         if (virDomainDetachDeviceFlags(domain->domainPtr(), liveXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
             const QString errorMsg =
-                i18nc("%1 is a PCI address, %2 is an error", "Failed to detach PCI device %1: %2", label, QString::fromUtf8(virGetLastErrorMessage()));
+                QCoreApplication::translate("Karton", "failed_to_detach_pci_device_1_2").arg(label).arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
             success = false;
         }
@@ -323,10 +323,8 @@ bool Karton::detachPciDevice(const Domain *domain, const QString &pciDomain, con
 
     if (!configXml.isEmpty()) {
         if (virDomainDetachDeviceFlags(domain->domainPtr(), configXml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
-            const QString errorMsg = i18nc("%1 is a PCI address, %2 is an error",
-                                           "Failed to detach persistent PCI device %1: %2",
-                                           label,
-                                           QString::fromUtf8(virGetLastErrorMessage()));
+            const QString errorMsg =
+                QCoreApplication::translate("Karton", "failed_to_detach_persistent_pci_device_1_2").arg(label).arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
             success = false;
         }

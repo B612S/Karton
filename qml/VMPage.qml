@@ -63,8 +63,10 @@ Kirigami.ScrollablePage {
         interval: 1000
         repeat: true
         // Do not capture while a SPICE viewer is open: the guest is already
-        // visible there and virsh screenshot briefly pauses QEMU.
+        // visible there and virsh screenshot briefly pauses QEMU. Text-only
+        // VMs have no screen at all, so there is nothing to capture.
         running: root.isRunning && root.visible && Karton.viewerCount === 0
+                 && root.domain !== null && root.domain.config.hasGraphics
         triggeredOnStart: true
         onTriggered: {
             if (root.domain) {
@@ -110,7 +112,7 @@ Kirigami.ScrollablePage {
 
     actions: [
         Kirigami.Action {
-            text: isRunning ? i18n("Shut Down") : i18n("Start")
+            text: isRunning ? qsTr("shut_down") : qsTr("start")
             icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
             onTriggered: {
                 if (isRunning) {
@@ -127,13 +129,13 @@ Kirigami.ScrollablePage {
             onTriggered: powerMenu.popup()
         },
         Kirigami.Action {
-            text: isPaused ? i18n("Resume") : i18n("Pause")
+            text: isPaused ? qsTr("resume") : qsTr("pause")
             icon.name: isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
             visible: isRunning
             onTriggered: root.togglePause()
         },
         Kirigami.Action {
-            text: i18n("Reboot")
+            text: qsTr("reboot")
             icon.name: "system-reboot-symbolic"
             visible: isRunning
             onTriggered: Karton.rebootDomain(domain)
@@ -145,7 +147,7 @@ Kirigami.ScrollablePage {
             onTriggered: rebootMenu.popup()
         },
         Kirigami.Action {
-            text: i18n("More")
+            text: qsTr("more")
             icon.name: "view-more-symbolic"
             onTriggered: moreMenu.popup()
         }
@@ -165,7 +167,7 @@ Kirigami.ScrollablePage {
         closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
 
         Controls.MenuItem {
-            text: i18n("Power Off")
+            text: qsTr("power_off")
             icon.name: "process-stop-symbolic"
             onTriggered: Karton.forceStopDomain(domain)
         }
@@ -176,7 +178,7 @@ Kirigami.ScrollablePage {
         closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
 
         Controls.MenuItem {
-            text: i18n("Reset")
+            text: qsTr("reset")
             icon.name: "system-reboot-symbolic"
             onTriggered: Karton.resetDomain(domain)
         }
@@ -187,22 +189,22 @@ Kirigami.ScrollablePage {
         closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
 
         Controls.MenuItem {
-            text: i18n("Hibernate")
+            text: qsTr("hibernate")
             icon.name: "document-save-symbolic"
             visible: isRunning
             onTriggered: {
                 if (Karton.saveDomainState(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Hibernating VM: %1", domain.config.name));
+                    applicationWindow().showPassiveNotification(qsTr("hibernating_vm_1").arg(domain.config.name));
                 }
             }
         }
         Controls.MenuItem {
-            text: i18n("Delete Hibernation")
+            text: qsTr("delete_hibernation")
             icon.name: "edit-delete-symbolic"
             visible: !isRunning && hasSavedState
             onTriggered: {
                 if (Karton.deleteSavedState(domain)) {
-                    applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "Deleted hibernation for VM: %1", domain.config.name));
+                    applicationWindow().showPassiveNotification(qsTr("deleted_hibernation_for_vm_1").arg(domain.config.name));
                 }
             }
         }
@@ -210,17 +212,18 @@ Kirigami.ScrollablePage {
             visible: hasSavedState || isRunning
         }
         Controls.MenuItem {
-            text: i18n("Snapshots")
+            text: qsTr("snapshots")
             icon.name: "camera-photo-symbolic"
             onTriggered: snapshotsDialog.open()
         }
         Controls.MenuItem {
-            text: i18n("Clone")
+            text: qsTr("clone")
             icon.name: "edit-copy-symbolic"
             onTriggered: cloneDialog.open()
         }
+        Controls.MenuSeparator {}
         Controls.MenuItem {
-            text: i18n("Settings")
+            text: qsTr("settings")
             icon.name: "preferences-system-symbolic"
             onTriggered: settingsDialog.open()
         }
@@ -228,7 +231,7 @@ Kirigami.ScrollablePage {
             visible: !isRunning
         }
         Controls.MenuItem {
-            text: i18nc("verb, delete a VM", "Delete")
+            text: qsTr("delete")
             icon.name: "delete-symbolic"
             visible: !isRunning
             onTriggered: {
@@ -287,7 +290,10 @@ Kirigami.ScrollablePage {
             Kirigami.Icon {
                 anchors.centerIn: parent
                 visible: !root.isRunning
-                source: domain ? Karton.domainOsIcon(domain) : "computer-symbolic"
+                source: {
+                    const icon = domain ? Karton.domainOsIcon(domain) : "karton-os-generic";
+                    return Karton.holidayMode && icon === "karton-os-linux" ? "karton-os-linux-newyear" : icon;
+                }
                 width: Kirigami.Units.iconSizes.huge
                 height: width
                 opacity: 0.35
@@ -302,7 +308,7 @@ Kirigami.ScrollablePage {
             }
         }
         Controls.Label {
-            text: i18n("Details")
+            text: qsTr("details")
             font.pixelSize: 15
             font.weight: Font.Bold
             Layout.fillWidth: true
@@ -318,7 +324,7 @@ Kirigami.ScrollablePage {
             rowSpacing: 16
             Layout.fillWidth: true
 
-            Controls.Label { text: i18n("UUID"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("uuid"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             Controls.Label {
                 text: domain ? domain.config.uuid : ""
                 font.pixelSize: 14
@@ -327,7 +333,7 @@ Kirigami.ScrollablePage {
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideRight
             }
-            Controls.Label { text: i18n("State"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("state"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             Controls.Label {
                 text: domain ? domain.config.state : ""
                 font.pixelSize: 14
@@ -335,15 +341,15 @@ Kirigami.ScrollablePage {
                 Layout.alignment: Qt.AlignRight
                 horizontalAlignment: Text.AlignRight
             }
-            Controls.Label { text: i18n("CPU Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("cpu_usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             Controls.Label {
-                text: root.stats.cpuPercent !== undefined ? i18n("%1 %", root.stats.cpuPercent.toFixed(1)) : "—"
+                text: root.stats.cpuPercent !== undefined ? qsTr("s_1").arg(root.stats.cpuPercent.toFixed(1)) : "—"
                 font.pixelSize: 14
                 Layout.preferredWidth: 280
                 Layout.alignment: Qt.AlignRight
                 horizontalAlignment: Text.AlignRight
             }
-            Controls.Label { text: i18n("CPUs"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("cpus"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             Controls.Label {
                 text: domain ? domain.config.cpus : ""
                 font.pixelSize: 14
@@ -354,7 +360,7 @@ Kirigami.ScrollablePage {
         }
 
         Controls.Label {
-            text: i18n("Memory")
+            text: qsTr("memory")
             font.pixelSize: 15
             font.weight: Font.Bold
             Layout.fillWidth: true
@@ -371,7 +377,7 @@ Kirigami.ScrollablePage {
             rowSpacing: 16
             Layout.fillWidth: true
 
-            Controls.Label { text: i18n("Maximum Memory (GB)"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("maximum_memory_gb"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             Controls.Label {
                 text: domain ? domain.config.maxRam : ""
                 font.pixelSize: 14
@@ -379,17 +385,17 @@ Kirigami.ScrollablePage {
                 Layout.alignment: Qt.AlignRight
                 horizontalAlignment: Text.AlignRight
             }
-            Controls.Label { text: i18n("Memory Usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("memory_usage"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             Controls.Label {
                 text: {
                     if (!domain) {
                         return "";
                     }
                     if (root.stats.memoryUsedKiB !== undefined) {
-                        return i18n("%1 MiB of %2 MiB used", (root.stats.memoryUsedKiB / 1024).toFixed(0), (root.stats.memoryTotalKiB / 1024).toFixed(0));
+                        return qsTr("s_1_mib_of_2_mib_used").arg((root.stats.memoryUsedKiB / 1024).toFixed(0)).arg((root.stats.memoryTotalKiB / 1024).toFixed(0));
                     }
                     if (root.stats.memoryKiB !== undefined) {
-                        return i18n("%1 MiB allocated", (root.stats.memoryKiB / 1024).toFixed(0));
+                        return qsTr("s_1_mib_allocated").arg((root.stats.memoryKiB / 1024).toFixed(0));
                     }
                     return domain.config.ramUsage + " GB";
                 }
@@ -401,7 +407,7 @@ Kirigami.ScrollablePage {
         }
 
         Controls.Label {
-            text: i18n("Storage")
+            text: qsTr("storage")
             font.pixelSize: 15
             font.weight: Font.Bold
             Layout.fillWidth: true
@@ -418,7 +424,7 @@ Kirigami.ScrollablePage {
             rowSpacing: 16
             Layout.fillWidth: true
 
-            Controls.Label { text: i18n("Virtual Disk Path"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("virtual_disk_path"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             Controls.Label {
                 text: {
                     if (!domain) {
@@ -433,7 +439,7 @@ Kirigami.ScrollablePage {
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideMiddle
             }
-            Controls.Label { text: i18n("ISO Disk Path"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
+            Controls.Label { text: qsTr("iso_disk_path"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
             RowLayout {
                 Layout.preferredWidth: 280
                 Layout.alignment: Qt.AlignRight
@@ -446,11 +452,11 @@ Kirigami.ScrollablePage {
                     elide: Text.ElideMiddle
                 }
                 Controls.Button {
-                    text: i18n("Eject")
+                    text: qsTr("eject")
                     icon.name: "media-eject-symbolic"
                     onClicked: {
                         if (Karton.ejectDisk(domain)) {
-                            applicationWindow().showPassiveNotification(i18nc("%1 is the name of the virtual machine", "ISO Disk ejected for VM: %1", domain.config.name));
+                            applicationWindow().showPassiveNotification(qsTr("iso_disk_ejected_for_vm_1").arg(domain.config.name));
                         }
                     }
                 }
@@ -466,8 +472,7 @@ Kirigami.ScrollablePage {
 
     Kirigami.Dialog {
         id: deleteConfirmationDialog
-        title: i18nc("Confirm deleting %1 (virtual machine name)", "Delete '%1'?",
-            deleteConfirmationDialog.domain ? deleteConfirmationDialog.domain.config.name : "")
+        title: qsTr("delete_1").arg(deleteConfirmationDialog.domain ? deleteConfirmationDialog.domain.config.name : "")
 
         padding: Kirigami.Units.largeSpacing
         preferredWidth: Math.max(Kirigami.Units.gridUnit * 20, root.width - Kirigami.Units.gridUnit * 30)
@@ -482,15 +487,11 @@ Kirigami.ScrollablePage {
         Controls.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: deleteConfirmationDialog.domain ? i18nc("%1 is the virtual machine name",
-`You are about to remove the virtual machine, '%1'.
-Would you like to remove the disk image as well?
-This action cannot be undone.`,
-            deleteConfirmationDialog.domain.config.name) : ""
+            text: deleteConfirmationDialog.domain ? qsTr("delete_vm_confirmation").arg(deleteConfirmationDialog.domain.config.name) : ""
         }
         customFooterActions: [
             Kirigami.Action {
-                text: i18nc("verb, close confirmation dialog", "Cancel")
+                text: qsTr("cancel")
                 icon.name: "dialog-cancel-symbolic"
                 onTriggered: {
                     deleteConfirmationDialog.domain = null;
@@ -498,7 +499,7 @@ This action cannot be undone.`,
                 }
             },
             Kirigami.Action {
-                text: i18nc("action, delete VM but keep disk image", "Keep File")
+                text: qsTr("keep_file")
                 icon.name: "edit-delete-remove-symbolic"
 
                 onTriggered: {
@@ -511,12 +512,12 @@ This action cannot be undone.`,
                     deleteConfirmationDialog.domain = null;
                     deleteConfirmationDialog.close();
                     if (Karton.deleteDomain(domainToDelete, false) && window) {
-                        window.showPassiveNotification(i18nc("%1 is the virtual machine name", "Deleted VM: %1", domainName));
+                        window.showPassiveNotification(qsTr("deleted_vm_1").arg(domainName));
                     }
                 }
             },
             Kirigami.Action {
-                text: i18nc("action, delete VM and disk image", "Delete Disk")
+                text: qsTr("delete_disk")
                 icon.name: "delete-symbolic"
 
                 onTriggered: {
@@ -529,7 +530,7 @@ This action cannot be undone.`,
                     deleteConfirmationDialog.domain = null;
                     deleteConfirmationDialog.close();
                     if (Karton.deleteDomain(domainToDelete, true) && window) {
-                        window.showPassiveNotification(i18nc("%1 is the virtual machine name", "Deleted VM: %1", domainName));
+                        window.showPassiveNotification(qsTr("deleted_vm_1").arg(domainName));
                     }
                 }
             }

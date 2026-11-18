@@ -10,9 +10,12 @@
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QSet>
+#include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
+#include <memory>
 
 #include "domain/domain.h"
 #include "util/commandrunner.h"
@@ -24,6 +27,8 @@ struct _virDomain; // need this for compile issues
 Q_DECLARE_OPAQUE_POINTER(_virDomain *)
 Q_DECLARE_METATYPE(_virDomain *)
 
+class ShortcutInhibitor;
+
 class Karton : public QObject
 {
     Q_OBJECT
@@ -32,7 +37,8 @@ class Karton : public QObject
     Q_PROPERTY(bool connected READ connected CONSTANT)
     Q_PROPERTY(QString connectionUri READ connectionUri CONSTANT)
     Q_PROPERTY(int viewerCount READ viewerCount NOTIFY viewerCountChanged)
-    Q_PROPERTY(bool guestAgentWarningDismissed READ guestAgentWarningDismissed WRITE setGuestAgentWarningDismissed NOTIFY guestAgentWarningDismissedChanged)
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
+    Q_PROPERTY(bool holidayMode READ holidayMode NOTIFY holidayModeChanged)
 
 public:
     // Deliberately not default-constructible: Qt then uses create() for the
@@ -52,16 +58,22 @@ public:
     {
         return m_viewerCount;
     }
-    [[nodiscard]] bool guestAgentWarningDismissed() const
+
+    // Stored as "auto", "en" or "ru". "auto" follows the system locale.
+    [[nodiscard]] QString language() const;
+    void setLanguage(const QString &language);
+    [[nodiscard]] bool holidayMode() const
     {
-        return m_guestAgentWarningDismissed;
+        return m_holidayMode;
     }
-    void setGuestAgentWarningDismissed(bool dismissed);
+    // Resolves a stored value to a compiled translation language.
+    static QString resolveLanguage(const QString &requested, const QString &systemLocale);
 
     QVector<Domain *> domains();
     void refreshDomain(const virDomainPtr domainPtr);
     int searchDomain(virDomainPtr domainPtr);
     void refreshDomainList();
+    void removeDomainCache(const QString &uuid, const QString &previewPath);
     QString getVirtualDiskPath(const QString &domainName, const QString &format = QStringLiteral("qcow2"));
     QString getXmlConfigPath(const QString &domainName);
     int diskSizeGB(const QString &path);
@@ -74,6 +86,8 @@ Q_SIGNALS:
     void domainsChanged(const virDomainPtr domainPtr, int event, int detail);
     void errorOccurred(const QString &errorMessage);
     void clipboardSettingsChanged();
+    void consoleFontSizeChanged();
+    void imagesDirectoryChanged();
     void domainAdded(Domain *domain);
     void domainRemoved(Domain *domain);
     void displayResolutionChanged(const Domain *domain);
@@ -81,7 +95,8 @@ Q_SIGNALS:
     void domainEdited(bool success, const QString &name);
     void domainCloned(bool success, const QString &sourceName, const QString &newName);
     void viewerCountChanged();
-    void guestAgentWarningDismissedChanged();
+    void languageChanged();
+    void holidayModeChanged();
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
@@ -104,6 +119,21 @@ public Q_SLOTS:
     Q_INVOKABLE void saveClipboardTextMode(int mode);
     Q_INVOKABLE int clipboardFilesMode() const;
     Q_INVOKABLE void saveClipboardFilesMode(int mode);
+    Q_INVOKABLE int globalConsoleFontSize() const;
+    Q_INVOKABLE void saveGlobalConsoleFontSize(int pixels);
+    Q_INVOKABLE int domainConsoleFontSize(const Domain *domain) const;
+    Q_INVOKABLE void saveDomainConsoleFontSize(const Domain *domain, int pixels);
+    Q_INVOKABLE int consoleFontSize(const Domain *domain) const;
+    Q_INVOKABLE int cleanupStaleCaches();
+    Q_INVOKABLE int clearPreviewCache();
+    Q_INVOKABLE QString defaultImagesDirectory() const;
+    Q_INVOKABLE QString imagesDirectory() const;
+    Q_INVOKABLE void saveImagesDirectory(const QString &path);
+    Q_INVOKABLE QString suggestedDiskPath(const QString &name, const QString &format) const;
+    Q_INVOKABLE QString checkDiskDirectoryAccess(const QString &path) const;
+    Q_INVOKABLE QString grantDiskDirectoryAccess(const QString &path);
+    Q_INVOKABLE QStringList grantedDiskDirectories() const;
+    Q_INVOKABLE QString revokeGrantedDiskAccess();
     Q_INVOKABLE bool spiceTlsEnabled() const;
     Q_INVOKABLE void saveSpiceTlsEnabled(bool enabled);
     Q_INVOKABLE QString spiceCaCertificate() const;
@@ -112,6 +142,11 @@ public Q_SLOTS:
     Q_INVOKABLE void saveAudioPlaybackEnabled(const Domain *domain, bool enabled);
     Q_INVOKABLE bool microphoneEnabled(const Domain *domain) const;
     Q_INVOKABLE void saveMicrophoneEnabled(const Domain *domain, bool enabled);
+    Q_INVOKABLE bool guestAgentSeen(const Domain *domain) const;
+    Q_INVOKABLE void markGuestAgentSeen(const Domain *domain);
+    Q_INVOKABLE bool guestAgentWarningShown(const Domain *domain) const;
+    Q_INVOKABLE void markGuestAgentWarningShown(const Domain *domain);
+    Q_INVOKABLE void clearGuestAgentState(const Domain *domain);
     Q_INVOKABLE QVariantMap domainDisplayResolution(const Domain *domain) const;
     Q_INVOKABLE void saveDomainDisplayResolution(const Domain *domain, int width, int height);
     Q_INVOKABLE Domain *domainByUuid(const QString &uuid) const;
@@ -141,6 +176,7 @@ public Q_SLOTS:
     Q_INVOKABLE QObject *viewerForDomain(Domain *domain) const;
     Q_INVOKABLE void registerViewer(Domain *domain, QObject *window);
     Q_INVOKABLE void unregisterViewer(QObject *window);
+    Q_INVOKABLE void setViewerGlobalShortcutsBlocked(QObject *viewer, bool blocked);
     Q_INVOKABLE void closeAllViewers();
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
@@ -177,11 +213,12 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantList domainPciDevices(const Domain *domain) const;
     Q_INVOKABLE bool attachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
     Q_INVOKABLE bool detachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
-    Q_INVOKABLE bool cloneDomain(const Domain *domain, const QString &newName);
+    Q_INVOKABLE bool cloneDomain(const Domain *domain, const QString &newName, const QString &destinationDirectory = QString());
     Q_INVOKABLE QVariantList domainDisks(const Domain *domain) const;
-    Q_INVOKABLE bool addDisk(const Domain *domain, int sizeGB, const QString &format);
+    Q_INVOKABLE bool addDisk(const Domain *domain, int sizeGB, const QString &format, const QVariantMap &options);
     Q_INVOKABLE bool attachDiskImage(const Domain *domain, const QString &path, const QString &format);
     Q_INVOKABLE bool attachIso(const Domain *domain, const QString &path);
+    Q_INVOKABLE bool setDiskMedia(const Domain *domain, const QString &targetDev, const QString &path);
     Q_INVOKABLE bool detachDisk(const Domain *domain, const QString &targetDev, bool deleteFile);
     Q_INVOKABLE QVariantMap domainDiskAdvanced(const Domain *domain, const QString &targetDev) const;
     Q_INVOKABLE bool editDomainDiskAdvanced(const Domain *domain, const QString &targetDev, const QVariantMap &settings);
@@ -206,9 +243,19 @@ private:
     };
     QHash<QString, CpuSample> m_cpuSamples;
     int m_viewerCount = 0;
-    bool m_guestAgentWarningDismissed = false;
+    bool m_holidayMode = false;
+    QTimer m_holidayTimer;
     QHash<QString, QPointer<QObject>> m_viewers;
+    QSet<QObject *> m_shortcutBlockedViewers;
+    std::unique_ptr<ShortcutInhibitor> m_shortcutInhibitor;
+    bool m_kglobalShortcutsBlocked = false;
+    void updateGlobalShortcutsBlock();
+    void updateHolidayMode();
     bool m_previewCapturing = false;
+    // Domains whose QEMU process has no screen to capture (for example a VM
+    // that only exposes a serial console). Cleared when the domain list is
+    // refreshed so an edited XML can be probed again.
+    QSet<QString> m_previewUnsupportedDomains;
 
     bool init();
 };

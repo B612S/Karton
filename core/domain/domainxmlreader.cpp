@@ -59,6 +59,12 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
         } else if (xmlReader.name() == QStringLiteral("loader")) {
             const QString secure = xmlReader.attributes().value(QStringLiteral("secure")).toString();
             info.secureBoot = secure == QStringLiteral("yes");
+        } else if (xmlReader.name() == QStringLiteral("graphics")) {
+            info.hasGraphics = true;
+        } else if (xmlReader.name() == QStringLiteral("video")) {
+            // A video device alone still gives QEMU a framebuffer even when no
+            // SPICE/VNC graphics element is configured.
+            info.hasGraphics = true;
         } else if (xmlReader.name() == QStringLiteral("interface")) {
             parseInterface(info, xmlReader);
         } else if (xmlReader.name() == QStringLiteral("disk")) {
@@ -91,6 +97,7 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
 void DomainXmlReader::parseInterface(XmlInfo &info, QXmlStreamReader &xmlReader)
 {
     info.networkModel = QStringLiteral("virtio");
+    const QString interfaceType = xmlReader.attributes().value(QStringLiteral("type")).toString();
 
     while (!xmlReader.atEnd()) {
         const QXmlStreamReader::TokenType token = xmlReader.readNext();
@@ -98,6 +105,12 @@ void DomainXmlReader::parseInterface(XmlInfo &info, QXmlStreamReader &xmlReader)
             const QString type = xmlReader.attributes().value(QStringLiteral("type")).toString();
             if (!type.isEmpty()) {
                 info.networkModel = type;
+            }
+        }
+        if (token == QXmlStreamReader::StartElement && xmlReader.name() == QStringLiteral("source") && interfaceType == QStringLiteral("network")) {
+            const QString network = xmlReader.attributes().value(QStringLiteral("network")).toString();
+            if (!network.isEmpty()) {
+                info.networkName = network;
             }
         }
         if (token == QXmlStreamReader::EndElement && xmlReader.name() == QStringLiteral("interface")) {

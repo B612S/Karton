@@ -21,10 +21,10 @@ depends=(
     'kirigami'
     'kirigami-addons'
     'kcoreaddons'
-    'ki18n'
     'kiconthemes'
     'qqc2-desktop-style'
     'libvirt'
+    'acl'
     'libosinfo'
     'spice-gtk'
     'phodav'
@@ -36,6 +36,7 @@ makedepends=(
     'cmake'
     'ninja'
     'extra-cmake-modules'
+    'qt6-tools'
 )
 checkdepends=('appstream')
 conflicts=('karton-git')

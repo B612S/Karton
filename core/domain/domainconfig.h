@@ -34,6 +34,7 @@ class DomainConfig : public QObject
     Q_PROPERTY(QString firmware READ firmware CONSTANT)
     Q_PROPERTY(QString networkModel READ networkModel CONSTANT)
     Q_PROPERTY(bool secureBoot READ secureBoot CONSTANT)
+    Q_PROPERTY(bool hasGraphics READ hasGraphics NOTIFY hasGraphicsChanged)
     Q_PROPERTY(QString screenshotPreviewPath READ screenshotPreviewPath NOTIFY pathsChanged)
     Q_PROPERTY(bool autostart READ autostart NOTIFY autostartChanged)
     Q_PROPERTY(bool enableAccel3d READ enableAccel3d CONSTANT)
@@ -42,6 +43,7 @@ Q_SIGNALS:
     void isActiveChanged(bool active);
     void isPausedChanged(bool paused);
     void hasSavedStateChanged(bool hasSavedState);
+    void hasGraphicsChanged(bool hasGraphics);
     void stateChanged(const QString &state);
     void ramUsageChanged(int ramUsage);
     void autostartChanged(bool autostart);
@@ -74,7 +76,9 @@ public:
         QString diskFormat = QStringLiteral("qcow2");
         QString firmware = QStringLiteral("bios");
         QString networkModel = QStringLiteral("virtio");
+        QString networkName;
         bool secureBoot = false;
+        bool hasGraphics = false;
         QString screenshotPreviewPath;
         bool autostart = false;
         bool enableAccel3d = true;
@@ -172,9 +176,18 @@ public:
     {
         return m_networkModel;
     }
+
+    [[nodiscard]] QString networkName() const
+    {
+        return m_networkName;
+    }
     [[nodiscard]] bool secureBoot() const
     {
         return m_secureBoot;
+    }
+    [[nodiscard]] bool hasGraphics() const
+    {
+        return m_hasGraphics;
     }
     [[nodiscard]] QString screenshotPreviewPath() const
     {
@@ -192,6 +205,7 @@ public:
     void setActive(bool active);
     void setPaused(bool paused);
     void setHasSavedState(bool hasSavedState);
+    void setHasGraphics(bool hasGraphics);
     void setState(const QString &state);
     void setRamUsage(int ramUsage);
     void setAutostart(bool autostart);
@@ -227,7 +241,9 @@ private:
     QString m_diskFormat = QStringLiteral("qcow2");
     QString m_firmware = QStringLiteral("bios");
     QString m_networkModel = QStringLiteral("virtio");
+    QString m_networkName;
     bool m_secureBoot = false;
+    bool m_hasGraphics = false;
     QString m_screenshotPreviewPath;
     bool m_autostart = false;
     bool m_enableAccel3d = true;

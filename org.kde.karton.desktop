@@ -13,4 +13,8 @@ Type=Application
 
 Name=Karton
 GenericName=Virtual Machine Manager
+GenericName[ru]=Диспетчер виртуальных машин
 Comment=Manage virtual machines
+Comment[ru]=Управление виртуальными машинами
+Keywords=Karton;virtual machine;VM;libvirt;QEMU;
+Keywords[ru]=Karton;виртуальная машина;ВМ;libvirt;QEMU;

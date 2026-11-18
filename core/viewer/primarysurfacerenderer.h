@@ -22,10 +22,7 @@ public:
 
     QSGNode *updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds) override;
 
-    QSize frameSize() const override
-    {
-        return QSize(m_imageWidth, m_imageHeight);
-    }
+    QSize frameSize() const override;
 
     QImage currentFrame() const override;
 
@@ -44,6 +41,7 @@ private:
     int m_imageHeight = 0;
     const uchar *m_frameSource = nullptr;
     int m_frameStride = 0;
+    int m_frameFormat = 0;
     QImage m_frame;
     mutable QMutex m_frameLock;
     bool m_frameUpdated = false;

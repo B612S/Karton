@@ -9,6 +9,7 @@
 
 #include <QAudioFormat>
 #include <QAudioSource>
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QIODevice>
 #include <QImage>
@@ -19,6 +20,8 @@
 #include <QQuickItem>
 #include <QSGNode>
 #include <QSize>
+#include <QStringConverter>
+#include <QTimer>
 
 #include <memory>
 
@@ -36,6 +39,7 @@ class DomainViewer : public QQuickItem
     Q_PROPERTY(Domain *domain READ domain WRITE setDomain NOTIFY domainChanged REQUIRED)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(bool pointerGrabbed READ pointerGrabbed NOTIFY pointerGrabbedChanged)
+    Q_PROPERTY(bool pointerInside READ pointerInside NOTIFY pointerInsideChanged)
     Q_PROPERTY(bool agentConnected READ agentConnected NOTIFY agentConnectedChanged)
     Q_PROPERTY(bool audioPlaybackEnabled READ audioPlaybackEnabled WRITE setAudioPlaybackEnabled NOTIFY audioPlaybackEnabledChanged)
     Q_PROPERTY(bool microphoneEnabled READ microphoneEnabled WRITE setMicrophoneEnabled NOTIFY microphoneEnabledChanged)
@@ -43,6 +47,7 @@ class DomainViewer : public QQuickItem
     Q_PROPERTY(QString spiceCaCertificate READ spiceCaCertificate WRITE setSpiceCaCertificate NOTIFY spiceCaCertificateChanged)
     Q_PROPERTY(int clipboardTextMode READ clipboardTextMode WRITE setClipboardTextMode NOTIFY clipboardTextModeChanged)
     Q_PROPERTY(int clipboardFilesMode READ clipboardFilesMode WRITE setClipboardFilesMode NOTIFY clipboardFilesModeChanged)
+    Q_PROPERTY(bool serialConsoleActive READ serialConsoleActive NOTIFY serialConsoleActiveChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -63,6 +68,10 @@ public:
     bool pointerGrabbed() const
     {
         return m_pointerGrabbed;
+    }
+    bool pointerInside() const
+    {
+        return m_pointerInside;
     }
     bool agentConnected() const
     {
@@ -98,12 +107,18 @@ public:
         return m_clipboardFilesMode;
     }
     void setClipboardFilesMode(int mode);
+    bool serialConsoleActive() const
+    {
+        return m_serialConsoleActive;
+    }
+    Q_INVOKABLE void sendConsoleText(const QString &text);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
 
     void componentComplete() override;
 
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
+    void releaseResources() override;
     Q_INVOKABLE bool setupSpiceSession();
     bool connectToSpice();
     Q_INVOKABLE void disconnectFromSpice();
@@ -118,6 +133,7 @@ public:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void hoverEnterEvent(QHoverEvent *event) override;
     void hoverLeaveEvent(QHoverEvent *event) override;
+    bool event(QEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -133,6 +149,7 @@ Q_SIGNALS:
     void domainChanged();
     void errorMessageChanged();
     void pointerGrabbedChanged();
+    void pointerInsideChanged();
     void agentConnectedChanged();
     void audioPlaybackEnabledChanged();
     void microphoneEnabledChanged();
@@ -140,11 +157,14 @@ Q_SIGNALS:
     void spiceCaCertificateChanged();
     void clipboardTextModeChanged();
     void clipboardFilesModeChanged();
+    void serialConsoleActiveChanged();
+    void consoleDataReceived(const QString &text);
 
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
     void updateLivePreview();
     void applyGuestCursor();
+    void applyDisplayResolution();
 
 private:
     enum class RenderMode {
@@ -155,7 +175,14 @@ private:
     static void channel_new_callback(SpiceSession *session, SpiceChannel *channel, gpointer user_data);
     void attachDisplayChannel(SpiceChannel *channel);
     void attachCursorChannel(SpiceChannel *channel);
-    static uint8_t evdevToPcXt(uint32_t evdev_scancode);
+    static uint32_t evdevToPcXt(uint32_t evdev_scancode);
+
+    bool openSerialConsole();
+    void closeSerialConsole();
+    void scheduleConsoleClose();
+    static void consoleEventCallback(virStreamPtr stream, int events, void *opaque);
+    void flushConsoleWrites();
+    void updateConsoleEvents();
 
     static void cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData);
     static void cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData);
@@ -185,11 +212,22 @@ private:
     RenderMode m_renderMode = RenderMode::GlScanout;
 
     std::unique_ptr<SpiceDisplayRenderer> m_renderer;
+    // A detached renderer is kept alive until releaseResources() runs on the
+    // render thread, so its EGL image and GL texture are not leaked when the
+    // viewer is closed.
+    std::unique_ptr<SpiceDisplayRenderer> m_detachedRenderer;
 
     SpiceSession *m_session = nullptr;
     SpiceMainChannel *m_main_channel = nullptr;
     SpiceInputsChannel *m_inputs_channel = nullptr;
     ClipboardManager *m_clipboard = nullptr;
+
+    virStreamPtr m_consoleStream = nullptr;
+    bool m_serialConsoleActive = false;
+    bool m_consoleClosePending = false;
+    quint64 m_consoleGeneration = 0;
+    QByteArray m_consoleWriteBuffer;
+    QStringDecoder m_consoleDecoder{QStringConverter::Utf8};
 
     int m_current_button_mask = 0;
     bool m_pointerGrabbed = false;
@@ -226,6 +264,11 @@ private:
     bool m_hasCursorPaintPosition = false;
     bool m_pointerInside = false;
     QSize m_lastDisplayResolution;
+    // Coalesces the geometry burst while a window is restored from fullscreen:
+    // the page first loses the toolbar, then the window shrinks, and each step
+    // would otherwise ask the guest agent for a new resolution. Sending only
+    // the final size avoids a visible double mode switch in the guest.
+    QTimer m_displayResizeTimer;
     int m_fixedDisplayWidth = 0;
     int m_fixedDisplayHeight = 0;
 

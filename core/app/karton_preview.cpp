@@ -7,7 +7,6 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
 #include <QDateTime>
@@ -59,6 +58,18 @@ bool Karton::refreshDomainPreview(const Domain *domain)
         return false;
     }
 
+    // A text-only VM (serial console) has no framebuffer, so virsh would fail
+    // with "no screens to take screenshot from" on every poll. Do not even
+    // start the command for such domains, and drop a preview left over from an
+    // earlier configuration so the VM page cannot show a stale frame.
+    const QString uuid = domain->config()->uuid();
+    if (!domain->config()->hasGraphics() || m_previewUnsupportedDomains.contains(uuid)) {
+        if (!domain->previewFrame().isNull()) {
+            const_cast<Domain *>(domain)->clearPreviewFrame();
+        }
+        return false;
+    }
+
     const QString previewPath = domain->config()->screenshotPreviewPath();
     QDir().mkpath(QFileInfo(previewPath).absolutePath());
     const QString tempPath = previewPath + QStringLiteral(".tmp.png");
@@ -70,13 +81,22 @@ bool Karton::refreshDomainPreview(const Domain *domain)
     m_commandRunner->runCommand(QStringLiteral("virsh"),
                                 {QStringLiteral("-c"), m_activeUri, QStringLiteral("screenshot"), domain->config()->name(), tempPath},
                                 [guard, domainGuard, tempPath](bool success, const QString &output) {
-                                    Q_UNUSED(output);
                                     if (!guard) {
                                         return;
                                     }
                                     guard->m_previewCapturing = false;
                                     if (!success) {
                                         QFile::remove(tempPath);
+                                        // QEMU can still report no screen when the
+                                        // XML does contain a video device. Remember
+                                        // that so the error is not repeated every
+                                        // second; refreshDomainList() clears it.
+                                        if (output.contains(QStringLiteral("no screens"), Qt::CaseInsensitive)) {
+                                            if (domainGuard) {
+                                                guard->m_previewUnsupportedDomains.insert(domainGuard->config()->uuid());
+                                                domainGuard->clearPreviewFrame();
+                                            }
+                                        }
                                         return;
                                     }
                                     const QImage image(tempPath);

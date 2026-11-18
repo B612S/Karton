@@ -67,6 +67,8 @@ find_package(Qt6 REQUIRED COMPONENTS
     Xml
     Multimedia
     Network
+    DBus
+    LinguistTools
 )
 
 find_package(Libvirt REQUIRED)
@@ -76,11 +78,25 @@ find_package(Spiceglib REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PHODAV REQUIRED IMPORTED_TARGET libphodav-3.0)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
+pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
+pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+
+find_program(WAYLAND_SCANNER NAMES wayland-scanner REQUIRED)
+set(KEYBOARD_SHORTCUTS_XML "${WAYLAND_PROTOCOLS_DIR}/unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml")
+set(KEYBOARD_SHORTCUTS_HEADER "${CMAKE_BINARY_DIR}/keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h")
+set(KEYBOARD_SHORTCUTS_CODE "${CMAKE_BINARY_DIR}/keyboard-shortcuts-inhibit-unstable-v1-protocol.c")
+add_custom_command(
+    OUTPUT ${KEYBOARD_SHORTCUTS_HEADER} ${KEYBOARD_SHORTCUTS_CODE}
+    COMMAND ${WAYLAND_SCANNER} client-header ${KEYBOARD_SHORTCUTS_XML} ${KEYBOARD_SHORTCUTS_HEADER}
+    COMMAND ${WAYLAND_SCANNER} private-code ${KEYBOARD_SHORTCUTS_XML} ${KEYBOARD_SHORTCUTS_CODE}
+    DEPENDS ${KEYBOARD_SHORTCUTS_XML}
+    VERBATIM
+)
 find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
 
 find_package(KF6 REQUIRED COMPONENTS
     Kirigami
-    I18n
     CoreAddons
     QQC2DesktopStyle
     IconThemes
@@ -104,7 +120,6 @@ install(DIRECTORY img/os/
 
 ecm_find_qmlmodule(org.kde.kirigami REQUIRED)
 
-add_definitions(-DTRANSLATION_DOMAIN="karton")
 
 ecm_setup_version(${CMAKE_PROJECT_VERSION}
     VARIABLE_PREFIX KARTON
@@ -127,6 +142,7 @@ target_include_directories(karton PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core/os
     ${CMAKE_CURRENT_SOURCE_DIR}/core/util
     ${CMAKE_CURRENT_BINARY_DIR}/core
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_sources(karton
@@ -144,6 +160,9 @@ target_sources(karton
     core/app/karton_settings.cpp
     core/app/karton_snapshots.cpp
     core/app/karton_usb.cpp
+    core/app/shortcutinhibitor.cpp
+    ${KEYBOARD_SHORTCUTS_HEADER}
+    ${KEYBOARD_SHORTCUTS_CODE}
     core/app/vmlistmodel.cpp
     core/domain/domain.cpp
     core/domain/domainconfig.cpp
@@ -155,6 +174,8 @@ target_sources(karton
     core/viewer/spicedisplayrenderer.h
     core/viewer/glscanoutrenderer.cpp
     core/viewer/primarysurfacerenderer.cpp
+    core/viewer/terminalview.cpp
+    core/viewer/terminalview.h
     core/viewer/previewitem.cpp
     core/viewer/previewitem.h
     core/domain/domainxmlbuilder.cpp
@@ -176,6 +197,7 @@ ecm_target_qml_sources(karton
     qml/VMViewerWindow.qml
     qml/QmlSmokeTest.qml
     qml/InstallationDialog.qml
+    qml/PermissionGrantDialog.qml
     qml/VMPage.qml
     qml/AddHardwareDialog.qml
     qml/ApplicationSettingsDialog.qml
@@ -184,6 +206,18 @@ ecm_target_qml_sources(karton
     qml/SettingsDialog.qml
     qml/SnapshotsDialog.qml
     qml/CloneDialog.qml
+)
+
+qt_add_translations(karton
+    TS_FILES
+        locales/en.ts
+        locales/ru.ts
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/en.qm
+    ${CMAKE_CURRENT_BINARY_DIR}/ru.qm
+    DESTINATION ${KDE_INSTALL_DATADIR}/karton/translations
 )
 
 ecm_qt_declare_logging_category(
@@ -212,8 +246,8 @@ target_link_libraries(karton
     Qt6::Multimedia
     Qt6::Network
     Qt6::GuiPrivate
-    KF6::I18n
-    KF6::I18nQml
+    Qt6::DBus
+    PkgConfig::WAYLAND_CLIENT
     KF6::CoreAddons
     KF6::IconThemes
     KirigamiApp

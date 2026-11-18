@@ -11,7 +11,7 @@ Kirigami.Dialog {
     id: root
     property Domain domain: null
 
-    title: domain ? i18n("USB Devices — %1", domain.config.name) : i18n("USB Devices")
+    title: domain ? qsTr("usb_devices_1").arg(domain.config.name) : qsTr("usb_devices")
     preferredWidth: Math.min(680, applicationWindow() ? applicationWindow().width - 48 : 680)
     preferredHeight: Math.min(620, applicationWindow() ? applicationWindow().height - 48 : 620)
 
@@ -49,7 +49,7 @@ Kirigami.Dialog {
 
     customFooterActions: [
         Kirigami.Action {
-            text: i18n("Close")
+            text: qsTr("close")
             icon.name: "dialog-cancel-symbolic"
             onTriggered: root.close()
         }
@@ -65,7 +65,7 @@ Kirigami.Dialog {
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.topMargin: Kirigami.Units.largeSpacing
             level: 3
-            text: i18n("Host USB devices")
+            text: qsTr("host_usb_devices")
         }
 
         Controls.Label {
@@ -82,7 +82,7 @@ Kirigami.Dialog {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.hostDevices.length === 0
-            text: i18n("No USB devices found.")
+            text: qsTr("no_usb_devices_found")
             opacity: 0.7
         }
 
@@ -122,7 +122,7 @@ Kirigami.Dialog {
                     }
 
                     Controls.Button {
-                        text: i18n("Attach")
+                        text: qsTr("attach")
                         icon.name: "list-add-symbolic"
                         enabled: root.domain !== null && !modelData.hub
                         onClicked: {
@@ -151,7 +151,7 @@ Kirigami.Dialog {
             Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.domain !== null
             level: 3
-            text: i18n("Attached to this VM")
+            text: qsTr("attached_to_this_vm")
         }
 
         ListView {
@@ -182,13 +182,13 @@ Kirigami.Dialog {
                         Controls.Label {
                             Layout.fillWidth: true
                             visible: modelData.bus.length > 0 || modelData.device.length > 0
-                            text: "bus " + modelData.bus + ", device " + modelData.device
+                            text: qsTr("bus_1_device_2").arg(modelData.bus).arg(modelData.device)
                             opacity: 0.7
                         }
                     }
 
                     Controls.Button {
-                        text: i18n("Detach")
+                        text: qsTr("detach")
                         icon.name: "list-remove-symbolic"
                         onClicked: {
                             if (Karton.detachUsbDevice(root.domain,

@@ -7,9 +7,9 @@
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
-#include <KLocalizedString>
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -47,6 +47,22 @@
 #include "os/osiconmapper.h"
 
 using namespace KartonCommon;
+
+namespace
+{
+// libvirt rejects a QXL vgamem that is not a power of two (in KiB). The UI
+// offers preset sizes, but round here as well so an old value or another
+// caller can never make the whole domain definition fail.
+int qxlVgamemKiB(int memoryMiB)
+{
+    const int requestedKiB = qBound(16, memoryMiB, 256) * 1024;
+    int powerOfTwoKiB = 16 * 1024;
+    while (powerOfTwoKiB < requestedKiB) {
+        powerOfTwoKiB *= 2;
+    }
+    return powerOfTwoKiB;
+}
+} // namespace
 
 // ---- Hardware configuration ----
 
@@ -178,7 +194,8 @@ bool Karton::setSharedMemoryBacking(const Domain *domain, bool enabled)
 
     virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
-        Q_EMIT errorOccurred(i18nc("%1 is the error message", "Failed to update shared memory backing: %1", QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(
+            QCoreApplication::translate("Karton", "failed_to_update_shared_memory_backing_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     virDomainFree(redefined);
@@ -194,17 +211,16 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
 
     char *xmlDesc = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
     if (!xmlDesc) {
-        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
-                                   "Failed to read configuration for domain %1: %2",
-                                   domain->config()->name(),
-                                   QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_read_configuration_for_domain_1_2")
+                                 .arg(domain->config()->name())
+                                 .arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
 
     QDomDocument document;
     if (!document.setContent(QString::fromUtf8(xmlDesc))) {
         free(xmlDesc);
-        Q_EMIT errorOccurred(i18n("Failed to parse the virtual machine configuration."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_parse_the_virtual_machine_configuration"));
         return false;
     }
     free(xmlDesc);
@@ -283,8 +299,9 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
         if (settings.contains(QStringLiteral("videoMemory"))) {
             const int memoryMiB = qBound(16, settings.value(QStringLiteral("videoMemory")).toInt(), 512);
             if (videoModelType == QStringLiteral("qxl")) {
-                // QXL's guest framebuffer is vgamem.
-                model.setAttribute(QStringLiteral("vgamem"), QString::number(memoryMiB * 1024));
+                // QXL's guest framebuffer is vgamem, which libvirt requires to
+                // be a power of two number of KiB.
+                model.setAttribute(QStringLiteral("vgamem"), QString::number(qxlVgamemKiB(memoryMiB)));
             } else {
                 // VGA and virtio have no vgamem; their video memory is the
                 // generic vram attribute (in KiB).
@@ -371,10 +388,9 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
 
     virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
     if (!redefined) {
-        Q_EMIT errorOccurred(i18nc("%1 is the name of the domain, %2 is the error message",
-                                   "Failed to update configuration for domain %1: %2",
-                                   domain->config()->name(),
-                                   QString::fromUtf8(virGetLastErrorMessage())));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_configuration_for_domain_1_2")
+                                 .arg(domain->config()->name())
+                                 .arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     virDomainFree(redefined);
@@ -384,7 +400,7 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
 
 // ---- Cloning ----
 
-bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
+bool Karton::cloneDomain(const Domain *domain, const QString &requestedName, const QString &destinationDirectory)
 {
     if (!domain || !domain->domainPtr()) {
         return false;
@@ -393,28 +409,28 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
     const QString sourceName = domain->config()->name();
     const QString newName = requestedName.trimmed();
     if (!isValidDomainName(newName)) {
-        Q_EMIT errorOccurred(i18n("A VM name may only contain letters, digits, dots, underscores and dashes."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_vm_name_may_only_contain_letters_digits_dots_underscores_and_dashes"));
         return false;
     }
 
     virDomainPtr existing = virDomainLookupByName(m_conn, newName.toUtf8().constData());
     if (existing) {
         virDomainFree(existing);
-        Q_EMIT errorOccurred(i18nc("%1 is a VM name", "A VM named %1 already exists.", newName));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_vm_named_1_already_exists").arg(newName));
         return false;
     }
 
     char *sourceXml = virDomainGetXMLDesc(domain->domainPtr(), 0);
     if (!sourceXml) {
         Q_EMIT errorOccurred(
-            i18nc("VM cloning failed, %1 is the libvirt error", "Could not read the source VM configuration: %1", QString::fromUtf8(virGetLastErrorMessage())));
+            QCoreApplication::translate("Karton", "could_not_read_the_source_vm_configuration_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
 
     QDomDocument document;
     if (!document.setContent(QString::fromUtf8(sourceXml))) {
         free(sourceXml);
-        Q_EMIT errorOccurred(i18n("Could not parse the source VM configuration."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "could_not_parse_the_source_vm_configuration"));
         return false;
     }
     free(sourceXml);
@@ -422,7 +438,7 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
     QDomElement root = document.documentElement();
     QDomElement nameElement = root.firstChildElement(QStringLiteral("name"));
     if (nameElement.isNull()) {
-        Q_EMIT errorOccurred(i18n("The source VM configuration has no name."));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_source_vm_configuration_has_no_name"));
         return false;
     }
     if (nameElement.firstChild().isNull()) {
@@ -435,9 +451,17 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
     if (!uuidElement.isNull()) {
         root.removeChild(uuidElement);
     }
-    const QDomElement metadataElement = root.firstChildElement(QStringLiteral("metadata"));
+    QDomElement metadataElement = root.firstChildElement(QStringLiteral("metadata"));
     if (!metadataElement.isNull()) {
-        root.removeChild(metadataElement);
+        // Keep libosinfo/OS metadata so the clone keeps its Windows/Linux icon
+        // and OS identity. Only Karton's own metadata must not be copied.
+        QDomNodeList metadataChildren = metadataElement.childNodes();
+        for (int i = metadataChildren.count() - 1; i >= 0; --i) {
+            const QDomNode node = metadataChildren.at(i);
+            if (node.isElement() && node.toElement().tagName() == QStringLiteral("karton:kde-karton")) {
+                metadataElement.removeChild(node);
+            }
+        }
     }
 
     QDomElement osElement = root.firstChildElement(QStringLiteral("os"));
@@ -490,7 +514,7 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
         QDomElement source = disk.firstChildElement(QStringLiteral("source"));
         const QString sourcePath = source.attribute(QStringLiteral("file"));
         if (sourcePath.isEmpty()) {
-            Q_EMIT errorOccurred(i18n("This VM has a disk that is not backed by a local file; cloning it is not supported."));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "this_vm_has_a_disk_that_is_not_backed_by_a_local_file_cloning_it_is_not_supported"));
             return false;
         }
 
@@ -501,9 +525,17 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
         }
 
         const QString diskName = dataDiskIndex == 0 ? newName : newName + QStringLiteral("-disk%1").arg(dataDiskIndex + 1);
-        const QString destination = getVirtualDiskPath(diskName, format);
+        const QString destinationDirectoryPath = destinationDirectory.trimmed().isEmpty() ? imagesDirectory() : QDir::cleanPath(destinationDirectory.trimmed());
+        QString suffix = QStringLiteral("qcow2");
+        if (format == QStringLiteral("raw")) {
+            suffix = QStringLiteral("raw");
+        } else if (format == QStringLiteral("vmdk")) {
+            suffix = QStringLiteral("vmdk");
+        }
+        QDir().mkpath(destinationDirectoryPath);
+        const QString destination = QDir(destinationDirectoryPath).filePath(diskName + QLatin1Char('.') + suffix);
         if (QFile::exists(destination)) {
-            Q_EMIT errorOccurred(i18nc("%1 is a file path", "The clone destination already exists: %1", destination));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_clone_destination_already_exists_1").arg(destination));
             return false;
         }
 
@@ -525,7 +557,7 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
                 QFile::remove(path);
             }
             const QString errorMsg =
-                i18nc("%1 is a VM name, %2 is an error", "Failed to define cloned VM %1: %2", newName, QString::fromUtf8(virGetLastErrorMessage()));
+                QCoreApplication::translate("Karton", "failed_to_define_cloned_vm_1_2").arg(newName).arg(QString::fromUtf8(virGetLastErrorMessage()));
             Q_EMIT errorOccurred(errorMsg);
             Q_EMIT domainCloned(false, sourceName, newName);
             return;
@@ -552,8 +584,7 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName)
                                                 QFile::remove(path);
                                             }
                                             QFile::remove(disk.destination);
-                                            Q_EMIT errorOccurred(
-                                                i18nc("%1 is a disk path, %2 is the error", "Failed to copy disk %1: %2", disk.source, output));
+                                            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_copy_disk_1_2").arg(disk.source).arg(output));
                                             Q_EMIT domainCloned(false, sourceName, newName);
                                             return;
                                         }
@@ -579,14 +610,27 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
     }
 
     virDomainPtr domainPtr = domain->domainPtr();
-    if (virDomainUndefine(domainPtr) < 0) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to undefine domain %1: %2",
-                                       domain->config()->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
-        qCWarning(KARTON_DEBUG) << errorMsg;
-        Q_EMIT errorOccurred(errorMsg);
-        return false;
+    unsigned int undefineFlags = VIR_DOMAIN_UNDEFINE_NVRAM | VIR_DOMAIN_UNDEFINE_SNAPSHOTS_METADATA | VIR_DOMAIN_UNDEFINE_CHECKPOINTS_METADATA;
+    if (domain->hasSavedState()) {
+        undefineFlags |= VIR_DOMAIN_UNDEFINE_MANAGED_SAVE;
+    }
+
+    QString undefineError;
+    if (virDomainUndefineFlags(domainPtr, undefineFlags) < 0) {
+        undefineError = QString::fromUtf8(virGetLastErrorMessage());
+        // Older libvirt versions may not understand all metadata flags. Retry
+        // with the essential NVRAM flag, then with the legacy call.
+        if (virDomainUndefineFlags(domainPtr, VIR_DOMAIN_UNDEFINE_NVRAM) < 0) {
+            undefineError = QString::fromUtf8(virGetLastErrorMessage());
+            if (virDomainUndefine(domainPtr) < 0) {
+                undefineError = QString::fromUtf8(virGetLastErrorMessage());
+                const QString errorMsg =
+                    QCoreApplication::translate("Karton", "failed_to_undefine_domain_1_2").arg(domain->config()->name()).arg(undefineError);
+                qCWarning(KARTON_DEBUG) << errorMsg;
+                Q_EMIT errorOccurred(errorMsg);
+                return false;
+            }
+        }
     }
 
     qCInfo(KARTON_DEBUG) << "Successfully undefined domain:" << domain->config()->name();
@@ -605,7 +649,7 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
                 continue;
             }
             if (!QFile::remove(diskPath)) {
-                const QString errorMsg = i18nc("%1 is the path of the disk file", "Failed to delete disk file: %1", diskPath);
+                const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_disk_file_1").arg(diskPath);
                 qCWarning(KARTON_DEBUG) << errorMsg;
                 Q_EMIT errorOccurred(errorMsg);
                 success = false;
@@ -617,7 +661,7 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 
     const QString previewPath = domain->config()->screenshotPreviewPath();
     if (!previewPath.isEmpty() && QFile::exists(previewPath) && !QFile::remove(previewPath)) {
-        const QString errorMsg = i18nc("%1 is the path of the preview image", "Failed to delete preview image: %1", previewPath);
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_preview_image_1").arg(previewPath);
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         success = false;
@@ -636,7 +680,7 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 bool Karton::createDomain(const QVariantMap &config)
 {
     if (!m_conn) {
-        Q_EMIT errorOccurred(i18n("Not connected to libvirt"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "not_connected_to_libvirt"));
         return false;
     }
 
@@ -646,27 +690,36 @@ bool Karton::createDomain(const QVariantMap &config)
     const int storageGB = config.value(QStringLiteral("storageGB")).toInt();
 
     if (!isValidDomainName(name)) {
-        Q_EMIT errorOccurred(i18nc("%1 is the requested name of the virtual machine", "Invalid virtual machine name: %1", name));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_virtual_machine_name_1").arg(name));
         return false;
     }
     if (memoryGB <= 0 || cpus <= 0 || storageGB <= 0) {
-        Q_EMIT errorOccurred(i18n("Invalid virtual machine configuration"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_virtual_machine_configuration"));
         return false;
     }
     const QString diskFormat = config.value(QStringLiteral("diskFormat"), QStringLiteral("qcow2")).toString();
     if (diskFormat != QStringLiteral("qcow2") && diskFormat != QStringLiteral("raw") && diskFormat != QStringLiteral("vmdk")) {
-        Q_EMIT errorOccurred(i18n("Unsupported disk format"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "unsupported_disk_format"));
         return false;
     }
     const QString firmware = config.value(QStringLiteral("firmware"), QStringLiteral("bios")).toString();
     if (firmware != QStringLiteral("bios") && firmware != QStringLiteral("efi")) {
-        Q_EMIT errorOccurred(i18n("Unsupported firmware type"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "unsupported_firmware_type"));
         return false;
     }
     const QString networkModel = config.value(QStringLiteral("networkModel"), QStringLiteral("virtio")).toString();
     if (networkModel != QStringLiteral("virtio") && networkModel != QStringLiteral("e1000") && networkModel != QStringLiteral("none")) {
-        Q_EMIT errorOccurred(i18n("Unsupported network model"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "unsupported_network_model"));
         return false;
+    }
+    const QString networkName = config.value(QStringLiteral("networkName")).toString().trimmed();
+    if (!networkName.isEmpty() && m_conn) {
+        virNetworkPtr network = virNetworkLookupByName(m_conn, networkName.toUtf8().constData());
+        if (!network) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_not_found_1").arg(networkName));
+            return false;
+        }
+        virNetworkFree(network);
     }
 
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
@@ -674,7 +727,7 @@ bool Karton::createDomain(const QVariantMap &config)
     QDir baseDir(basePath);
     if (!baseDir.mkpath(QStringLiteral("images"))) {
         qCCritical(KARTON_DEBUG) << "Failed to create directory for images:" << basePath;
-        Q_EMIT errorOccurred(i18nc("%1 is a directory path", "Failed to create image directory: %1", basePath));
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_image_directory_1").arg(basePath));
         return false;
     }
 
@@ -687,45 +740,66 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.maxDiskStorage = storageGB;
     configData.xmlConfigPath = getXmlConfigPath(name);
     configData.isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString();
-    configData.virtualDiskPath = getVirtualDiskPath(name, diskFormat);
+    QString diskPath = config.value(QStringLiteral("diskPath")).toString().trimmed();
+    if (diskPath.isEmpty()) {
+        diskPath = getVirtualDiskPath(name, diskFormat);
+    } else {
+        diskPath = QDir::cleanPath(diskPath);
+        if (QFileInfo(diskPath).isRelative()) {
+            diskPath = QDir::current().absoluteFilePath(diskPath);
+        }
+    }
+    const QFileInfo diskInfo(diskPath);
+    if (!QDir().mkpath(diskInfo.absolutePath())) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_image_directory_1").arg(diskInfo.absolutePath()));
+        return false;
+    }
+    if (QFile::exists(diskPath)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_disk_path_already_exists_1").arg(diskPath));
+        return false;
+    }
+    const QString accessError = checkDiskDirectoryAccess(diskInfo.absolutePath());
+    if (!accessError.isEmpty()) {
+        Q_EMIT errorOccurred(accessError);
+        return false;
+    }
+    configData.virtualDiskPath = diskPath;
     configData.virtualDiskPaths = {configData.virtualDiskPath};
     configData.diskFormat = diskFormat;
     configData.firmware = firmware;
     configData.networkModel = networkModel;
+    configData.networkName = networkName;
     configData.secureBoot = config.value(QStringLiteral("secureBoot"), false).toBool();
     configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool();
 
-    const QString diskPath = configData.virtualDiskPath;
+    m_commandRunner->runCommand(QStringLiteral("qemu-img"),
+                                {QStringLiteral("create"), QStringLiteral("-f"), diskFormat, diskPath, QStringLiteral("%1G").arg(storageGB)},
+                                [this, name, diskPath, configData](bool success, const QString &output) {
+                                    if (!success) {
+                                        QFile::remove(diskPath);
+                                        const QString errorMsg =
+                                            QCoreApplication::translate("Karton", "failed_to_create_disk_image_for_domain_1_2").arg(name).arg(output);
+                                        qCWarning(KARTON_DEBUG) << errorMsg;
+                                        Q_EMIT errorOccurred(errorMsg);
+                                        Q_EMIT domainCreated(false, name);
+                                        return;
+                                    }
 
-    m_commandRunner->runCommand(
-        QStringLiteral("qemu-img"),
-        {QStringLiteral("create"), QStringLiteral("-f"), diskFormat, diskPath, QStringLiteral("%1G").arg(storageGB)},
-        [this, name, diskPath, configData](bool success, const QString &output) {
-            if (!success) {
-                QFile::remove(diskPath);
-                const QString errorMsg =
-                    i18nc("%1 is the name of the domain, %2 is the error message", "Failed to create disk image for domain %1: %2", name, output);
-                qCWarning(KARTON_DEBUG) << errorMsg;
-                Q_EMIT errorOccurred(errorMsg);
-                Q_EMIT domainCreated(false, name);
-                return;
-            }
+                                    DomainConfig domainConfig(configData);
+                                    DomainXmlBuilder builder;
+                                    if (!builder.setupDomain(m_conn, &domainConfig)) {
+                                        QFile::remove(diskPath);
+                                        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_create_domain_1").arg(name);
+                                        qCWarning(KARTON_DEBUG) << errorMsg;
+                                        Q_EMIT errorOccurred(errorMsg);
+                                        Q_EMIT domainCreated(false, name);
+                                        return;
+                                    }
 
-            DomainConfig domainConfig(configData);
-            DomainXmlBuilder builder;
-            if (!builder.setupDomain(m_conn, &domainConfig)) {
-                QFile::remove(diskPath);
-                const QString errorMsg = i18nc("%1 is the name of the domain", "Failed to create domain: %1", name);
-                qCWarning(KARTON_DEBUG) << errorMsg;
-                Q_EMIT errorOccurred(errorMsg);
-                Q_EMIT domainCreated(false, name);
-                return;
-            }
-
-            qCInfo(KARTON_DEBUG) << "Successfully created domain:" << name;
-            refreshDomainList();
-            Q_EMIT domainCreated(true, name);
-        });
+                                    qCInfo(KARTON_DEBUG) << "Successfully created domain:" << name;
+                                    refreshDomainList();
+                                    Q_EMIT domainCreated(true, name);
+                                });
 
     return true;
 }
@@ -740,7 +814,7 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
     DomainConfig *domainConfig = domain->config();
 
     if (virDomainIsActive(domainPtr) == 1) {
-        const QString errorMsg = i18nc("%1 is the name of the domain", "Cannot edit configuration while domain is running: %1", domainConfig->name());
+        const QString errorMsg = QCoreApplication::translate("Karton", "cannot_edit_configuration_while_domain_is_running_1").arg(domainConfig->name());
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -752,13 +826,13 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
     const int newStorageGB = config.value(QStringLiteral("storageGB")).toInt();
 
     if (!isValidDomainName(newName)) {
-        const QString errorMsg = i18nc("%1 is the requested name of the virtual machine", "Invalid virtual machine name: %1", newName);
+        const QString errorMsg = QCoreApplication::translate("Karton", "invalid_virtual_machine_name_1").arg(newName);
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
     }
     if (newMemoryGB <= 0 || newCpus <= 0 || newStorageGB <= 0) {
-        const QString errorMsg = i18n("Invalid virtual machine configuration");
+        const QString errorMsg = QCoreApplication::translate("Karton", "invalid_virtual_machine_configuration");
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -770,7 +844,7 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
     const int oldStorageGB = domainConfig->maxDiskStorage();
     const bool storageKnown = oldStorageGB > 0;
     if (storageKnown && newStorageGB < oldStorageGB) {
-        const QString errorMsg = i18nc("%1 is the name of the domain", "Disk storage cannot be shrunk for domain: %1", domainConfig->name());
+        const QString errorMsg = QCoreApplication::translate("Karton", "disk_storage_cannot_be_shrunk_for_domain_1").arg(domainConfig->name());
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -778,10 +852,9 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
 
     char *xmlDesc = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
     if (!xmlDesc) {
-        const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                       "Failed to read configuration for domain %1: %2",
-                                       domainConfig->name(),
-                                       QString::fromUtf8(virGetLastErrorMessage()));
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_read_configuration_for_domain_1_2")
+                                     .arg(domainConfig->name())
+                                     .arg(QString::fromUtf8(virGetLastErrorMessage()));
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -792,7 +865,7 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
     free(xmlDesc);
 
     if (xmlString.isEmpty()) {
-        const QString errorMsg = i18nc("%1 is the name of the domain", "Failed to update configuration for domain: %1", domainConfig->name());
+        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_update_configuration_for_domain_1").arg(domainConfig->name());
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
         return false;
@@ -805,17 +878,16 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
     // is rejected by libvirt as a UUID conflict.
     const auto applyXml = [this, xmlString, newName, oldName](Domain *target) -> bool {
         if (!target) {
-            Q_EMIT errorOccurred(i18n("The virtual machine was removed"));
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_virtual_machine_was_removed"));
             return false;
         }
 
         virDomainPtr domainPtr = target->domainPtr();
         virDomainPtr redefined = virDomainDefineXML(m_conn, xmlString.toUtf8().constData());
         if (!redefined) {
-            const QString errorMsg = i18nc("%1 is the name of the domain, %2 is the error message",
-                                           "Failed to update configuration for domain %1: %2",
-                                           oldName,
-                                           QString::fromUtf8(virGetLastErrorMessage()));
+            const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_update_configuration_for_domain_1_2")
+                                         .arg(oldName)
+                                         .arg(QString::fromUtf8(virGetLastErrorMessage()));
             qCWarning(KARTON_DEBUG) << errorMsg;
             Q_EMIT errorOccurred(errorMsg);
             return false;
@@ -823,11 +895,10 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
         virDomainFree(redefined);
 
         if (newName != oldName && virDomainRename(domainPtr, newName.toUtf8().constData(), 0) < 0) {
-            const QString errorMsg = i18nc("%1 is the old name, %2 is the new name, %3 is the error message",
-                                           "Failed to rename domain %1 to %2: %3",
-                                           oldName,
-                                           newName,
-                                           QString::fromUtf8(virGetLastErrorMessage()));
+            const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_rename_domain_1_to_2_3")
+                                         .arg(oldName)
+                                         .arg(newName)
+                                         .arg(QString::fromUtf8(virGetLastErrorMessage()));
             qCWarning(KARTON_DEBUG) << errorMsg;
             Q_EMIT errorOccurred(errorMsg);
             refreshDomainList();
@@ -849,23 +920,22 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
         const QString diskPath = domainConfig->virtualDiskPath();
         QPointer<Domain> guard(const_cast<Domain *>(domain));
 
-        m_commandRunner->runCommand(
-            QStringLiteral("qemu-img"),
-            {QStringLiteral("resize"), diskPath, QStringLiteral("%1G").arg(newStorageGB)},
-            [this, guard, applyXml, newName, diskPath](bool success, const QString &output) {
-                if (!success) {
-                    const QString errorMsg =
-                        i18nc("%1 is the name of the domain, %2 is the error message", "Failed to resize disk for domain %1: %2", newName, output);
-                    qCWarning(KARTON_DEBUG) << errorMsg;
-                    Q_EMIT errorOccurred(errorMsg);
-                    Q_EMIT domainEdited(false, newName);
-                    return;
-                }
+        m_commandRunner->runCommand(QStringLiteral("qemu-img"),
+                                    {QStringLiteral("resize"), diskPath, QStringLiteral("%1G").arg(newStorageGB)},
+                                    [this, guard, applyXml, newName, diskPath](bool success, const QString &output) {
+                                        if (!success) {
+                                            const QString errorMsg =
+                                                QCoreApplication::translate("Karton", "failed_to_resize_disk_for_domain_1_2").arg(newName).arg(output);
+                                            qCWarning(KARTON_DEBUG) << errorMsg;
+                                            Q_EMIT errorOccurred(errorMsg);
+                                            Q_EMIT domainEdited(false, newName);
+                                            return;
+                                        }
 
-                m_diskSizeCache.remove(diskPath);
-                const bool applied = applyXml(guard.data());
-                Q_EMIT domainEdited(applied, newName);
-            });
+                                        m_diskSizeCache.remove(diskPath);
+                                        const bool applied = applyXml(guard.data());
+                                        Q_EMIT domainEdited(applied, newName);
+                                    });
         return true;
     }
 

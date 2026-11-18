@@ -94,7 +94,7 @@ QString OsIconMapper::iconName(const QString &shortOsId, const QString &osId)
 {
     const QString id = normalized(shortOsId, osId);
     if (id.trimmed().isEmpty()) {
-        return QStringLiteral("computer-symbolic");
+        return QStringLiteral("karton-os-generic");
     }
     if (id.contains(QStringLiteral("darwin")) || id.contains(QStringLiteral("macos")) || id.contains(QStringLiteral("mac os"))) {
         return QStringLiteral("karton-os-macos");
@@ -124,7 +124,7 @@ QString OsIconMapper::iconName(const QString &shortOsId, const QString &osId)
         || id.contains(QStringLiteral("mint")) || id.contains(QStringLiteral("kali")) || id.contains(QStringLiteral("void"))) {
         return QStringLiteral("karton-os-linux");
     }
-    return QStringLiteral("computer-symbolic");
+    return QStringLiteral("karton-os-generic");
 }
 
 QString OsIconMapper::displayName(const QString &shortOsId, const QString &osId)

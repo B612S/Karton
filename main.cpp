@@ -6,27 +6,31 @@
 #include <libvirt/libvirt.h>
 
 #include <KAboutData>
-#include <KLocalizedQmlContext>
-#include <KLocalizedString>
 #include <KirigamiAddons/App/KirigamiAppDefaults>
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QIcon>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QLocale>
 #include <QLockFile>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QSurfaceFormat>
 #include <QThread>
 #include <QTimer>
+#include <QTranslator>
 #include <QWindow>
 #include <QtQml>
 #include <cstdlib>
 #include <memory>
 
+#include "app/karton.h"
+#include "app/karton_private.h"
 #include "karton_debug.h"
 #include "karton_version.h"
 
@@ -120,19 +124,38 @@ int main(int argc, char *argv[])
     QQuickWindow::setGraphicsApi(graphicsApi);
     qCInfo(KARTON_DEBUG) << "Using graphics API:" << (graphicsApi == QSGRendererInterface::OpenGL ? "OpenGL" : "software");
 
-    KLocalizedString::setApplicationDomain("karton");
+    // Translations are embedded in the binary by qt_add_translations and
+    // looked up from :/i18n first, so the resource always matches this build.
+    QTranslator *translator = new QTranslator(&app);
+    auto loadLanguage = [&](const QString &requested) {
+        QCoreApplication::removeTranslator(translator);
+        const QString language = Karton::resolveLanguage(requested, QLocale::system().name());
+        const QString resourcePath = QStringLiteral(":/i18n/") + language + QStringLiteral(".qm");
+        const QString installedPath = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("karton/translations/%1.qm").arg(language));
+        const QString localPath = QCoreApplication::applicationDirPath() + QLatin1Char('/') + language + QStringLiteral(".qm");
+        if (translator->load(resourcePath) || (!installedPath.isEmpty() && translator->load(installedPath)) || translator->load(localPath)) {
+            QCoreApplication::installTranslator(translator);
+        }
+    };
+
+    const QSettings languageSettings(KartonCommon::kartonConfigPath(), QSettings::IniFormat);
+    loadLanguage(languageSettings.value(QStringLiteral("ui/language"), QStringLiteral("auto")).toString());
 
     KAboutData about(QStringLiteral("karton"),
-                     i18nc("Application name", "Karton"),
+                     QCoreApplication::translate("Main", "karton"),
                      QStringLiteral(KARTON_VERSION_STRING),
-                     i18nc("Application description", "Manage and run virtual machines with ease"),
+                     QCoreApplication::translate("Main", "manage_and_run_virtual_machines_with_ease"),
                      KAboutLicense::GPL_V3,
-                     i18nc("Copyright statement", "(C) KDE"));
+                     QCoreApplication::translate("Main", "c_kde"));
     about.setDesktopFileName(QStringLiteral("org.kde.karton"));
 
-    about.addAuthor(i18nc("author name", "Aaron Rainbolt"), i18nc("author role", "Initial developer"), QStringLiteral("arraybolt3@gmail.com"));
-    about.addAuthor(i18nc("author name", "Derek Lin"), i18nc("author role", "Developer"), QStringLiteral("derekhongdalin@gmail.com"));
-    about.setTranslator(i18nc("NAME OF TRANSLATORS", "Your names"), i18nc("EMAIL OF TRANSLATORS", "Your emails"));
+    about.addAuthor(QCoreApplication::translate("Main", "aaron_rainbolt"),
+                    QCoreApplication::translate("Main", "initial_developer"),
+                    QStringLiteral("arraybolt3@gmail.com"));
+    about.addAuthor(QCoreApplication::translate("Main", "derek_lin"),
+                    QCoreApplication::translate("Main", "developer"),
+                    QStringLiteral("derekhongdalin@gmail.com"));
+    about.setTranslator(QCoreApplication::translate("Main", "your_names"), QCoreApplication::translate("Main", "your_emails"));
 
     KAboutData::setApplicationData(about);
     QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("org.kde.karton")));
@@ -179,7 +202,6 @@ int main(int argc, char *argv[])
 
     qCInfo(KARTON_DEBUG) << "Hello! Starting Karton...";
 
-    KLocalization::setupLocalizedContext(&engine);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&instanceLock]() {
         if (instanceLock) {
             instanceLock->unlock();
@@ -198,6 +220,15 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty()) {
         return -1;
     }
+
+    QObject::connect(Karton::self(), &Karton::languageChanged, &app, [&engine, &loadLanguage]() {
+        loadLanguage(Karton::self()->language());
+        engine.retranslate();
+        // Domain state strings are generated on the C++ side; refresh them so
+        // the list does not keep showing the previous language until the next
+        // libvirt event.
+        Karton::self()->refreshDomainList();
+    });
 
     // Used by the opt-in test suite to catch QML component/import errors
     // without entering the event loop or requiring a graphical session.
