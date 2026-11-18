@@ -2383,21 +2383,19 @@ Kirigami.Dialog {
                 readonly: diskEditReadonlyCheck.checked,
                 shareable: isCdrom ? false : diskEditShareableCheck.checked,
                 serial: isCdrom ? "" : diskEditSerialField.text.trim(),
-                cache: isCdrom ? 0 : diskEditCacheCombo.currentIndex,
-                discard: isCdrom ? 0 : diskEditDiscardCombo.currentIndex
+                cache: isCdrom ? "" : diskEditCacheCombo.currentValue,
+                discard: isCdrom ? "" : diskEditDiscardCombo.currentValue
             });
         }
 
         function applySettings() {
-            const cacheIndex = diskEditCacheCombo.currentIndex;
-            const discardIndex = diskEditDiscardCombo.currentIndex;
             const advanced = {
                 source: sourcePath.trim(),
                 readonly: diskEditReadonlyCheck.checked,
                 shareable: diskEditShareableCheck.checked,
                 serial: diskEditSerialField.text.trim(),
-                cache: cacheIndex === 0 ? "" : diskEditCacheCombo.model[cacheIndex],
-                discard: discardIndex === 0 ? "" : diskEditDiscardCombo.model[discardIndex]
+                cache: diskEditCacheCombo.currentValue,
+                discard: diskEditDiscardCombo.currentValue
             };
             if (Karton.editDomainDiskAdvanced(root.domain, targetDev, advanced)) {
                 close();
@@ -2425,8 +2423,8 @@ Kirigami.Dialog {
             diskEditReadonlyCheck.enabled = !isCdrom;
             diskEditShareableCheck.checked = advanced.shareable === true;
             diskEditSerialField.text = advanced.serial || "";
-            diskEditCacheCombo.currentIndex = Math.max(0, diskEditCacheCombo.model.indexOf(advanced.cache || ""));
-            diskEditDiscardCombo.currentIndex = Math.max(0, diskEditDiscardCombo.model.indexOf(advanced.discard || ""));
+            diskEditCacheCombo.currentIndex = Math.max(0, diskEditCacheCombo.indexOfValue(advanced.cache || ""));
+            diskEditDiscardCombo.currentIndex = Math.max(0, diskEditDiscardCombo.indexOfValue(advanced.discard || ""));
             savedState = currentState();
         }
 
@@ -2524,8 +2522,16 @@ Kirigami.Dialog {
                 Controls.ComboBox {
                     id: diskEditCacheCombo
                     visible: !editDiskDialog.isCdrom
-                    model: ["", "none", "writethrough", "writeback", "directsync", "unsafe"]
-                    displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                    model: [
+                        { text: qsTr("hypervisor_default"), value: "" },
+                        { text: "none", value: "none" },
+                        { text: "writethrough", value: "writethrough" },
+                        { text: "writeback", value: "writeback" },
+                        { text: "directsync", value: "directsync" },
+                        { text: "unsafe", value: "unsafe" }
+                    ]
+                    textRole: "text"
+                    valueRole: "value"
                     Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                 }
@@ -2539,8 +2545,13 @@ Kirigami.Dialog {
                 Controls.ComboBox {
                     id: diskEditDiscardCombo
                     visible: !editDiskDialog.isCdrom
-                    model: ["", "unmap", "ignore"]
-                    displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                    model: [
+                        { text: qsTr("hypervisor_default"), value: "" },
+                        { text: "unmap", value: "unmap" },
+                        { text: "ignore", value: "ignore" }
+                    ]
+                    textRole: "text"
+                    valueRole: "value"
                     Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                 }

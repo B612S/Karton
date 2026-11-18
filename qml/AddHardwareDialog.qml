@@ -138,14 +138,12 @@ Kirigami.Dialog {
             permissionGrantDialog.openFor(directory);
             return;
         }
-        const cacheIndex = addDiskCache.currentIndex;
-        const discardIndex = addDiskDiscard.currentIndex;
         const options = {
             directory: directory,
             filename: addDiskFileNameField.text.trim(),
             bus: addDiskBus.currentText,
-            cache: cacheIndex === 0 ? "" : addDiskCache.model[cacheIndex],
-            discard: discardIndex === 0 ? "" : addDiskDiscard.model[discardIndex],
+            cache: addDiskCache.currentValue,
+            discard: addDiskDiscard.currentValue,
             readonly: addDiskReadonly.checked,
             shareable: addDiskShareable.checked,
             serial: addDiskSerial.text.trim()
@@ -579,8 +577,19 @@ Kirigami.Dialog {
                                     }
                                     Controls.ComboBox {
                                         id: addDiskCache
-                                        model: ["", "none", "writethrough", "writeback", "directsync", "unsafe"]
-                                        displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                                        // Use text/value roles instead of an empty
+                                        // first string: an empty model entry showed
+                                        // up as a blank row in the popup.
+                                        model: [
+                                            { text: qsTr("hypervisor_default"), value: "" },
+                                            { text: "none", value: "none" },
+                                            { text: "writethrough", value: "writethrough" },
+                                            { text: "writeback", value: "writeback" },
+                                            { text: "directsync", value: "directsync" },
+                                            { text: "unsafe", value: "unsafe" }
+                                        ]
+                                        textRole: "text"
+                                        valueRole: "value"
                                         Layout.preferredWidth: 260
                                     }
                                 }
@@ -593,8 +602,13 @@ Kirigami.Dialog {
                                     }
                                     Controls.ComboBox {
                                         id: addDiskDiscard
-                                        model: ["", "unmap", "ignore"]
-                                        displayText: currentIndex === 0 ? qsTr("hypervisor_default") : currentText
+                                        model: [
+                                            { text: qsTr("hypervisor_default"), value: "" },
+                                            { text: "unmap", value: "unmap" },
+                                            { text: "ignore", value: "ignore" }
+                                        ]
+                                        textRole: "text"
+                                        valueRole: "value"
                                         Layout.preferredWidth: 260
                                     }
                                 }

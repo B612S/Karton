@@ -704,6 +704,7 @@
 <message><source>display</source><translation>Дисплей</translation></message>
 <message><source>exit_fullscreen</source><translation>Выйти из полноэкранного режима</translation></message>
 <message><source>fit_guest_to_window</source><translation>Подогнать гостя под окно</translation></message>
+<message><source>fullscreen</source><translation>Полный экран</translation></message>
 <message><source>guest_agent_is_not_connected_automatic_resize_requires_spice_vdagent_in_the_guest</source><translation>Гостевой агент не подключён. Для автоматического изменения размера требуется spice-vdagent в госте.</translation></message>
 <message><source>hibernate</source><translation>Гибернация</translation></message>
 <message><source>hibernating_vm_1</source><translation>Гибернация ВМ: %1</translation></message>

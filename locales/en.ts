@@ -704,6 +704,7 @@ This action cannot be undone.</translation></message>
 <message><source>display</source><translation>Display</translation></message>
 <message><source>exit_fullscreen</source><translation>Exit Fullscreen</translation></message>
 <message><source>fit_guest_to_window</source><translation>Fit Guest to Window</translation></message>
+<message><source>fullscreen</source><translation>Fullscreen</translation></message>
 <message><source>guest_agent_is_not_connected_automatic_resize_requires_spice_vdagent_in_the_guest</source><translation>Guest agent is not connected. Automatic resize requires spice-vdagent in the guest.</translation></message>
 <message><source>hibernate</source><translation>Hibernate</translation></message>
 <message><source>hibernating_vm_1</source><translation>Hibernating VM: %1</translation></message>

@@ -387,9 +387,8 @@ Kirigami.ApplicationWindow {
     }
 
     // The configured guest resolution always wins over whatever size was last
-    // written to karton.conf. This is what guarantees a fixed-resolution VM
-    // (for example FullHD) reopens at that size even after a crash while the
-    // viewer was fullscreen or had an unrelated geometry.
+    // written to karton.conf. 1920x1080 is the guest area only, so the window
+    // is sized to that content plus the toolbar and is then locked to it.
     function applyFixedWindowSize() {
         if (fixedContentWidth <= 0 || fixedContentHeight <= 0 || viewerWindow.isFullScreen || viewerWindow.fullScreenTransition) {
             return;
@@ -400,17 +399,21 @@ Kirigami.ApplicationWindow {
         const chrome = chromeHeight();
         const windowWidth = Math.max(320, contentWidth);
         const windowHeight = Math.max(240, contentHeight + chrome);
-        if (viewerWindow.width === windowWidth && viewerWindow.height === windowHeight) {
-            return;
-        }
-        // Set the size but do not pin min/max to it. KWin keeps a client's
-        // maximum size even when the window becomes fullscreen, which left the
-        // viewer (and therefore the guest resolution) at the fixed 1920x1126
-        // size on a 3440x1440 screen. The size is re-applied when returning
-        // from fullscreen, so the configured resolution still wins on open.
+
+        // A different fixed resolution selected in Settings may be larger than
+        // the old maximum, so clear the limits before applying the new size.
         resetWindowSizeLimits();
         viewerWindow.width = windowWidth;
         viewerWindow.height = windowHeight;
+        // In windowed mode the fixed guest resolution also fixes the window.
+        // The limits are released before entering fullscreen and re-applied
+        // after the compositor has restored the window; otherwise KWin keeps
+        // the windowed maximum for the fullscreen surface and the guest stays
+        // at 1920x1080 instead of following the screen.
+        viewerWindow.minimumWidth = windowWidth;
+        viewerWindow.maximumWidth = windowWidth;
+        viewerWindow.minimumHeight = windowHeight;
+        viewerWindow.maximumHeight = windowHeight;
     }
 
     function applyDisplayMode() {
@@ -981,6 +984,7 @@ Kirigami.ApplicationWindow {
                 }
             },
             Kirigami.Action {
+                text: qsTr("power_off")
                 icon.name: "arrow-down-symbolic"
                 displayHint: Kirigami.DisplayHint.IconOnly
                 visible: viewerWindow.isRunning
@@ -1012,6 +1016,7 @@ Kirigami.ApplicationWindow {
                 }
             },
             Kirigami.Action {
+                text: qsTr("reset")
                 icon.name: "arrow-down-symbolic"
                 displayHint: Kirigami.DisplayHint.IconOnly
                 visible: viewerWindow.isRunning
@@ -1026,7 +1031,9 @@ Kirigami.ApplicationWindow {
                 }
             },
             Kirigami.Action {
+                text: qsTr("fullscreen")
                 icon.name: "view-fullscreen-symbolic"
+                displayHint: Kirigami.DisplayHint.IconOnly
                 onTriggered: {
                     viewerWindow.toggleFullScreen();
                     Qt.callLater(viewerWindow.focusDisplay);
@@ -1080,7 +1087,7 @@ Kirigami.ApplicationWindow {
             Controls.MenuItem {
                 text: qsTr("actual_size")
                 icon.name: "zoom-original-symbolic"
-                enabled: !domainViewer.serialConsoleActive
+                enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
                 onTriggered: {
                     viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
                     viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
@@ -1089,7 +1096,7 @@ Kirigami.ApplicationWindow {
             Controls.MenuItem {
                 text: qsTr("fit_guest_to_window")
                 icon.name: "transform-scale-symbolic"
-                enabled: !domainViewer.serialConsoleActive
+                enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
                 onTriggered: domainViewer.fitGuestToWindow()
             }
             Controls.MenuSeparator {}

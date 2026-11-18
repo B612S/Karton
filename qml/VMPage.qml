@@ -123,6 +123,7 @@ Kirigami.ScrollablePage {
             }
         },
         Kirigami.Action {
+            text: qsTr("power_off")
             icon.name: "arrow-down-symbolic"
             displayHint: Kirigami.DisplayHint.IconOnly
             visible: isRunning
@@ -141,6 +142,7 @@ Kirigami.ScrollablePage {
             onTriggered: Karton.rebootDomain(domain)
         },
         Kirigami.Action {
+            text: qsTr("reset")
             icon.name: "arrow-down-symbolic"
             displayHint: Kirigami.DisplayHint.IconOnly
             visible: isRunning
