@@ -124,6 +124,17 @@ void TerminalView::setFontSize(int pixels)
     Q_EMIT fontSizeChanged();
 }
 
+void TerminalView::setCursorShape(const QString &shape)
+{
+    const QString normalized = shape == QStringLiteral("bar") || shape == QStringLiteral("underline") ? shape : QStringLiteral("block");
+    if (m_cursorShape == normalized) {
+        return;
+    }
+    m_cursorShape = normalized;
+    update();
+    Q_EMIT cursorShapeChanged();
+}
+
 void TerminalView::updateGridGeometry()
 {
     const qreal availableWidth = width();
@@ -255,14 +266,21 @@ void TerminalView::paint(QPainter *painter)
     if (scrollOffset == 0 && m_cursorVisible && m_cursorColumn >= 0 && m_cursorColumn < m_columns && m_cursorRow >= 0 && m_cursorRow < m_rows) {
         const QRectF cursorRect(m_originX + m_cursorColumn * m_cellWidth, m_originY + m_cursorRow * m_cellHeight, m_cellWidth, m_cellHeight);
         const Cell &cell = cellAt(m_cursorColumn, m_cursorRow);
-        if (hasActiveFocus()) {
-            painter->fillRect(cursorRect, QColor(cell.fg));
+        const bool focused = hasActiveFocus();
+        const QColor cursorColor = focused ? QColor(cell.fg) : QColor(DefaultForeground);
+        const qreal stroke = qMax(1.0, m_cellHeight / 10.0);
+        if (m_cursorShape == QStringLiteral("bar")) {
+            painter->fillRect(QRectF(cursorRect.left(), cursorRect.top(), qMax(1.0, m_cellWidth / 8.0), cursorRect.height()), cursorColor);
+        } else if (m_cursorShape == QStringLiteral("underline")) {
+            painter->fillRect(QRectF(cursorRect.left(), cursorRect.bottom() - stroke, cursorRect.width(), stroke), cursorColor);
+        } else if (focused) {
+            painter->fillRect(cursorRect, cursorColor);
             if (cell.ch != QLatin1Char(' ')) {
                 painter->setPen(QColor(cell.bg));
                 painter->drawText(cursorRect, Qt::AlignLeft | Qt::AlignVCenter, QString(cell.ch));
             }
         } else {
-            painter->setPen(QColor(DefaultForeground));
+            painter->setPen(cursorColor);
             painter->drawRect(cursorRect.adjusted(0.5, 0.5, -0.5, -0.5));
         }
     }

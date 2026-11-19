@@ -50,6 +50,7 @@ development or testing must pass `-c <same URI>` (usually
 | `core/util/xmlhighlighter.*` | Theme-coloured XML syntax highlighter for the VM XML editor. |
 | `qml/` | Kirigami QML pages and dialogs. |
 | `tests/` | Opt-in QtTest unit tests; never linked into the application. |
+| `scripts/guests/` | Standalone guest installers (`linux/install.sh`, `windows/install.cmd`) that download and install the guest agents themselves. |
 | `src/` | Reserved for makepkg's `$srcdir`; it is not used for source files. |
 
 C++ sources are grouped by responsibility under `core/`:
@@ -357,10 +358,12 @@ Karton style; do not invent a separate layout for a new screen.
   call is ever needed, pass `-c <the same URI>` to match the application's
   active connection.
 - Karton stores its own data inside domain XML metadata:
-  `<karton:data maxDiskStorage="…" screenshotPreviewPath="…"/>`.
-  `maxDiskStorage` is stored in MiB. `DomainXmlReader` gets the XML from
-  libvirt (`virDomainGetXMLDesc()`) rather than reading the config file on
-  disk. Preserve unknown metadata when rewriting XML —
+  `<karton:data maxDiskStorage="…"/>`. `maxDiskStorage` is stored in MiB. Older
+  domains may also carry a legacy `screenshotPreviewPath`; new domains do not
+  write it, and the referenced files are cleaned up because previews are
+  memory-only. `DomainXmlReader` gets the XML from libvirt
+  (`virDomainGetXMLDesc()`) rather than reading the config file on disk.
+  Preserve unknown metadata when rewriting XML —
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
 - `Karton::deleteDomain()` undefines with
@@ -444,13 +447,21 @@ Karton style; do not invent a separate layout for a new screen.
   VM (`display/<uuid>/width|height`), with presets and a Custom width/height
   pair. When set, the viewer requests that exact
   SPICE resolution, opens at the matching window size and scales the content to
-  fit the screen; Auto restores normal auto-resize. The window size is not
-  enforced with min/max hints, because KWin keeps a client's maximum size for
-  the fullscreen surface (the guest then stayed at the fixed 1920x1126 instead
-  of following a 3440x1440 output). In fullscreen the fixed resolution is
-  ignored; `updateDisplayResolution()` uses the full `QScreen` geometry rather
-  than the page size so the guest follows the output even if the page has not
-  been resized yet. The Display page also exposes QXL
+  fit the screen; Auto restores normal auto-resize. With a fixed resolution the
+  viewer window is pinned to the matching client size plus the toolbar in
+  windowed mode; the min/max limits are released before entering fullscreen and
+  re-applied only after the compositor has restored the window, so KWin does
+  not keep a windowed maximum for the fullscreen surface. In fullscreen the
+  fixed resolution is ignored; `updateDisplayResolution()` uses the full
+  `QScreen` geometry rather than the page size so the guest follows the output
+  even if the page has not been resized yet. Minimizing and restoring a viewer
+  is left to the compositor, including its window effects: only
+  `showMinimized()` is called and the windowed size/limits are not touched
+  while it is minimized. Never call `showNormal()` to make a fullscreen
+  minimize work; that drops the fullscreen state and makes the compositor
+  restore a windowed window in the screen corner. Viewers are created hidden
+  and map once in their final mode, so opening one from the VM preview does
+  not flash a windowed window first. The Display page also exposes QXL
   video memory (`vgamem`, 16–256 MiB) for higher guest resolutions; libvirt
   requires `vgamem` to be a power of two, so the page offers only those preset
   sizes and the backend rounds defensively. The change
@@ -528,17 +539,30 @@ Karton style; do not invent a separate layout for a new screen.
   `DomainConfig::networkModel`; the selected libvirt network is passed as
   `networkName` and validated with `virNetworkLookupByName()` before defining
   the domain.
-- The screenshot preview path defaults to
-  `$XDG_STATE_HOME/previews/<uuid>.png` (via `QStandardPaths::StateLocation`).
-  `VMPage.qml` polls `Karton::refreshDomainPreview()` every second while the
-  VM is running, the page is visible and no viewer is open (a viewer would make
-  QEMU screenshots pause the guest during interaction). The capture is an
-  asynchronous `virsh screenshot` process through `CommandRunner`, so the GUI
-  is never blocked by libvirt's synchronous screenshot path. Preview images are
-  scaled to 640 px and written atomically through `QSaveFile` for persistence;
-  `Domain::savePreviewFrame()` also keeps the new frame in memory and emits
-  `previewFrameChanged()`. `PreviewItem` paints that `QImage` directly, so the
-  QML never reloads a PNG while updating and the preview does not blink.
+- Karton does not take VM screenshots and never writes a preview file:
+  `virDomainScreenshot()` is not used, because libvirt's QEMU driver would
+  create a short-lived per-domain screenshot file anyway. Live previews come
+  from SPICE instead. Each VM page creates a hidden `VMViewerWindow` with
+  `previewMode: true`; it owns the single SPICE connection for that VM and
+  registers through `Karton::registerPreviewViewer()` without increasing
+  `viewerCount`. The hidden viewer's `DomainViewer` has `previewOnly: true`,
+  connects only the SPICE display and main channels (no input, cursor, audio,
+  clipboard or serial fallback), and `updateLivePreview()` throttles frames to
+  200 ms, storing them through `Domain::updateLivePreviewFrame()`; a retry
+  timer and a 500 ms frame pump keep the preview alive after reconnects.
+  Opening the viewer promotes that same window with `openAsViewer()` and
+  switches `DomainViewer::previewOnly` off, so no second SPICE client is ever
+  created. Closing the viewer demotes the window back to preview mode with
+  `enterPreviewMode()`; `Karton::viewerForDomain()` also returns preview
+  windows so list/detail open actions reuse them. Preview windows are never
+  destroyed while the application runs: on page close/VM stop they are
+  disconnected and hidden (`suspendPreview()`) and resumed on the next page
+  open, because destroying a QQuickWindow at runtime leaves QQC2/Breeze style
+  timers pointing at freed objects. `PreviewItem` paints the
+  in-memory `QImage` directly, so the QML never reloads an image and the
+  preview does not blink. A stopped VM shows no preview, and the legacy
+  `screenshotPreviewPath` metadata plus any old PNG files are ignored and
+  removed when domains are listed.
 - SPICE cursor shapes are installed as the actual host cursor by
   `DomainViewer::applyGuestCursor()`; no scene-graph cursor overlay is painted.
   There is one display node per renderer and one root node that owns it. Client
@@ -590,12 +614,27 @@ Karton style; do not invent a separate layout for a new screen.
   stays absent for three minutes (removed guest tools, replaced image at the
   same path, slow boot), the cached state is cleared and the hint can appear
   again after the normal grace period.
+- Guest tools are plain scripts in `scripts/guests/`: `linux/install.sh` and
+  `windows/install.cmd`. Karton does not download, mount or execute anything in
+  the guest and has no UI action for this; the user copies the script into the
+  guest and runs it. Both scripts download and install the packages themselves,
+  so the guest needs internet access: the Linux script uses the guest's package
+  manager (apt, dnf, yum, pacman, zypper or apk) for qemu-guest-agent,
+  spice-vdagent, spice-webdavd, Mesa virtio-gpu/Vulkan and a serial getty; the
+  Windows script self-elevates, downloads the latest virtio-win guest tools
+  bundle from the stable `latest-virtio` URL, falls back to the VirtIO driver
+  MSI, installs WinFsp and offers a restart, logging to
+  `%TEMP%\karton-guest-tools.log`.
+- Karton logging is quiet by default: Karton info/debug and libvirt error
+  messages are suppressed. Pass `--verbose` or set `KARTON_VERBOSE=1` to
+  enable them.
 - The guest cursor is installed as the actual host cursor and no scene-graph
   cursor overlay is painted, so pointer motion must not call
   `QQuickItem::update()`; doing so repainted the whole viewer at pointer rate.
-  While the pointer is inside the display, a guest `cursor-hide` keeps the last
-  guest cursor and leaves the host cursor blank, so dragging a guest window
-  does not flash the host arrow.
+  A guest `cursor-hide` blanks the host cursor while the pointer is over the
+  display instead of re-installing the last shape: the guest draws its own
+  cursor into the framebuffer in that case (window dragging, full-screen video,
+  xrdp/mstsc), and showing the stale host cursor produced two visible mice.
 - `PrimarySurfaceRenderer` copies SPICE's primary framebuffer into an owned
   `QImage`. The original buffer is unmapped by spice-gtk when the guest changes
   resolution (notably while Windows boots); creating/using a texture from that
@@ -623,6 +662,18 @@ Karton style; do not invent a separate layout for a new screen.
   GLib main loop from inside the stream callback and aborts the process during
   a guest reboot. Stream teardown is deferred with `QTimer::singleShot(0)` and
   a generation check instead of aborting/freeing the stream from the callback.
+- A dropped SPICE session must not leave the viewer on a dead frame. The
+  session's `disconnected` signal is connected for every session, and
+  `DomainViewer::sessionDisconnectedCallback()` clears `m_connected`, the
+  channel pointers and `m_inputsChannelReady`, releases the pointer grab and
+  reconnects: previews through the 1 s preview retry, real viewers through a
+  1.5 s timer. Input is only sent when the inputs channel reported
+  `SPICE_CHANNEL_OPENED` via `SpiceChannel::channel-event` (`inputsReady()`);
+  spice-gtk 0.43 has no `spice_channel_get_state()`. The SPICE endpoint from
+  the live XML is cached in `m_endpointValid`: re-reading it on every reconnect
+  blocks the GUI thread while libvirt is busy during a guest reboot. The cache
+  is dropped when the domain, preview mode or the TLS options change and after
+  three failed viewer reconnects, because a restarted VM can change an autoport.
 - `VMViewerWindow.qml` registers itself with `Karton::registerViewer()`.
   Opening the same VM again focuses/raises the existing window instead of
   creating a duplicate. Its toolbar has the same split actions as the VM page:

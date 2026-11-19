@@ -48,6 +48,9 @@ class DomainViewer : public QQuickItem
     Q_PROPERTY(int clipboardTextMode READ clipboardTextMode WRITE setClipboardTextMode NOTIFY clipboardTextModeChanged)
     Q_PROPERTY(int clipboardFilesMode READ clipboardFilesMode WRITE setClipboardFilesMode NOTIFY clipboardFilesModeChanged)
     Q_PROPERTY(bool serialConsoleActive READ serialConsoleActive NOTIFY serialConsoleActiveChanged)
+    // Preview-only instances connect to SPICE just to copy frames into the
+    // Domain preview; they never handle input, audio, clipboard or serial.
+    Q_PROPERTY(bool previewOnly READ previewOnly WRITE setPreviewOnly NOTIFY previewOnlyChanged)
 
 public:
     explicit DomainViewer(QQuickItem *parent = nullptr);
@@ -111,6 +114,11 @@ public:
     {
         return m_serialConsoleActive;
     }
+    bool previewOnly() const
+    {
+        return m_previewOnly;
+    }
+    void setPreviewOnly(bool previewOnly);
     Q_INVOKABLE void sendConsoleText(const QString &text);
     Q_INVOKABLE void grabPointer();
     Q_INVOKABLE void releasePointerGrab();
@@ -144,6 +152,13 @@ public:
     Q_INVOKABLE void setFixedDisplayResolution(int width, int height);
     Q_INVOKABLE void updateDisplayResolution();
     Q_INVOKABLE void fitGuestToWindow();
+    // Ignore frames for a short time after a preview reconnects; SPICE sends
+    // an empty/black surface first, which made the page preview blink.
+    Q_INVOKABLE void armPreviewSettle(int milliseconds);
+    // Stop/restart a preview connection without destroying the window. While
+    // stopped, retries and the frame pump must not reconnect it in the
+    // background (that made a page switch reconnect twice and flicker).
+    Q_INVOKABLE void setPreviewStopped(bool stopped);
 
 Q_SIGNALS:
     void domainChanged();
@@ -158,6 +173,7 @@ Q_SIGNALS:
     void clipboardTextModeChanged();
     void clipboardFilesModeChanged();
     void serialConsoleActiveChanged();
+    void previewOnlyChanged();
     void consoleDataReceived(const QString &text);
 
 private Q_SLOTS:
@@ -180,6 +196,11 @@ private:
     bool openSerialConsole();
     void closeSerialConsole();
     void scheduleConsoleClose();
+    void schedulePreviewRetry();
+    void scheduleViewerRetry();
+    bool inputsReady() const;
+    static void sessionDisconnectedCallback(SpiceSession *session, gpointer userData);
+    static void inputsChannelEventCallback(SpiceChannel *channel, SpiceChannelEvent event, gpointer userData);
     static void consoleEventCallback(virStreamPtr stream, int events, void *opaque);
     void flushConsoleWrites();
     void updateConsoleEvents();
@@ -209,6 +230,12 @@ private:
     QString m_spiceUri;
     QString m_errorMessage;
     bool m_connected = false;
+    // The SPICE endpoint (port, TLS password, render mode) is parsed from the
+    // live XML once. Reconnects reuse it: re-reading the live XML of a busy
+    // domain blocks the GUI thread, and a reconnect loop would make the whole
+    // window unresponsive during a guest reboot.
+    bool m_endpointValid = false;
+    int m_viewerReconnectAttempts = 0;
     RenderMode m_renderMode = RenderMode::GlScanout;
 
     std::unique_ptr<SpiceDisplayRenderer> m_renderer;
@@ -220,10 +247,14 @@ private:
     SpiceSession *m_session = nullptr;
     SpiceMainChannel *m_main_channel = nullptr;
     SpiceInputsChannel *m_inputs_channel = nullptr;
+    // SpiceInputsChannel reports readiness through SpiceChannel::channel-event;
+    // sending input to a channel that is not opened trips GLib assertions.
+    bool m_inputsChannelReady = false;
     ClipboardManager *m_clipboard = nullptr;
 
     virStreamPtr m_consoleStream = nullptr;
     bool m_serialConsoleActive = false;
+    bool m_previewOnly = false;
     bool m_consoleClosePending = false;
     quint64 m_consoleGeneration = 0;
     QByteArray m_consoleWriteBuffer;
@@ -276,6 +307,20 @@ private:
     QSGSimpleTextureNode *m_cursorNode = nullptr;
     bool m_previewGrabPending = false;
     QElapsedTimer m_livePreviewTimer;
+    // Preview-only connections can be dropped when a real viewer takes over
+    // the single SPICE display client. Retry and pump the cache so the page
+    // preview does not stay blank after a reconnect.
+    QTimer m_previewRetryTimer;
+    QTimer m_previewWatchdog;
+    QTimer m_previewPump;
+    // Reconnects a real viewer after the SPICE session drops (guest reboot,
+    // restarted display server) instead of leaving the window on a dead frame.
+    QTimer m_viewerRetryTimer;
+    QElapsedTimer m_previewSettle;
+    int m_previewSettleMs = 0;
+    int m_previewBlankFrames = 0;
+    bool m_previewStopped = false;
+    bool m_disconnecting = false;
 
     static constexpr quint32 x11_wayland_evdev_offset = 8;
     // difference of 8 between x11 wayland.

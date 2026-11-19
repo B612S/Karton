@@ -118,6 +118,10 @@
 <message><source>enable_ipv6</source><translation>Включить IPv6</translation></message>
 <message><source>end</source><translation>Конец</translation></message>
 <message><source>example_lan</source><translation>example.lan</translation></message>
+<message><source>cursor_shape</source><translation>Форма курсора</translation></message>
+<message><source>cursor_block</source><translation>Квадрат</translation></message>
+<message><source>cursor_bar</source><translation>Вертикальная линия</translation></message>
+<message><source>cursor_underline</source><translation>Нижняя линия</translation></message>
 <message><source>font_size</source><translation>Размер шрифта</translation></message>
 <message><source>forward_to</source><translation>Перенаправить на</translation></message>
 <message><source>github_repository</source><translation>Репозиторий GitHub</translation></message>
@@ -445,6 +449,10 @@
 <message><source>virtio_serial_controller</source><translation>Последовательный контроллер VirtIO</translation></message>
 <message><source>vsock</source><translation>VSOCK</translation></message>
 <message><source>watchdog</source><translation>Сторожевой таймер</translation></message>
+
+<message><source>could_not_start_the_windows_driver_installer_1</source><translation>Не удалось запустить установщик драйверов Windows: %1</translation></message>
+
+<message><source>the_vm_has_no_cd_rom_drive_add_one_while_it_is_stopped</source><translation>У этой VM нет привода CD-ROM.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -477,6 +485,7 @@
 <message><source>apply_xml</source><translation>Применить XML</translation></message>
 <message><source>attached_pci_devices</source><translation>Подключённые устройства PCI</translation></message>
 <message><source>attaching_a_pci_device_detaches_it_from_the_host_devices_without_an_iommu_group_cannot_be</source><translation>При подключении устройства PCI оно отсоединяется от хоста. Устройства без группы IOMMU подключить нельзя.</translation></message>
+<message><source>fullscreen</source><translation>Полный экран</translation></message>
 <message><source>auto_fit_window</source><translation>Авто (по размеру окна)</translation></message>
 <message><source>backend</source><translation>Бэкенд</translation></message>
 <message><source>bidirectional</source><translation>Двунаправленно</translation></message>
@@ -642,6 +651,7 @@
 <message><source>usb_devices</source><translation>Устройства USB</translation></message>
 <message><source>usb_devices_1</source><translation>Устройства USB — %1</translation></message>
 </context>
+
 <context>
 <name>VMListPage</name>
 <message><source>cannot_connect_to_libvirt</source><translation>Не удалось подключиться к libvirt</translation></message>
@@ -680,6 +690,7 @@
 <message><source>more</source><translation>Ещё</translation></message>
 <message><source>pause</source><translation>Приостановить</translation></message>
 <message><source>power_off</source><translation>Отключить питание</translation></message>
+<message><source>ram</source><translation>ОЗУ</translation></message>
 <message><source>reboot</source><translation>Перезагрузить</translation></message>
 <message><source>reset</source><translation>Сбросить</translation></message>
 <message><source>resume</source><translation>Продолжить</translation></message>
@@ -694,6 +705,17 @@
 <message><source>storage</source><translation>Хранилище</translation></message>
 <message><source>uuid</source><translation>UUID</translation></message>
 <message><source>virtual_disk_path</source><translation>Путь к виртуальному диску</translation></message>
+<message><source>all_files</source><translation>Все файлы (*)</translation></message>
+<message><source>cdrom</source><translation>CD-ROM</translation></message>
+<message><source>change</source><translation>Изменить…</translation></message>
+<message><source>choose_cd_rom_media</source><translation>Выбрать образ CD-ROM</translation></message>
+<message><source>disk</source><translation>Диск</translation></message>
+<message><source>disk_images_iso_img_raw</source><translation>Образы дисков (*.iso *.img *.raw)</translation></message>
+<message><source>insert</source><translation>Вставить…</translation></message>
+<message><source>no_disks</source><translation>Нет дисков</translation></message>
+<message><source>no_media</source><translation>Нет носителя</translation></message>
+<message><source>performance</source><translation>Производительность</translation></message>
+<message><source>s_1_of_2</source><translation>%1 из %2</translation></message>
 </context>
 <context>
 <name>VMViewerWindow</name>

@@ -15,8 +15,8 @@ Kirigami.Dialog {
 
     modal: true
     padding: 0
-    readonly property real cardWidth: applicationWindow() ? Math.min(1000, applicationWindow().width - 48) : 1000
-    readonly property real cardHeight: applicationWindow() ? Math.min(680, applicationWindow().height - 48) : 680
+    readonly property real cardWidth: applicationWindow() ? Math.max(640, Math.min(1000, applicationWindow().width - 48)) : 1000
+    readonly property real cardHeight: applicationWindow() ? Math.max(460, Math.min(680, applicationWindow().height - 48)) : 680
     width: cardWidth
     height: cardHeight
     header: Item {}
@@ -92,8 +92,14 @@ Kirigami.Dialog {
     })
     readonly property var soundModels: ["ich9", "ac97", "none"]
     readonly property var soundLabels: ["ich9", "AC97", qsTr("none")]
+    // Fixed resolutions specify the guest area, not the window: the viewer
+    // toolbar adds about two grid units of chrome around it. Keep these values
+    // in sync with VMViewerWindow.minimumGuestWidth/minimumGuestHeight.
+    readonly property int minimumDisplayWidth: Kirigami.Units.gridUnit * 40
+    readonly property int minimumDisplayHeight: Kirigami.Units.gridUnit * 27
     readonly property var displayResolutions: [
         { label: qsTr("auto_fit_window"), width: 0, height: 0 },
+        { label: qsTr("fullscreen"), width: 0, height: 0 },
         { label: "1280 × 720", width: 1280, height: 720 },
         { label: "1600 × 900", width: 1600, height: 900 },
         { label: "1920 × 1080", width: 1920, height: 1080 },
@@ -133,7 +139,7 @@ Kirigami.Dialog {
         videoCombo.currentIndex = Math.max(0, videoModels.indexOf(hardware.videoModel));
         videoHeadsSpin.value = Math.max(1, hardware.videoHeads || 1);
         videoMemoryCombo.currentIndex = Math.max(0, videoMemoryOptions.indexOf(nearestVideoMemory((hardware.videoMemoryKiB || 16384) / 1024)));
-        accel3dCheck.checked = hardware.accel3d === true;
+        accel3dCheck.checked = hardware.accel3d === true && hardware.videoModel === "virtio";
         soundCombo.currentIndex = Math.max(0, soundModels.indexOf(hardware.soundModel));
         soundOutputCheck.checked = Karton.audioPlaybackEnabled(domain);
         microphoneCheck.checked = Karton.microphoneEnabled(domain);
@@ -165,18 +171,26 @@ Kirigami.Dialog {
         Qt.callLater(root.ensureVisibleCategory);
 
         const resolution = Karton.domainDisplayResolution(domain);
+        const fullscreenMode = Karton.domainDisplayFullscreen(domain);
         let resolutionIndex = 0;
-        for (let i = 0; i < displayResolutions.length - 1; ++i) {
-            if (displayResolutions[i].width === (resolution.width || 0)
-                && displayResolutions[i].height === (resolution.height || 0)) {
-                resolutionIndex = i;
-                break;
+        if (fullscreenMode) {
+            resolutionIndex = 1;
+        } else {
+            for (let i = 0; i < displayResolutions.length - 1; ++i) {
+                if (i === 1) {
+                    continue;
+                }
+                if (displayResolutions[i].width === (resolution.width || 0)
+                    && displayResolutions[i].height === (resolution.height || 0)) {
+                    resolutionIndex = i;
+                    break;
+                }
             }
-        }
-        if (resolution.width > 0 && resolution.height > 0 && resolutionIndex === 0) {
-            resolutionIndex = displayResolutions.length - 1;
-            displayCustomWidth.value = resolution.width;
-            displayCustomHeight.value = resolution.height;
+            if (resolution.width > 0 && resolution.height > 0 && resolutionIndex === 0) {
+                resolutionIndex = displayResolutions.length - 1;
+                displayCustomWidth.value = resolution.width;
+                displayCustomHeight.value = resolution.height;
+            }
         }
         displayResolutionCombo.currentIndex = resolutionIndex;
         const consoleOverride = Karton.domainConsoleFontSize(domain);
@@ -192,11 +206,15 @@ Kirigami.Dialog {
         if (!domain) {
             return null;
         }
+        const fullscreenMode = displayResolutionCombo.currentIndex === 1;
         let resolutionWidth = 0;
         let resolutionHeight = 0;
-        if (displayResolutionCombo.currentIndex === displayResolutions.length - 1) {
-            resolutionWidth = displayCustomWidth.value;
-            resolutionHeight = displayCustomHeight.value;
+        if (fullscreenMode) {
+            resolutionWidth = 0;
+            resolutionHeight = 0;
+        } else if (displayResolutionCombo.currentIndex === displayResolutions.length - 1) {
+            resolutionWidth = Math.max(root.minimumDisplayWidth, displayCustomWidth.value);
+            resolutionHeight = Math.max(root.minimumDisplayHeight, displayCustomHeight.value);
         } else {
             const resolution = displayResolutions[Math.max(0, displayResolutionCombo.currentIndex)];
             resolutionWidth = resolution.width;
@@ -212,7 +230,7 @@ Kirigami.Dialog {
             videoModel: videoModels[Math.max(0, videoCombo.currentIndex)],
             videoHeads: videoHeadsSpin.value,
             videoMemory: root.videoMemoryOptions[Math.max(0, videoMemoryCombo.currentIndex)],
-            accel3d: accel3dCheck.checked,
+            accel3d: accel3dCheck.checked && videoModels[videoCombo.currentIndex] === "virtio",
             soundModel: soundModels[Math.max(0, soundCombo.currentIndex)],
             tpmEnabled: tpmEnabledCheck.checked,
             tpmModel: ["tpm-crb", "tpm-tis"][Math.max(0, tpmModelCombo.currentIndex)],
@@ -220,6 +238,7 @@ Kirigami.Dialog {
             description: descriptionField.text,
             resolutionWidth: resolutionWidth,
             resolutionHeight: resolutionHeight,
+            fullscreen: fullscreenMode,
             consoleFontSize: consoleUseGlobalCheck.checked ? 0 : consoleFontSizeSpin.value,
             autostart: autostartCheck.checked,
             audioPlayback: soundOutputCheck.checked,
@@ -454,7 +473,7 @@ Kirigami.Dialog {
             videoModel: videoModels[videoCombo.currentIndex],
             videoHeads: videoHeadsSpin.value,
             videoMemory: root.videoMemoryOptions[Math.max(0, videoMemoryCombo.currentIndex)],
-            accel3d: accel3dCheck.checked,
+            accel3d: accel3dCheck.checked && videoModels[videoCombo.currentIndex] === "virtio",
             soundModel: soundModels[soundCombo.currentIndex],
             tpmEnabled: tpmEnabledCheck.checked,
             tpmModel: ["tpm-crb", "tpm-tis"][tpmModelCombo.currentIndex],
@@ -467,17 +486,21 @@ Kirigami.Dialog {
             return;
         }
 
+        const fullscreenMode = displayResolutionCombo.currentIndex === 1;
         let resolutionWidth = 0;
         let resolutionHeight = 0;
-        if (displayResolutionCombo.currentIndex === displayResolutions.length - 1) {
-            resolutionWidth = displayCustomWidth.value;
-            resolutionHeight = displayCustomHeight.value;
-        } else {
-            const resolution = displayResolutions[displayResolutionCombo.currentIndex];
-            resolutionWidth = resolution.width;
-            resolutionHeight = resolution.height;
+        if (!fullscreenMode) {
+            if (displayResolutionCombo.currentIndex === displayResolutions.length - 1) {
+                resolutionWidth = Math.max(root.minimumDisplayWidth, displayCustomWidth.value);
+                resolutionHeight = Math.max(root.minimumDisplayHeight, displayCustomHeight.value);
+            } else {
+                const resolution = displayResolutions[displayResolutionCombo.currentIndex];
+                resolutionWidth = resolution.width;
+                resolutionHeight = resolution.height;
+            }
         }
         Karton.saveDomainDisplayResolution(domain, resolutionWidth, resolutionHeight);
+        Karton.saveDomainDisplayFullscreen(domain, fullscreenMode);
         Karton.saveDomainConsoleFontSize(domain, consoleUseGlobalCheck.checked ? 0 : consoleFontSizeSpin.value);
 
         const name = nameField.text.trim();
@@ -508,6 +531,11 @@ Kirigami.Dialog {
 
     Connections {
         target: Karton
+        function onDomainStatsUpdated(uuid) {
+            if (root.domain && root.domain.config.uuid === uuid) {
+                root.performance = Karton.domainStats(root.domain);
+            }
+        }
         function onDomainEdited(success, name) {
             if (name !== root.pendingName) {
                 return;
@@ -876,9 +904,7 @@ Kirigami.Dialog {
                         Controls.Label {
                             text: root.performance.memoryUsedKiB !== undefined
                                 ? qsTr("s_1_mib_of_2_mib_used").arg((root.performance.memoryUsedKiB / 1024).toFixed(0)).arg((root.performance.memoryTotalKiB / 1024).toFixed(0))
-                                : (root.performance.memoryKiB !== undefined
-                                    ? qsTr("s_1_mib_allocated").arg((root.performance.memoryKiB / 1024).toFixed(0))
-                                    : "—")
+                                : "—"
                             opacity: 0.7
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
@@ -1217,6 +1243,11 @@ Kirigami.Dialog {
                             model: root.videoLabels
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
+                            onCurrentIndexChanged: {
+                                if (currentIndex >= 0 && videoModels[currentIndex] !== "virtio") {
+                                    accel3dCheck.checked = false;
+                                }
+                            }
                         }
                         Controls.Label {
                             text: qsTr("video_memory_mib")
@@ -1266,7 +1297,7 @@ Kirigami.Dialog {
                         Controls.SpinBox {
                             id: displayCustomWidth
                             visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
-                            from: 320
+                            from: root.minimumDisplayWidth
                             to: 7680
                             stepSize: 2
                             value: 1920
@@ -1283,7 +1314,7 @@ Kirigami.Dialog {
                         Controls.SpinBox {
                             id: displayCustomHeight
                             visible: displayResolutionCombo.currentIndex === root.displayResolutions.length - 1
-                            from: 240
+                            from: root.minimumDisplayHeight
                             to: 4320
                             stepSize: 2
                             value: 1080
@@ -1298,6 +1329,7 @@ Kirigami.Dialog {
                         }
                         Controls.CheckBox {
                             id: accel3dCheck
+                            enabled: videoCombo.currentIndex >= 0 && videoModels[videoCombo.currentIndex] === "virtio"
                             Layout.alignment: Qt.AlignRight
                         }
                     }
@@ -2729,6 +2761,17 @@ Kirigami.Dialog {
             }
             if (categoryList.currentIndex === categoryList.count - 1) {
                 root.loadXml(Karton.domainXml(root.domain));
+            }
+        }
+    }
+
+    Timer {
+        interval: 2000
+        repeat: true
+        running: root.opened && root.domain !== null && root.domain.isActive
+        onTriggered: {
+            if (root.domain) {
+                root.performance = Karton.domainStats(root.domain);
             }
         }
     }

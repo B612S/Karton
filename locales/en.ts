@@ -118,6 +118,10 @@
 <message><source>enable_ipv6</source><translation>Enable IPv6</translation></message>
 <message><source>end</source><translation>End</translation></message>
 <message><source>example_lan</source><translation>example.lan</translation></message>
+<message><source>cursor_shape</source><translation>Cursor shape</translation></message>
+<message><source>cursor_block</source><translation>Block</translation></message>
+<message><source>cursor_bar</source><translation>Bar</translation></message>
+<message><source>cursor_underline</source><translation>Underline</translation></message>
 <message><source>font_size</source><translation>Font size</translation></message>
 <message><source>forward_to</source><translation>Forward to</translation></message>
 <message><source>github_repository</source><translation>GitHub repository</translation></message>
@@ -445,6 +449,10 @@
 <message><source>virtio_serial_controller</source><translation>VirtIO Serial Controller</translation></message>
 <message><source>vsock</source><translation>VSOCK</translation></message>
 <message><source>watchdog</source><translation>Watchdog</translation></message>
+
+<message><source>could_not_start_the_windows_driver_installer_1</source><translation>Could not start the Windows driver installer: %1</translation></message>
+
+<message><source>the_vm_has_no_cd_rom_drive_add_one_while_it_is_stopped</source><translation>This VM has no CD-ROM drive.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -477,6 +485,7 @@
 <message><source>apply_xml</source><translation>Apply XML</translation></message>
 <message><source>attached_pci_devices</source><translation>Attached PCI devices</translation></message>
 <message><source>attaching_a_pci_device_detaches_it_from_the_host_devices_without_an_iommu_group_cannot_be</source><translation>Attaching a PCI device detaches it from the host. Devices without an IOMMU group cannot be attached.</translation></message>
+<message><source>fullscreen</source><translation>Fullscreen</translation></message>
 <message><source>auto_fit_window</source><translation>Auto (fit window)</translation></message>
 <message><source>backend</source><translation>Backend</translation></message>
 <message><source>bidirectional</source><translation>Bidirectional</translation></message>
@@ -642,6 +651,7 @@
 <message><source>usb_devices</source><translation>USB Devices</translation></message>
 <message><source>usb_devices_1</source><translation>USB Devices — %1</translation></message>
 </context>
+
 <context>
 <name>VMListPage</name>
 <message><source>cannot_connect_to_libvirt</source><translation>Cannot connect to libvirt</translation></message>
@@ -680,6 +690,7 @@ This action cannot be undone.</translation></message>
 <message><source>more</source><translation>More</translation></message>
 <message><source>pause</source><translation>Pause</translation></message>
 <message><source>power_off</source><translation>Power Off</translation></message>
+<message><source>ram</source><translation>RAM</translation></message>
 <message><source>reboot</source><translation>Reboot</translation></message>
 <message><source>reset</source><translation>Reset</translation></message>
 <message><source>resume</source><translation>Resume</translation></message>
@@ -694,6 +705,17 @@ This action cannot be undone.</translation></message>
 <message><source>storage</source><translation>Storage</translation></message>
 <message><source>uuid</source><translation>UUID</translation></message>
 <message><source>virtual_disk_path</source><translation>Virtual Disk Path</translation></message>
+<message><source>all_files</source><translation>All files (*)</translation></message>
+<message><source>cdrom</source><translation>CD-ROM</translation></message>
+<message><source>change</source><translation>Change…</translation></message>
+<message><source>choose_cd_rom_media</source><translation>Choose CD-ROM media</translation></message>
+<message><source>disk</source><translation>Disk</translation></message>
+<message><source>disk_images_iso_img_raw</source><translation>Disk images (*.iso *.img *.raw)</translation></message>
+<message><source>insert</source><translation>Insert…</translation></message>
+<message><source>no_disks</source><translation>No disks</translation></message>
+<message><source>no_media</source><translation>No media</translation></message>
+<message><source>performance</source><translation>Performance</translation></message>
+<message><source>s_1_of_2</source><translation>%1 of %2</translation></message>
 </context>
 <context>
 <name>VMViewerWindow</name>

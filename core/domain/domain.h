@@ -25,6 +25,9 @@ class Domain : public QObject
     Q_PROPERTY(bool autostart READ autostart NOTIFY autostartChanged)
     Q_PROPERTY(DomainConfig *config READ config CONSTANT)
     Q_PROPERTY(QImage previewFrame READ previewFrame NOTIFY previewFrameChanged)
+    Q_PROPERTY(bool hasPreviewFrame READ hasPreviewFrame NOTIFY previewFrameChanged)
+    Q_PROPERTY(QString consolePreviewText READ consolePreviewText NOTIFY consolePreviewTextChanged)
+    Q_PROPERTY(bool consolePreviewActive READ consolePreviewActive NOTIFY consolePreviewActiveChanged)
 
 Q_SIGNALS:
     void isActiveChanged(const bool active);
@@ -35,6 +38,8 @@ Q_SIGNALS:
     void autostartChanged(const bool autostart);
     void previewChanged();
     void previewFrameChanged();
+    void consolePreviewTextChanged();
+    void consolePreviewActiveChanged();
 
 public:
     Domain(QObject *parent = nullptr);
@@ -56,6 +61,18 @@ public:
     [[nodiscard]] QImage previewFrame() const
     {
         return m_previewFrame;
+    }
+    [[nodiscard]] bool hasPreviewFrame() const
+    {
+        return !m_previewFrame.isNull();
+    }
+    [[nodiscard]] QString consolePreviewText() const
+    {
+        return m_consolePreviewText;
+    }
+    [[nodiscard]] bool consolePreviewActive() const
+    {
+        return m_consolePreviewActive;
     }
 
     [[nodiscard]] bool isActive() const
@@ -97,9 +114,14 @@ public:
     void savePreviewFrame(QImage frame);
     void clearPreviewFrame();
     void updateLivePreviewFrame(QImage frame);
+    Q_INVOKABLE void appendConsolePreview(const QString &text);
+    Q_INVOKABLE void setConsolePreviewActive(bool active);
+    Q_INVOKABLE void clearConsolePreview();
 
 private:
     virDomainPtr m_domainPtr;
     DomainConfig *m_config;
     QImage m_previewFrame;
+    QString m_consolePreviewText;
+    bool m_consolePreviewActive = false;
 };

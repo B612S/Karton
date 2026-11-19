@@ -25,6 +25,7 @@ Kirigami.Dialog {
     property string errorText: ""
     property bool cloning: false
     property string destinationDirectory: ""
+    preferredWidth: applicationWindow() ? Math.max(480, Math.min(640, applicationWindow().width - 48)) : 640
 
     function defaultName() {
         const base = (domain ? domain.config.name : "vm").replace(/[^A-Za-z0-9._-]/g, "-");

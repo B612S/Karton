@@ -126,6 +126,29 @@ Global Application Settings provide:
 - shared libvirt networks (start/stop, autostart, create NAT, delete);
 - About information.
 
+## Guest tools
+
+Karton never downloads or runs anything inside a guest. The guest installers
+live in this repository and install the recommended packages themselves from
+inside the guest, so the guest needs internet access:
+
+```sh
+# Linux guest
+sh scripts/guests/linux/install.sh
+```
+
+```bat
+rem Windows guest (asks for administrator rights)
+scripts\guests\windows\install.cmd
+```
+
+`install.sh` uses the guest's package manager (apt, dnf, yum, pacman, zypper or
+apk) to install the QEMU guest agent, spice-vdagent, spice-webdavd, the Mesa
+virtio-gpu drivers and a serial console getty. `install.cmd` downloads the
+latest virtio-win guest tools (drivers, QEMU guest agent, SPICE agent), falls
+back to the VirtIO driver MSI, installs WinFsp for VirtIO FS shares and offers
+to restart Windows.
+
 ## Requirements
 
 - Linux with KVM and libvirt
@@ -255,6 +278,7 @@ the application manually and exercise the affected pages with a throwaway VM.
 | `img/os/` | Bundled flat OS family icons. |
 | `locales/` | Qt `.ts` translation sources (English and Russian). |
 | `tests/` | Optional QtTest unit tests. |
+| `scripts/guests/` | Standalone guest installers (`linux/install.sh`, `windows/install.cmd`). |
 
 ## Contributing
 

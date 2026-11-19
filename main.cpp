@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 #include <libvirt/libvirt.h>
+#include <libvirt/virterror.h>
 
 #include <KAboutData>
 #include <KirigamiAddons/App/KirigamiAppDefaults>
@@ -15,6 +16,7 @@
 #include <QLocalSocket>
 #include <QLocale>
 #include <QLockFile>
+#include <QLoggingCategory>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -35,6 +37,15 @@
 #include "karton_version.h"
 
 static bool qmlCheckFailed = false;
+static bool verboseLogging = false;
+
+static void libvirtErrorHandler(void *, virErrorPtr error)
+{
+    if (!verboseLogging || !error || !error->message) {
+        return;
+    }
+    qWarning("libvirt: %s", error->message);
+}
 
 static void qmlCheckMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
@@ -117,6 +128,9 @@ int main(int argc, char *argv[])
     QSurfaceFormat::setDefaultFormat(format);
 
     QApplication app(argc, argv);
+    verboseLogging = app.arguments().contains(QStringLiteral("--verbose")) || !qEnvironmentVariableIsEmpty("KARTON_VERBOSE");
+    QLoggingCategory::setFilterRules(verboseLogging ? QStringLiteral("*.debug=true\n*.info=true") : QStringLiteral("*.debug=false\n*.info=false"));
+    virSetErrorFunc(nullptr, libvirtErrorHandler);
     app.setApplicationVersion(QStringLiteral(KARTON_VERSION_STRING));
     KirigamiAppDefaults::apply(&app);
 

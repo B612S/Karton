@@ -5,6 +5,7 @@
 
 #include <libvirt/libvirt.h>
 
+#include <QByteArray>
 #include <QHash>
 #include <QJSEngine>
 #include <QObject>
@@ -15,6 +16,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
+#include <functional>
 #include <memory>
 
 #include "domain/domain.h"
@@ -87,6 +89,7 @@ Q_SIGNALS:
     void errorOccurred(const QString &errorMessage);
     void clipboardSettingsChanged();
     void consoleFontSizeChanged();
+    void consoleCursorShapeChanged();
     void imagesDirectoryChanged();
     void domainAdded(Domain *domain);
     void domainRemoved(Domain *domain);
@@ -97,6 +100,7 @@ Q_SIGNALS:
     void viewerCountChanged();
     void languageChanged();
     void holidayModeChanged();
+    void domainStatsUpdated(const QString &uuid);
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
@@ -109,6 +113,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool saveDomainState(const Domain *domain);
     Q_INVOKABLE bool deleteSavedState(const Domain *domain);
     Q_INVOKABLE QVariantMap domainStats(const Domain *domain);
+    void applyGuestMemoryStats(const QString &uuid, qulonglong usedKiB, qulonglong totalKiB);
     Q_INVOKABLE QString domainOsIcon(const Domain *domain) const;
     Q_INVOKABLE QString domainOsName(const Domain *domain) const;
     Q_INVOKABLE QVariantMap mainWindowSize() const;
@@ -124,6 +129,8 @@ public Q_SLOTS:
     Q_INVOKABLE int domainConsoleFontSize(const Domain *domain) const;
     Q_INVOKABLE void saveDomainConsoleFontSize(const Domain *domain, int pixels);
     Q_INVOKABLE int consoleFontSize(const Domain *domain) const;
+    Q_INVOKABLE QString consoleCursorShape() const;
+    Q_INVOKABLE void saveConsoleCursorShape(const QString &shape);
     Q_INVOKABLE int cleanupStaleCaches();
     Q_INVOKABLE int clearPreviewCache();
     Q_INVOKABLE QString defaultImagesDirectory() const;
@@ -149,6 +156,8 @@ public Q_SLOTS:
     Q_INVOKABLE void clearGuestAgentState(const Domain *domain);
     Q_INVOKABLE QVariantMap domainDisplayResolution(const Domain *domain) const;
     Q_INVOKABLE void saveDomainDisplayResolution(const Domain *domain, int width, int height);
+    Q_INVOKABLE bool domainDisplayFullscreen(const Domain *domain) const;
+    Q_INVOKABLE void saveDomainDisplayFullscreen(const Domain *domain, bool fullscreen);
     Q_INVOKABLE Domain *domainByUuid(const QString &uuid) const;
     Q_INVOKABLE QString domainXml(const Domain *domain) const;
     Q_INVOKABLE QVariantList domainXmlDevices(const Domain *domain) const;
@@ -170,12 +179,17 @@ public Q_SLOTS:
     Q_INVOKABLE QVariantMap domainHardwareInfo(const Domain *domain) const;
     Q_INVOKABLE bool editDomainHardware(const Domain *domain, const QVariantMap &settings);
     Q_INVOKABLE bool setSharedMemoryBacking(const Domain *domain, bool enabled);
-    Q_INVOKABLE bool refreshDomainPreview(const Domain *domain);
     Q_INVOKABLE void viewerOpened();
     Q_INVOKABLE void viewerClosed();
     Q_INVOKABLE QObject *viewerForDomain(Domain *domain) const;
+    Q_INVOKABLE bool reserveViewer(const Domain *domain);
+    Q_INVOKABLE void releaseViewerReservation(const Domain *domain);
     Q_INVOKABLE void registerViewer(Domain *domain, QObject *window);
     Q_INVOKABLE void unregisterViewer(QObject *window);
+    // Hidden viewer windows that only feed the VM page preview. They share the
+    // same SPICE connection that is later reused when the viewer is shown.
+    Q_INVOKABLE void registerPreviewViewer(Domain *domain, QObject *window);
+    Q_INVOKABLE void unregisterPreviewViewer(QObject *window);
     Q_INVOKABLE void setViewerGlobalShortcutsBlocked(QObject *viewer, bool blocked);
     Q_INVOKABLE void closeAllViewers();
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
@@ -215,6 +229,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool detachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function);
     Q_INVOKABLE bool cloneDomain(const Domain *domain, const QString &newName, const QString &destinationDirectory = QString());
     Q_INVOKABLE QVariantList domainDisks(const Domain *domain) const;
+    Q_INVOKABLE QVariantList domainDiskStats(const Domain *domain) const;
     Q_INVOKABLE bool addDisk(const Domain *domain, int sizeGB, const QString &format, const QVariantMap &options);
     Q_INVOKABLE bool attachDiskImage(const Domain *domain, const QString &path, const QString &format);
     Q_INVOKABLE bool attachIso(const Domain *domain, const QString &path);
@@ -240,22 +255,32 @@ private:
     struct CpuSample {
         qint64 cpuTime = 0;
         qint64 timestamp = 0;
+        double percent = 0.0;
+        bool valid = false;
     };
     QHash<QString, CpuSample> m_cpuSamples;
+    struct GuestMemorySample {
+        qulonglong usedKiB = 0;
+        qulonglong totalKiB = 0;
+    };
+    QHash<QString, GuestMemorySample> m_guestMemory;
+    QHash<QString, qint64> m_memoryRequestTimes;
+    QSet<QString> m_memoryRequests;
     int m_viewerCount = 0;
     bool m_holidayMode = false;
     QTimer m_holidayTimer;
     QHash<QString, QPointer<QObject>> m_viewers;
+    QHash<QString, QPointer<QObject>> m_previewViewers;
+    // Stable registry for both preview and full viewer windows. It is not
+    // cleared on a preview/full mode switch, so a window cannot be forgotten
+    // just because the user visited another VM in between.
+    QHash<QString, QPointer<QObject>> m_knownViewers;
+    QSet<QString> m_viewerReservations;
     QSet<QObject *> m_shortcutBlockedViewers;
     std::unique_ptr<ShortcutInhibitor> m_shortcutInhibitor;
     bool m_kglobalShortcutsBlocked = false;
     void updateGlobalShortcutsBlock();
     void updateHolidayMode();
-    bool m_previewCapturing = false;
-    // Domains whose QEMU process has no screen to capture (for example a VM
-    // that only exposes a serial console). Cleared when the domain list is
-    // refreshed so an edited XML can be probed again.
-    QSet<QString> m_previewUnsupportedDomains;
 
     bool init();
 };

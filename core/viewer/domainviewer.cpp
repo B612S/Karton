@@ -55,6 +55,33 @@ DomainViewer::DomainViewer(QQuickItem *parent)
     m_displayResizeTimer.setSingleShot(true);
     m_displayResizeTimer.setInterval(200);
     connect(&m_displayResizeTimer, &QTimer::timeout, this, &DomainViewer::applyDisplayResolution);
+
+    m_previewRetryTimer.setSingleShot(true);
+    m_previewRetryTimer.setInterval(1000);
+    connect(&m_previewRetryTimer, &QTimer::timeout, this, [this]() {
+        if (m_previewOnly && m_domain) {
+            setupSpiceSession();
+        }
+    });
+    m_previewWatchdog.setSingleShot(true);
+    m_previewWatchdog.setInterval(3000);
+    connect(&m_previewWatchdog, &QTimer::timeout, this, [this]() {
+        if (m_previewOnly && m_domain && !m_renderer) {
+            disconnectFromSpice();
+            schedulePreviewRetry();
+        }
+    });
+    m_previewPump.setInterval(500);
+    connect(&m_previewPump, &QTimer::timeout, this, &DomainViewer::updateLivePreview);
+
+    m_viewerRetryTimer.setSingleShot(true);
+    m_viewerRetryTimer.setInterval(1500);
+    connect(&m_viewerRetryTimer, &QTimer::timeout, this, [this]() {
+        if (m_previewOnly || !m_domain || !m_domain->domainPtr() || !m_domain->isActive()) {
+            return;
+        }
+        setupSpiceSession();
+    });
 }
 
 DomainViewer::~DomainViewer()
@@ -79,8 +106,16 @@ void DomainViewer::setDomain(Domain *domain)
     if (m_domain) {
         disconnectFromSpice();
     }
+    if (!domain) {
+        m_previewRetryTimer.stop();
+        m_previewWatchdog.stop();
+        m_previewPump.stop();
+        m_viewerRetryTimer.stop();
+    }
 
     m_domain = domain;
+    m_endpointValid = false;
+    m_viewerReconnectAttempts = 0;
     Q_EMIT domainChanged();
 
     if (isComponentComplete() && m_domain) {
@@ -89,6 +124,19 @@ void DomainViewer::setDomain(Domain *domain)
         } else {
             qCDebug(KARTON_DEBUG) << "setDomain(): null domain assigned";
         }
+    }
+}
+
+void DomainViewer::setPreviewOnly(bool previewOnly)
+{
+    if (m_previewOnly == previewOnly) {
+        return;
+    }
+    m_previewOnly = previewOnly;
+    m_endpointValid = false;
+    Q_EMIT previewOnlyChanged();
+    if (isComponentComplete() && m_domain) {
+        setupSpiceSession();
     }
 }
 
@@ -102,7 +150,12 @@ void DomainViewer::componentComplete()
 
 bool DomainViewer::setupSpiceSession()
 {
+    if (m_previewOnly && m_previewStopped) {
+        return false;
+    }
     disconnectFromSpice();
+    m_previewRetryTimer.stop();
+    m_previewWatchdog.stop();
     setErrorMessage(QString());
 
     if (!m_domain || !m_domain->domainPtr()) {
@@ -111,120 +164,132 @@ bool DomainViewer::setupSpiceSession()
         return false;
     }
 
-    // The live XML contains the actual SPICE port for autoport domains and the
-    // socket path for socket-listening domains.
-    char *xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), 0);
-    if (!xmlDesc) {
-        xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
-    }
-    if (!xmlDesc) {
-        qCWarning(KARTON_DEBUG) << "Failed to read domain XML:" << virGetLastErrorMessage();
-        setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_read_the_virtual_machine_configuration"));
-        return false;
-    }
-
-    const QByteArray xml(xmlDesc);
-    free(xmlDesc);
-
-    QDomDocument document;
-    if (!document.setContent(QString::fromUtf8(xml))) {
-        qCWarning(KARTON_DEBUG) << "Failed to parse domain XML";
-        setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_parse_the_virtual_machine_configuration"));
-        return false;
-    }
-
-    QString uri;
-    bool glEnabled = false;
-    m_spiceTlsPort = 0;
-    m_spicePassword.clear();
-
-    const QDomNodeList graphicsNodes = document.elementsByTagName(QStringLiteral("graphics"));
-    for (int i = 0; i < graphicsNodes.count(); ++i) {
-        const QDomElement graphics = graphicsNodes.at(i).toElement();
-        if (graphics.attribute(QStringLiteral("type")) != QStringLiteral("spice")) {
-            continue;
+    if (!m_endpointValid) {
+        // The live XML contains the actual SPICE port for autoport domains and the
+        // socket path for socket-listening domains.
+        char *xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), 0);
+        if (!xmlDesc) {
+            xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+        }
+        if (!xmlDesc) {
+            qCWarning(KARTON_DEBUG) << "Failed to read domain XML:" << virGetLastErrorMessage();
+            setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_read_the_virtual_machine_configuration"));
+            return false;
         }
 
-        const QDomElement gl = graphics.firstChildElement(QStringLiteral("gl"));
-        const bool graphicsGl = !gl.isNull() && gl.attribute(QStringLiteral("enable")) != QStringLiteral("no");
+        const QByteArray xml(xmlDesc);
+        free(xmlDesc);
 
-        const QDomElement listen = graphics.firstChildElement(QStringLiteral("listen"));
-        QString listenType = listen.attribute(QStringLiteral("type"));
-        if (listenType.isEmpty()) {
-            listenType = graphics.attribute(QStringLiteral("listen"));
+        QDomDocument document;
+        if (!document.setContent(QString::fromUtf8(xml))) {
+            qCWarning(KARTON_DEBUG) << "Failed to parse domain XML";
+            setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_parse_the_virtual_machine_configuration"));
+            return false;
         }
 
-        if (listenType == QStringLiteral("socket")) {
-            QString socketPath = listen.attribute(QStringLiteral("socket"));
-            if (socketPath.isEmpty()) {
-                socketPath = graphics.attribute(QStringLiteral("socket"));
+        QString uri;
+        bool glEnabled = false;
+        m_spiceTlsPort = 0;
+        m_spicePassword.clear();
+
+        const QDomNodeList graphicsNodes = document.elementsByTagName(QStringLiteral("graphics"));
+        for (int i = 0; i < graphicsNodes.count(); ++i) {
+            const QDomElement graphics = graphicsNodes.at(i).toElement();
+            if (graphics.attribute(QStringLiteral("type")) != QStringLiteral("spice")) {
+                continue;
             }
-            if (!socketPath.isEmpty()) {
-                uri = QStringLiteral("spice+unix://%1").arg(socketPath);
+
+            const QDomElement gl = graphics.firstChildElement(QStringLiteral("gl"));
+            const bool graphicsGl = !gl.isNull() && gl.attribute(QStringLiteral("enable")) != QStringLiteral("no");
+
+            const QDomElement listen = graphics.firstChildElement(QStringLiteral("listen"));
+            QString listenType = listen.attribute(QStringLiteral("type"));
+            if (listenType.isEmpty()) {
+                listenType = graphics.attribute(QStringLiteral("listen"));
             }
-        } else if (listenType != QStringLiteral("none")) {
-            QString host = listen.attribute(QStringLiteral("address"));
-            if (host.isEmpty()) {
-                host = graphics.attribute(QStringLiteral("listen"));
+
+            if (listenType == QStringLiteral("socket")) {
+                QString socketPath = listen.attribute(QStringLiteral("socket"));
+                if (socketPath.isEmpty()) {
+                    socketPath = graphics.attribute(QStringLiteral("socket"));
+                }
+                if (!socketPath.isEmpty()) {
+                    uri = QStringLiteral("spice+unix://%1").arg(socketPath);
+                }
+            } else if (listenType != QStringLiteral("none")) {
+                QString host = listen.attribute(QStringLiteral("address"));
+                if (host.isEmpty()) {
+                    host = graphics.attribute(QStringLiteral("listen"));
+                }
+                if (host.isEmpty() || host == QStringLiteral("0.0.0.0") || host == QStringLiteral("::")) {
+                    host = QStringLiteral("127.0.0.1");
+                }
+                const QString port = graphics.attribute(QStringLiteral("port"));
+                const QString tlsPort = graphics.attribute(QStringLiteral("tlsPort"));
+                const bool useTls = m_spiceTlsEnabled && !tlsPort.isEmpty() && tlsPort != QStringLiteral("-1");
+                if (useTls) {
+                    m_spiceTlsPort = tlsPort.toInt();
+                    m_spicePassword = graphics.attribute(QStringLiteral("passwd"));
+                    uri = QStringLiteral("spice://%1?tls_port=%2").arg(host, tlsPort);
+                } else if (!port.isEmpty() && port != QStringLiteral("-1")) {
+                    uri = QStringLiteral("spice://%1:%2").arg(host, port);
+                }
             }
-            if (host.isEmpty() || host == QStringLiteral("0.0.0.0") || host == QStringLiteral("::")) {
-                host = QStringLiteral("127.0.0.1");
-            }
-            const QString port = graphics.attribute(QStringLiteral("port"));
-            const QString tlsPort = graphics.attribute(QStringLiteral("tlsPort"));
-            const bool useTls = m_spiceTlsEnabled && !tlsPort.isEmpty() && tlsPort != QStringLiteral("-1");
-            if (useTls) {
-                m_spiceTlsPort = tlsPort.toInt();
-                m_spicePassword = graphics.attribute(QStringLiteral("passwd"));
-                uri = QStringLiteral("spice://%1?tls_port=%2").arg(host, tlsPort);
-            } else if (!port.isEmpty() && port != QStringLiteral("-1")) {
-                uri = QStringLiteral("spice://%1:%2").arg(host, port);
+
+            if (!uri.isEmpty()) {
+                glEnabled = graphicsGl;
+                break;
             }
         }
 
-        if (!uri.isEmpty()) {
-            glEnabled = graphicsGl;
-            break;
+        if (uri.isEmpty()) {
+            // Text-only domains (and VMs configured with -display none) have no
+            // SPICE graphics at all. virt-manager shows their serial console in
+            // that case, so fall back to the libvirt console stream. This also
+            // feeds the VM page's console preview.
+            qCInfo(KARTON_DEBUG) << "No SPICE graphics found for domain; trying the serial console";
+            if (openSerialConsole()) {
+                return true;
+            }
+            qCWarning(KARTON_DEBUG) << "No usable SPICE graphics device or serial console found for domain:" << m_domain->config()->name();
+            setErrorMessage(QCoreApplication::translate("DomainViewer", "this_virtual_machine_has_no_usable_spice_display_or_serial_console"));
+            return false;
         }
-    }
 
-    if (uri.isEmpty()) {
-        // Text-only domains (and VMs configured with -display none) have no
-        // SPICE graphics at all. virt-manager shows their serial console in
-        // that case, so fall back to the libvirt console stream.
-        qCInfo(KARTON_DEBUG) << "No SPICE graphics found for domain; trying the serial console";
-        if (openSerialConsole()) {
-            return true;
-        }
-        qCWarning(KARTON_DEBUG) << "No usable SPICE graphics device or serial console found for domain:" << m_domain->config()->name();
-        setErrorMessage(QCoreApplication::translate("DomainViewer", "this_virtual_machine_has_no_usable_spice_display_or_serial_console"));
-        return false;
-    }
+        m_spiceUri = uri;
 
-    m_spiceUri = uri;
-
-    // GL scanout requires both a local connection and a SPICE display that was
-    // created with <gl enable='yes'/>. Selecting it by transport alone made
-    // local domains without 3D acceleration stay black: they only provide
-    // primary surfaces, which the GL renderer does not handle.
-    if (glEnabled && uri.startsWith(QStringLiteral("spice+unix://"))) {
-        qCInfo(KARTON_DEBUG) << "Detected local GL-enabled SPICE display. Using GL scanout rendering.";
-        m_renderMode = RenderMode::GlScanout;
-    } else {
-        if (glEnabled) {
-            qCInfo(KARTON_DEBUG) << "SPICE GL is enabled but the connection is not local. Using primary surface rendering.";
+        // GL scanout requires both a local connection and a SPICE display that was
+        // created with <gl enable='yes'/>. Selecting it by transport alone made
+        // local domains without 3D acceleration stay black: they only provide
+        // primary surfaces, which the GL renderer does not handle.
+        if (!m_previewOnly && glEnabled && uri.startsWith(QStringLiteral("spice+unix://"))) {
+            qCInfo(KARTON_DEBUG) << "Detected local GL-enabled SPICE display. Using GL scanout rendering.";
+            m_renderMode = RenderMode::GlScanout;
         } else {
-            qCInfo(KARTON_DEBUG) << "SPICE GL is disabled. Using primary surface rendering.";
+            if (glEnabled) {
+                qCInfo(KARTON_DEBUG) << "SPICE GL is enabled but the connection is not local. Using primary surface rendering.";
+            } else {
+                qCInfo(KARTON_DEBUG) << "SPICE GL is disabled. Using primary surface rendering.";
+            }
+            m_renderMode = RenderMode::PrimarySurface;
         }
-        m_renderMode = RenderMode::PrimarySurface;
+        m_endpointValid = true;
     }
 
     if (!connectToSpice()) {
+        if (m_previewOnly) {
+            schedulePreviewRetry();
+            return false;
+        }
         if (openSerialConsole()) {
             return true;
         }
         setErrorMessage(QCoreApplication::translate("DomainViewer", "could_not_connect_to_the_spice_display_or_serial_console"));
         return false;
+    }
+    if (m_previewOnly) {
+        m_previewWatchdog.start();
+        m_previewPump.start();
     }
     return true;
 }
@@ -241,7 +306,7 @@ bool DomainViewer::connectToSpice()
 
     disconnectFromSpice();
     m_session = spice_session_new();
-    if (m_clipboard) {
+    if (m_clipboard && !m_previewOnly) {
         m_clipboard->prepare(m_session);
     }
 
@@ -258,6 +323,11 @@ bool DomainViewer::connectToSpice()
     }
 
     g_signal_connect(m_session, "channel-new", G_CALLBACK(DomainViewer::channel_new_callback), this);
+    // A dropped session must not leave a viewer window on a dead frame: the
+    // callback clears the channel state and schedules a reconnect. It used to
+    // be registered for preview connections only, so a real viewer froze after
+    // a guest reboot and kept sending input to unconnected SPICE channels.
+    g_signal_connect(m_session, "disconnected", G_CALLBACK(DomainViewer::sessionDisconnectedCallback), this);
 
     if (!spice_session_connect(m_session)) {
         g_object_unref(m_session);
@@ -278,6 +348,10 @@ bool DomainViewer::connectToSpice()
 void DomainViewer::disconnectFromSpice()
 {
     m_displayResizeTimer.stop();
+    m_previewRetryTimer.stop();
+    m_previewWatchdog.stop();
+    m_previewPump.stop();
+    m_viewerRetryTimer.stop();
     closeSerialConsole();
     stopAudio();
 
@@ -290,7 +364,9 @@ void DomainViewer::disconnectFromSpice()
     update();
 
     if (m_session) {
+        m_disconnecting = true;
         spice_session_disconnect(m_session);
+        m_disconnecting = false;
         g_object_unref(m_session);
         m_session = nullptr;
     }
@@ -301,6 +377,7 @@ void DomainViewer::disconnectFromSpice()
     }
     m_main_channel = nullptr;
     m_inputs_channel = nullptr;
+    m_inputsChannelReady = false;
     m_recordChannel = nullptr;
     m_connected = false;
     m_lastDisplayResolution = QSize();
@@ -499,18 +576,26 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
     item->checkChannelStatus();
     if (SPICE_IS_DISPLAY_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE display connected";
+        item->m_viewerReconnectAttempts = 0;
         item->attachDisplayChannel(channel);
     } else if (SPICE_IS_MAIN_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE main channel connected";
         spice_channel_connect(channel);
         item->m_main_channel = SPICE_MAIN_CHANNEL(channel);
-        g_signal_connect(channel, "main-agent-update", G_CALLBACK(mainAgentUpdateCallback), item);
-        item->m_clipboard->attach(item->m_session, SPICE_MAIN_CHANNEL(channel));
-        QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
+        if (!item->m_previewOnly) {
+            g_signal_connect(channel, "main-agent-update", G_CALLBACK(mainAgentUpdateCallback), item);
+            item->m_clipboard->attach(item->m_session, SPICE_MAIN_CHANNEL(channel));
+            QTimer::singleShot(1500, item, &DomainViewer::updateDisplayResolution);
+        }
+    } else if (item->m_previewOnly) {
+        // A preview connection only needs the display and main channels.
+        return;
     } else if (SPICE_IS_INPUTS_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Inputs connected";
         spice_channel_connect(channel);
         item->m_inputs_channel = SPICE_INPUTS_CHANNEL(channel);
+        item->m_inputsChannelReady = false;
+        g_signal_connect(channel, "channel-event", G_CALLBACK(inputsChannelEventCallback), item);
     } else if (SPICE_IS_PLAYBACK_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Audio playback connected";
         spice_channel_connect(channel);
@@ -538,6 +623,9 @@ void DomainViewer::mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer u
 {
     Q_UNUSED(channel);
     auto *item = static_cast<DomainViewer *>(userData);
+    if (item->m_previewOnly) {
+        return;
+    }
     // The agent can connect after the initial resize request. Force a new
     // request even if the target size did not change in the meantime.
     item->m_lastDisplayResolution = QSize();
@@ -567,6 +655,11 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
     });
 
     m_renderer->attach(SPICE_DISPLAY_CHANNEL(channel));
+    if (m_previewOnly) {
+        m_previewRetryTimer.stop();
+        m_previewWatchdog.stop();
+        m_previewPump.start();
+    }
 }
 
 void DomainViewer::attachCursorChannel(SpiceChannel *channel)
@@ -621,22 +714,23 @@ void DomainViewer::cursorHideCallback(SpiceCursorChannel *channel, gpointer user
     auto *item = static_cast<DomainViewer *>(userData);
     qCDebug(KARTON_DEBUG) << "SPICE cursor-hide";
     bool pointerInside = false;
-    bool haveCursor = false;
     {
         QMutexLocker locker(&item->m_cursorMutex);
         pointerInside = item->m_pointerInside;
-        haveCursor = item->m_cursorVisible && !item->m_cursorImage.isNull();
-        if (!pointerInside) {
-            item->m_cursorVisible = false;
-        }
+        // The hide applies regardless of where the host pointer is: the guest
+        // no longer wants its shape displayed.
+        item->m_cursorVisible = false;
     }
-    if (pointerInside && haveCursor) {
-        // Keep the last guest cursor while the pointer is over the display;
-        // otherwise the host arrow flashes in during guest window dragging.
-        item->applyGuestCursor();
+    if (pointerInside) {
+        // The guest hides its cursor when it paints the pointer itself into the
+        // framebuffer: dragging a window, full-screen video, or a remote-desktop
+        // client (xrdp/mstsc) that renders the remote cursor. Keep the host
+        // cursor blank instead of re-installing the last shape, otherwise the
+        // stale host cursor and the guest-painted one are visible as two mice.
+        item->setCursor(Qt::BlankCursor);
     } else if (!item->m_pointerGrabbed) {
-        // No guest cursor is available (for example after clearing it while
-        // entering fullscreen). Do not leave the host cursor blank.
+        // No cursor is shown over the guest and the pointer is outside it; the
+        // normal host arrow must come back.
         item->unsetCursor();
     }
     item->update();
@@ -684,16 +778,156 @@ void DomainViewer::clearCursor()
     update();
 }
 
+void DomainViewer::schedulePreviewRetry()
+{
+    if (!m_previewOnly || !m_domain || m_previewStopped) {
+        return;
+    }
+    m_previewRetryTimer.start();
+}
+
+void DomainViewer::scheduleViewerRetry()
+{
+    if (m_previewOnly || !m_domain || !m_domain->isActive()) {
+        return;
+    }
+    m_viewerRetryTimer.start();
+}
+
+bool DomainViewer::inputsReady() const
+{
+    return m_connected && m_inputs_channel && m_inputsChannelReady;
+}
+
+void DomainViewer::inputsChannelEventCallback(SpiceChannel *channel, SpiceChannelEvent event, gpointer userData)
+{
+    auto *item = static_cast<DomainViewer *>(userData);
+    if (!item->m_inputs_channel || channel != SPICE_CHANNEL(item->m_inputs_channel)) {
+        return;
+    }
+    const bool ready = event == SPICE_CHANNEL_OPENED;
+    if (item->m_inputsChannelReady == ready) {
+        return;
+    }
+    item->m_inputsChannelReady = ready;
+    if (!ready) {
+        item->m_current_button_mask = 0;
+    }
+}
+
+void DomainViewer::setPreviewStopped(bool stopped)
+{
+    if (m_previewStopped == stopped) {
+        return;
+    }
+    m_previewStopped = stopped;
+    if (stopped) {
+        m_previewRetryTimer.stop();
+        m_previewWatchdog.stop();
+        m_previewPump.stop();
+        disconnectFromSpice();
+    } else {
+        m_endpointValid = false;
+    }
+}
+
+void DomainViewer::sessionDisconnectedCallback(SpiceSession *session, gpointer userData)
+{
+    auto *item = static_cast<DomainViewer *>(userData);
+    if (item->m_disconnecting || session != item->m_session) {
+        return;
+    }
+
+    // The SPICE server may go away while the domain keeps running: a guest
+    // reboot, a restarted display server or a dropped connection. Forget the
+    // dead channels so no input is sent to them, then reconnect from a timer
+    // instead of from this signal handler (setupSpiceSession() unrefs the
+    // session that is currently emitting).
+    item->m_connected = false;
+    item->m_inputsChannelReady = false;
+    item->m_main_channel = nullptr;
+    item->m_inputs_channel = nullptr;
+    item->m_recordChannel = nullptr;
+    item->m_current_button_mask = 0;
+    item->releasePointerGrab();
+    item->clearCursor();
+    if (item->m_agentConnected) {
+        item->m_agentConnected = false;
+        Q_EMIT item->agentConnectedChanged();
+    }
+
+    if (item->m_previewOnly) {
+        item->schedulePreviewRetry();
+        return;
+    }
+    ++item->m_viewerReconnectAttempts;
+    if (item->m_viewerReconnectAttempts >= 3) {
+        // A restarted VM can change an autoport. Re-read the live XML on the
+        // next attempt instead of retrying a stale port forever.
+        item->m_viewerReconnectAttempts = 0;
+        item->m_endpointValid = false;
+    }
+    qCInfo(KARTON_DEBUG) << "SPICE session lost; reconnecting";
+    item->scheduleViewerRetry();
+}
+
+namespace
+{
+bool isBlankPreviewFrame(const QImage &image)
+{
+    if (image.isNull() || image.width() <= 0 || image.height() <= 0) {
+        return true;
+    }
+    const int step = qMax(1, image.width() / 80);
+    int dark = 0;
+    int total = 0;
+    for (int y = 0; y < image.height(); y += step) {
+        for (int x = 0; x < image.width(); x += step) {
+            const QRgb pixel = image.pixel(x, y);
+            if (qRed(pixel) < 16 && qGreen(pixel) < 16 && qBlue(pixel) < 16) {
+                ++dark;
+            }
+            ++total;
+        }
+    }
+    return total > 0 && dark * 100 >= total * 99;
+}
+} // namespace
+
+void DomainViewer::armPreviewSettle(int milliseconds)
+{
+    m_previewSettleMs = qMax(0, milliseconds);
+    m_previewSettle.start();
+}
+
 void DomainViewer::updateLivePreview()
 {
     if (!m_domain || !m_renderer || (m_livePreviewTimer.isValid() && m_livePreviewTimer.elapsed() < 200)) {
         return;
     }
+    if (m_previewOnly && m_previewSettleMs > 0 && m_previewSettle.isValid()) {
+        if (m_previewSettle.elapsed() < m_previewSettleMs) {
+            return;
+        }
+        m_previewSettleMs = 0;
+    }
     m_livePreviewTimer.restart();
     const QImage frame = m_renderer->currentFrame();
-    if (!frame.isNull()) {
-        m_domain->updateLivePreviewFrame(frame);
+    if (frame.isNull()) {
+        return;
     }
+    // A reconnected SPICE client starts with an empty/black surface. Keep the
+    // previous preview instead of flashing black; if the guest really stays
+    // black, accept it after a few seconds.
+    if (m_previewOnly && m_domain->hasPreviewFrame() && isBlankPreviewFrame(frame)) {
+        if (m_previewBlankFrames < 20) {
+            ++m_previewBlankFrames;
+            return;
+        }
+    } else {
+        m_previewBlankFrames = 0;
+    }
+    m_domain->updateLivePreviewFrame(frame);
 }
 
 void DomainViewer::handleRendererFrameSizeChanged()
@@ -716,7 +950,7 @@ void DomainViewer::setFixedDisplayResolution(int width, int height)
 
 void DomainViewer::updateDisplayResolution()
 {
-    if (!m_main_channel || !m_connected) {
+    if (m_previewOnly || !m_main_channel || !m_connected) {
         return;
     }
     // Resizing the window for fullscreen produces several geometry changes in
@@ -804,6 +1038,9 @@ void DomainViewer::fitGuestToWindow()
 // triggered by update()
 QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
+    if (m_previewOnly) {
+        return nullptr;
+    }
     QSGNode *root = oldNode;
     if (!root) {
         // The scene graph owns the old node tree and may delete it when the
@@ -1038,6 +1275,7 @@ void DomainViewer::setSpiceTlsEnabled(bool enabled)
         return;
     }
     m_spiceTlsEnabled = enabled;
+    m_endpointValid = false;
     Q_EMIT spiceTlsEnabledChanged();
 }
 
@@ -1047,6 +1285,7 @@ void DomainViewer::setSpiceCaCertificate(const QString &path)
         return;
     }
     m_spiceCaCertificate = path;
+    m_endpointValid = false;
     Q_EMIT spiceCaCertificateChanged();
 }
 
@@ -1162,6 +1401,13 @@ void DomainViewer::grabPointer()
     if (m_pointerGrabbed || !window()) {
         return;
     }
+    // Never grab input for a window that is minimized or hidden: the grab
+    // would outlive the surface and make the viewer toolbar unclickable after
+    // the window is restored (the same symptom appears with virt-manager and
+    // spice-gtk).
+    if (window()->visibility() == QWindow::Minimized || window()->visibility() == QWindow::Hidden) {
+        return;
+    }
 
     // Set the guard before calling into the window system: grabbing can
     // re-enter the event handlers on some platforms.
@@ -1197,6 +1443,13 @@ void DomainViewer::grabPointer()
 void DomainViewer::releasePointerGrab()
 {
     if (!m_pointerGrabbed) {
+        // The platform grab can outlive our flag after a minimize/restore
+        // cycle or a failed keyboard grab. Clearing it unconditionally keeps
+        // the window toolbar responsive when the viewer comes back.
+        if (QQuickWindow *viewerWindow = window()) {
+            viewerWindow->setMouseGrabEnabled(false);
+            viewerWindow->setKeyboardGrabEnabled(false);
+        }
         return;
     }
 
@@ -1222,7 +1475,7 @@ void DomainViewer::releasePointerGrab()
 
 int DomainViewer::mouseMode() const
 {
-    if (!m_main_channel) {
+    if (!m_main_channel || !m_connected) {
         return SPICE_MOUSE_MODE_CLIENT;
     }
 
@@ -1256,7 +1509,7 @@ void DomainViewer::updateCursorPaintPosition()
 
 void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
 {
-    if (!m_inputs_channel || !m_connected || width() <= 0 || height() <= 0) {
+    if (!inputsReady() || width() <= 0 || height() <= 0) {
         return;
     }
 
@@ -1362,7 +1615,7 @@ void DomainViewer::keyPressEvent(QKeyEvent *event)
     const uint32_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode); // SPICE uses XT scancodes with the 0x100 extended flag
     qCDebug(KARTON_DEBUG) << "key press: " << event->text() << evdev_scancode << pcxt_scancode;
 
-    if (m_inputs_channel && m_connected && pcxt_scancode != 0) {
+    if (inputsReady() && pcxt_scancode != 0) {
         spice_inputs_channel_key_press(m_inputs_channel, pcxt_scancode);
     }
 }
@@ -1374,7 +1627,7 @@ void DomainViewer::keyReleaseEvent(QKeyEvent *event)
     const quint32 evdev_scancode = evdevScancodeForEvent(event);
     const uint32_t pcxt_scancode = DomainViewer::evdevToPcXt(evdev_scancode);
 
-    if (m_inputs_channel && m_connected && pcxt_scancode != 0) {
+    if (inputsReady() && pcxt_scancode != 0) {
         spice_inputs_channel_key_release(m_inputs_channel, pcxt_scancode);
     }
 }
@@ -1383,7 +1636,7 @@ void DomainViewer::wheelEvent(QWheelEvent *event)
 {
     event->accept();
 
-    if (!m_inputs_channel || !m_connected) {
+    if (!inputsReady()) {
         return;
     }
     updatePointer(event->position(), m_current_button_mask);
@@ -1429,22 +1682,27 @@ void DomainViewer::hoverEnterEvent(QHoverEvent *event)
     if (m_domain && m_domain->isActive() && window() && window()->isActive() && !QGuiApplication::modalWindow() && !hasActiveFocus()) {
         forceActiveFocus(Qt::MouseFocusReason);
     }
-    bool haveCursor = false;
+    bool haveImage = false;
+    bool wantCursor = false;
     bool entered = false;
     {
         QMutexLocker locker(&m_cursorMutex);
         entered = !m_pointerInside;
         m_pointerInside = true;
-        if (!m_cursorImage.isNull()) {
-            m_cursorVisible = true;
-            haveCursor = true;
-        }
+        haveImage = !m_cursorImage.isNull();
+        wantCursor = m_cursorVisible;
     }
     if (entered) {
         Q_EMIT pointerInsideChanged();
     }
-    if (haveCursor) {
-        applyGuestCursor();
+    if (haveImage) {
+        if (wantCursor) {
+            applyGuestCursor();
+        } else {
+            // The guest hid the cursor (it may paint it into the framebuffer
+            // itself); do not re-show the stale shape as the host cursor.
+            setCursor(Qt::BlankCursor);
+        }
     } else if (!m_pointerGrabbed) {
         unsetCursor();
     }
@@ -1458,7 +1716,8 @@ void DomainViewer::hoverLeaveEvent(QHoverEvent *event)
         QMutexLocker locker(&m_cursorMutex);
         left = m_pointerInside;
         m_pointerInside = false;
-        m_cursorVisible = false;
+        // Keep m_cursorVisible: it records whether the guest currently wants
+        // its shape shown, so re-entering the display restores it.
     }
     if (left) {
         Q_EMIT pointerInsideChanged();
@@ -1492,7 +1751,7 @@ void DomainViewer::mousePressEvent(QMouseEvent *event)
     grabPointer();
     forceActiveFocus();
 
-    if (!m_inputs_channel || !m_connected) {
+    if (!inputsReady()) {
         return;
     }
 
@@ -1520,7 +1779,7 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
 {
     qCDebug(KARTON_DEBUG) << "Mouse release at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
 
-    if (!m_inputs_channel || !m_connected) {
+    if (!inputsReady()) {
         return;
     }
 

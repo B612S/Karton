@@ -24,6 +24,7 @@ Kirigami.Dialog {
 
     property var snapshotList: []
     property string errorText: ""
+    preferredWidth: applicationWindow() ? Math.max(520, Math.min(700, applicationWindow().width - 48)) : 700
 
     function refresh() {
         snapshotList = domain ? Karton.domainSnapshots(domain) : [];

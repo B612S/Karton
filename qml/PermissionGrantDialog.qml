@@ -19,7 +19,7 @@ Kirigami.Dialog {
     title: qsTr("grant_access")
     modal: true
     padding: Kirigami.Units.largeSpacing
-    width: Kirigami.Units.gridUnit * 36
+    width: applicationWindow() ? Math.min(Kirigami.Units.gridUnit * 36, applicationWindow().width - 48) : Kirigami.Units.gridUnit * 36
 
     background: Rectangle {
         color: Qt.rgba(Kirigami.Theme.backgroundColor.r,

@@ -11,7 +11,6 @@
 #include <QDomText>
 #include <QMap>
 #include <QRandomGenerator>
-#include <QStandardPaths>
 #include <QString>
 #include <QSysInfo>
 #include <QUuid>
@@ -93,8 +92,6 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
     metadata.appendChild(karton);
     QMap<QString, QString> kartonData;
     kartonData[QStringLiteral("maxDiskStorage")] = QString::number(config->maxDiskStorage() * 1024);
-    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::StateLocation);
-    kartonData[QStringLiteral("screenshotPreviewPath")] = QStringLiteral("%1/previews/%2.png").arg(dataDir).arg(uuidString);
     addElementWithAttributes(document, karton, QStringLiteral("karton:data"), QString(), kartonData);
 
     // metadata->LIBOSINFO (only when an OS variant was selected)
@@ -244,9 +241,10 @@ QString DomainXmlBuilder::updateXML(const QString &xmlDesc, const EditableConfig
 
     addHardwareElements(document, root, config.maxRam, config.cpus);
 
-    // metadata->Karton: only the one attribute, the others (screenshotPreviewPath) are
-    // not editable and must survive. A value of 0 means the disk size is
-    // unknown (e.g. a domain not created by Karton), so leave it untouched.
+    // metadata->Karton: only maxDiskStorage is written. Other attributes from
+    // older versions (screenshotPreviewPath) are not editable and must survive.
+    // A value of 0 means the disk size is unknown (e.g. a domain not created by
+    // Karton), so leave it untouched.
     if (config.maxDiskStorage > 0) {
         const QDomNodeList kartonDataNodes = root.elementsByTagName(QStringLiteral("karton:data"));
         if (kartonDataNodes.isEmpty()) {

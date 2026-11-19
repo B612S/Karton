@@ -293,7 +293,24 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
             video.appendChild(model);
         }
         const QString videoModelType = settings.value(QStringLiteral("videoModel")).toString();
+        // 3D acceleration is a VirtIO-only feature; QXL and VGA have no
+        // accel3d attribute and libvirt rejects it for them.
+        const bool enableAccel3d = settings.value(QStringLiteral("accel3d")).toBool() && videoModelType == QStringLiteral("virtio");
         model.setAttribute(QStringLiteral("type"), videoModelType);
+        if (videoModelType == QStringLiteral("virtio")) {
+            if (enableAccel3d) {
+                model.setAttribute(QStringLiteral("device"), QStringLiteral("virtio-vga-gl"));
+            } else if (model.attribute(QStringLiteral("device")) == QStringLiteral("virtio-vga-gl")) {
+                // libvirt stores the concrete virtio backend in "device".
+                // Leaving a stale virtio-vga-gl behind after disabling 3D
+                // makes it refuse the definition with "the 'virtio-vga-gl'
+                // virtio video device frontend can be only with enabled 3d
+                // acceleration".
+                model.removeAttribute(QStringLiteral("device"));
+            }
+        } else {
+            model.removeAttribute(QStringLiteral("device"));
+        }
         model.setAttribute(QStringLiteral("heads"), QString::number(qMax(1, settings.value(QStringLiteral("videoHeads")).toInt())));
         model.setAttribute(QStringLiteral("primary"), QStringLiteral("yes"));
         if (settings.contains(QStringLiteral("videoMemory"))) {
@@ -322,10 +339,54 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
         if (!oldAcceleration.isNull()) {
             model.removeChild(oldAcceleration);
         }
-        if (settings.value(QStringLiteral("accel3d")).toBool()) {
+        if (enableAccel3d) {
             QDomElement acceleration = document.createElement(QStringLiteral("acceleration"));
             acceleration.setAttribute(QStringLiteral("accel3d"), QStringLiteral("yes"));
             model.appendChild(acceleration);
+        }
+
+        // The SPICE <gl> switch lives outside the video device, so toggling 3D
+        // acceleration has to update it as well. Otherwise enabling 3D makes
+        // QEMU start virtio-vga-gl without a GL display backend ("The display
+        // backend does not have OpenGL support enabled"), and disabling it
+        // leaves <gl enable='yes'/> behind so the VM keeps failing EGL init.
+        QDomElement graphics = devices.firstChildElement(QStringLiteral("graphics"));
+        while (!graphics.isNull() && graphics.attribute(QStringLiteral("type")) != QStringLiteral("spice")) {
+            graphics = graphics.nextSiblingElement(QStringLiteral("graphics"));
+        }
+        if (!graphics.isNull()) {
+            QDomElement gl = graphics.firstChildElement(QStringLiteral("gl"));
+            const bool glEnabled = !gl.isNull() && gl.attribute(QStringLiteral("enable")) == QStringLiteral("yes");
+            if (enableAccel3d != glEnabled) {
+                if (enableAccel3d) {
+                    if (gl.isNull()) {
+                        gl = document.createElement(QStringLiteral("gl"));
+                        graphics.appendChild(gl);
+                    }
+                    gl.setAttribute(QStringLiteral("enable"), QStringLiteral("yes"));
+                } else if (!gl.isNull()) {
+                    graphics.removeChild(gl);
+                }
+            }
+
+            if (enableAccel3d) {
+                // Karton's GL scanout renderer needs a local SPICE socket; a
+                // TCP display silently falls back to primary surfaces and
+                // shows the guest black.
+                QDomElement listen = graphics.firstChildElement(QStringLiteral("listen"));
+                if (listen.isNull()) {
+                    listen = document.createElement(QStringLiteral("listen"));
+                    graphics.insertBefore(listen, graphics.firstChild());
+                }
+                if (listen.attribute(QStringLiteral("type")) != QStringLiteral("socket") || listen.attribute(QStringLiteral("socket")).isEmpty()) {
+                    const QString uuid = root.firstChildElement(QStringLiteral("uuid")).text();
+                    listen.setAttribute(QStringLiteral("type"), QStringLiteral("socket"));
+                    listen.removeAttribute(QStringLiteral("address"));
+                    listen.setAttribute(QStringLiteral("socket"), QStringLiteral("/tmp/spice%1.sock").arg(uuid));
+                    graphics.removeAttribute(QStringLiteral("port"));
+                    graphics.removeAttribute(QStringLiteral("autoport"));
+                }
+            }
         }
     }
 

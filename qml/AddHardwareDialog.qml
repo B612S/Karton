@@ -24,8 +24,8 @@ Kirigami.Dialog {
 
     modal: true
     padding: 0
-    readonly property real cardWidth: applicationWindow() ? Math.min(680, applicationWindow().width - 48) : 680
-    readonly property real cardHeight: applicationWindow() ? Math.min(680, applicationWindow().height - 48) : 680
+    readonly property real cardWidth: applicationWindow() ? Math.max(600, Math.min(680, applicationWindow().width - 48)) : 680
+    readonly property real cardHeight: applicationWindow() ? Math.max(460, Math.min(680, applicationWindow().height - 48)) : 680
     width: cardWidth
     height: cardHeight
     header: Item {}

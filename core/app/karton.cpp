@@ -22,6 +22,7 @@
 #include <QDomElement>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QHostAddress>
 #include <QImage>
 #include <QJsonDocument>
@@ -59,7 +60,7 @@ using namespace KartonCommon;
 // responsibility across this directory: this file owns the connection and VM
 // lifecycle, while karton_network.cpp, karton_devices.cpp, karton_disk.cpp,
 // karton_domain.cpp, karton_usb.cpp, karton_pci.cpp, karton_snapshots.cpp,
-// karton_settings.cpp, karton_preview.cpp and karton_os.cpp contain the
+// karton_settings.cpp and karton_os.cpp contain the
 // corresponding feature groups.
 
 Karton::Karton(QObject *parent)
@@ -361,10 +362,6 @@ void Karton::refreshDomainList()
         return;
     }
 
-    // Device capabilities may have changed together with the domain
-    // definition, so let the preview code probe them again.
-    m_previewUnsupportedDomains.clear();
-
     virDomainPtr *domains = nullptr;
     const int numDomains = virConnectListAllDomains(m_conn, &domains, 0);
     if (numDomains < 0) {
@@ -400,6 +397,10 @@ void Karton::refreshDomainList()
         if (screenshotPreviewPath.isEmpty()) { // set default path if not found
             screenshotPreviewPath = QStringLiteral("%1/previews/%2.png").arg(QStandardPaths::writableLocation(QStandardPaths::StateLocation), uuid);
         }
+        // Previews are memory-only now. Remove screenshots written by older
+        // versions instead of leaving them in the state directory.
+        QFile::remove(screenshotPreviewPath);
+        QFile::remove(screenshotPreviewPath + QStringLiteral(".tmp.png"));
 
         int autoFlag = 0;
         virDomainGetAutostart(domainPtr, &autoFlag);
@@ -763,16 +764,63 @@ void Karton::viewerClosed()
     Q_EMIT viewerCountChanged();
 }
 
+bool Karton::reserveViewer(const Domain *domain)
+{
+    if (!domain || !domain->config()) {
+        return false;
+    }
+    const QString uuid = domain->config()->uuid();
+    if (uuid.isEmpty() || m_viewerReservations.contains(uuid)) {
+        return false;
+    }
+    // A registered or top-level window always wins over a new reservation.
+    if (viewerForDomain(const_cast<Domain *>(domain))) {
+        return false;
+    }
+    m_viewerReservations.insert(uuid);
+    return true;
+}
+
+void Karton::releaseViewerReservation(const Domain *domain)
+{
+    if (domain && domain->config()) {
+        m_viewerReservations.remove(domain->config()->uuid());
+    }
+}
+
 QObject *Karton::viewerForDomain(Domain *domain) const
 {
     if (!domain) {
         return nullptr;
     }
-    const auto it = m_viewers.constFind(domain->config()->uuid());
-    if (it == m_viewers.constEnd() || it.value().isNull()) {
-        return nullptr;
+    const QString uuid = domain->config()->uuid();
+    const auto known = m_knownViewers.constFind(uuid);
+    if (known != m_knownViewers.constEnd() && !known.value().isNull()) {
+        return known.value();
     }
-    return it.value();
+    const auto it = m_viewers.constFind(uuid);
+    if (it != m_viewers.constEnd() && !it.value().isNull()) {
+        return it.value();
+    }
+    const auto preview = m_previewViewers.constFind(uuid);
+    if (preview != m_previewViewers.constEnd() && !preview.value().isNull()) {
+        return preview.value();
+    }
+
+    // Last-resort lookup by the window's domain property. This keeps opening
+    // an existing VM window idempotent even if a QML registration was lost.
+    const QWindowList windows = QGuiApplication::topLevelWindows();
+    for (QWindow *window : windows) {
+        const QVariant value = window->property("domain");
+        auto *candidate = value.value<Domain *>();
+        if (!candidate) {
+            candidate = qobject_cast<Domain *>(value.value<QObject *>());
+        }
+        if (candidate && candidate->config()->uuid() == uuid) {
+            return window;
+        }
+    }
+    return nullptr;
 }
 
 void Karton::registerViewer(Domain *domain, QObject *window)
@@ -785,7 +833,9 @@ void Karton::registerViewer(Domain *domain, QObject *window)
     // the scene graph still use it; such a teardown aborts inside
     // QWaylandWindow::reset() on Wayland.
     QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+    m_viewerReservations.remove(domain->config()->uuid());
     m_viewers.insert(domain->config()->uuid(), window);
+    m_knownViewers.insert(domain->config()->uuid(), window);
 }
 
 void Karton::closeAllViewers()
@@ -803,6 +853,28 @@ void Karton::unregisterViewer(QObject *window)
     for (auto it = m_viewers.begin(); it != m_viewers.end();) {
         if (it.value().isNull() || it.value() == window) {
             it = m_viewers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void Karton::registerPreviewViewer(Domain *domain, QObject *window)
+{
+    if (!domain || !window) {
+        return;
+    }
+    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+    m_viewerReservations.remove(domain->config()->uuid());
+    m_previewViewers.insert(domain->config()->uuid(), window);
+    m_knownViewers.insert(domain->config()->uuid(), window);
+}
+
+void Karton::unregisterPreviewViewer(QObject *window)
+{
+    for (auto it = m_previewViewers.begin(); it != m_previewViewers.end();) {
+        if (it.value().isNull() || it.value() == window) {
+            it = m_previewViewers.erase(it);
         } else {
             ++it;
         }
@@ -898,16 +970,32 @@ QVariantMap Karton::domainStats(const Domain *domain)
     }
 
     double cpuPercent = 0.0;
+    bool haveCpuPercent = false;
     const auto previous = m_cpuSamples.constFind(cacheKey);
-    if (info.state == VIR_DOMAIN_RUNNING && previous != m_cpuSamples.cend() && now > previous->timestamp) {
-        const qint64 elapsedMs = now - previous->timestamp;
-        const qint64 usedNs = cpuTime - previous->cpuTime;
-        if (elapsedMs > 0 && usedNs > 0) {
-            cpuPercent = static_cast<double>(usedNs) * 100.0 / (static_cast<double>(elapsedMs) * 1000000.0 * vcpus);
-            cpuPercent = qBound(0.0, cpuPercent, 100.0);
+    if (info.state == VIR_DOMAIN_RUNNING) {
+        if (previous == m_cpuSamples.cend()) {
+            m_cpuSamples.insert(cacheKey, {cpuTime, now, 0.0, false});
+        } else if (now > previous->timestamp) {
+            const qint64 elapsedMs = now - previous->timestamp;
+            if (elapsedMs < 250) {
+                // The VM page and an open Settings dialog can both poll. Reuse
+                // the last value without resetting the sample timestamp.
+                if (previous->valid) {
+                    cpuPercent = previous->percent;
+                    haveCpuPercent = true;
+                }
+            } else {
+                const qint64 usedNs = qMax<qint64>(0, cpuTime - previous->cpuTime);
+                cpuPercent = static_cast<double>(usedNs) * 100.0 / (static_cast<double>(elapsedMs) * 1000000.0 * vcpus);
+                cpuPercent = qBound(0.0, cpuPercent, 100.0);
+                haveCpuPercent = true;
+                m_cpuSamples.insert(cacheKey, {cpuTime, now, cpuPercent, true});
+            }
+        } else if (previous->valid) {
+            cpuPercent = previous->percent;
+            haveCpuPercent = true;
         }
     }
-    m_cpuSamples.insert(cacheKey, {cpuTime, now});
 
     const unsigned long maxMemory = virDomainGetMaxMemory(domainPtr);
 
@@ -917,12 +1005,94 @@ QVariantMap Karton::domainStats(const Domain *domain)
     // 2-second timer on the GUI thread, so such a call freezes the whole
     // window, including an open SPICE viewer. virDomainGetInfo() is answered
     // from libvirt's cached domain state and is safe to poll.
-    stats.insert(QStringLiteral("cpuPercent"), cpuPercent);
+    if (haveCpuPercent) {
+        stats.insert(QStringLiteral("cpuPercent"), cpuPercent);
+    }
     stats.insert(QStringLiteral("cpuTime"), cpuTime);
     stats.insert(QStringLiteral("memoryKiB"), static_cast<qulonglong>(info.memory));
     stats.insert(QStringLiteral("maxMemoryKiB"), static_cast<qulonglong>(maxMemory));
     stats.insert(QStringLiteral("vcpus"), vcpus);
+
+    const auto memorySample = m_guestMemory.constFind(cacheKey);
+    if (memorySample != m_guestMemory.cend()) {
+        stats.insert(QStringLiteral("memoryUsedKiB"), memorySample->usedKiB);
+        stats.insert(QStringLiteral("memoryTotalKiB"), memorySample->totalKiB);
+    }
+
+    if (info.state == VIR_DOMAIN_RUNNING && !m_memoryRequests.contains(cacheKey) && now - m_memoryRequestTimes.value(cacheKey, 0) >= 2000) {
+        const QString virsh = QStandardPaths::findExecutable(QStringLiteral("virsh"));
+        if (!virsh.isEmpty() && !m_activeUri.isEmpty()) {
+            m_memoryRequests.insert(cacheKey);
+            m_memoryRequestTimes.insert(cacheKey, now);
+            const QString name = QString::fromUtf8(virDomainGetName(domainPtr));
+            m_commandRunner->runCommand(
+                virsh,
+                {QStringLiteral("-c"), m_activeUri, QStringLiteral("dommemstat"), name},
+                [this, cacheKey, virsh, name](bool success, const QString &output) {
+                    m_memoryRequests.remove(cacheKey);
+                    if (!success) {
+                        return;
+                    }
+                    qulonglong actual = 0;
+                    qulonglong unused = 0;
+                    qulonglong available = 0;
+                    qulonglong usable = 0;
+                    bool hasUnused = false;
+                    bool hasAvailable = false;
+                    const QStringList lines = output.split(QLatin1Char('\n'));
+                    for (const QString &line : lines) {
+                        const QStringList parts = line.simplified().split(QLatin1Char(' '));
+                        if (parts.size() < 2) {
+                            continue;
+                        }
+                        bool ok = false;
+                        const qulonglong value = parts.at(1).toULongLong(&ok);
+                        if (!ok) {
+                            continue;
+                        }
+                        if (parts.at(0) == QStringLiteral("actual")) {
+                            actual = value;
+                        } else if (parts.at(0) == QStringLiteral("unused")) {
+                            unused = value;
+                            hasUnused = true;
+                        } else if (parts.at(0) == QStringLiteral("available")) {
+                            available = value;
+                            hasAvailable = true;
+                        } else if (parts.at(0) == QStringLiteral("usable")) {
+                            usable = value;
+                        }
+                    }
+                    const qulonglong total = actual > 0 ? actual : usable;
+                    qulonglong used = 0;
+                    if (hasUnused && total >= unused) {
+                        used = total - unused;
+                    } else if (hasAvailable && total >= available) {
+                        used = total - available;
+                    } else {
+                        // Balloon polling is off. virsh's --period command
+                        // prints no statistics; enable it and fetch on the
+                        // next two-second tick.
+                        m_commandRunner->runCommand(
+                            virsh,
+                            {QStringLiteral("-c"), m_activeUri, QStringLiteral("dommemstat"), QStringLiteral("--period"), QStringLiteral("2"), name},
+                            [](bool, const QString &) { });
+                        return;
+                    }
+                    applyGuestMemoryStats(cacheKey, used, total);
+                });
+        }
+    }
+
     return stats;
+}
+
+void Karton::applyGuestMemoryStats(const QString &uuid, qulonglong usedKiB, qulonglong totalKiB)
+{
+    if (totalKiB == 0) {
+        return;
+    }
+    m_guestMemory.insert(uuid, {usedKiB, totalKiB});
+    Q_EMIT domainStatsUpdated(uuid);
 }
 
 bool Karton::setAutostart(const Domain *domain, bool autostart)

@@ -6,6 +6,7 @@
 
 #include <QProcess>
 #include <QTimer>
+#include <memory>
 
 #include "karton_debug.h"
 
@@ -13,8 +14,23 @@ void CommandRunner::runCommand(const QString &program, const QStringList &argume
 {
     qCDebug(KARTON_DEBUG) << "Running command:" << program << arguments;
 
+    if (qEnvironmentVariableIsSet("KARTON_TIMING")) {
+        qWarning("KARTON_TIMING runner start");
+    }
     auto *process = new QProcess(this);
-    connect(process, &QProcess::finished, this, [process, callback](int exitCode, QProcess::ExitStatus exitStatus) {
+    auto reported = std::make_shared<bool>(false);
+    connect(process, &QProcess::errorOccurred, this, [this, process, callback, reported](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || *reported) {
+            return;
+        }
+        *reported = true;
+        const QString errorString = process->errorString();
+        process->deleteLater();
+        QTimer::singleShot(0, this, [callback, errorString] {
+            callback(false, errorString);
+        });
+    });
+    connect(process, &QProcess::finished, this, [process, callback, reported](int exitCode, QProcess::ExitStatus exitStatus) {
         const QString output = QString::fromLocal8Bit(process->readAllStandardOutput());
         const QString error = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
         const bool success = exitStatus == QProcess::NormalExit && exitCode == 0;
@@ -24,20 +40,19 @@ void CommandRunner::runCommand(const QString &program, const QStringList &argume
         }
 
         process->deleteLater();
+        if (*reported) {
+            return;
+        }
+        *reported = true;
         callback(success, success ? output : (error.isEmpty() ? output : error));
     });
 
+    // QProcess::start() is asynchronous. Do not call waitForStarted() here:
+    // it blocks the GUI thread while the child process is forked/executed,
+    // which froze the window for several seconds on slower systems.
     process->start(program, arguments);
-    if (!process->waitForStarted()) {
-        const QString error = process->errorString();
-        qCWarning(KARTON_DEBUG) << "Failed to start command:" << program << error;
-        process->deleteLater();
-
-        // Report the failure after the caller has returned and had a chance to
-        // set up its own pending state.
-        QTimer::singleShot(0, this, [callback, error] {
-            callback(false, error);
-        });
+    if (qEnvironmentVariableIsSet("KARTON_TIMING")) {
+        qWarning("KARTON_TIMING runner start returned");
     }
 }
 

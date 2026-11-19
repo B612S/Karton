@@ -6,12 +6,9 @@
 
 #include <array>
 
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QPainter>
 
-#include <QSaveFile>
 #include <QString>
 #include <utility>
 
@@ -29,7 +26,6 @@ Domain::Domain(QObject *parent)
     connect(m_config, &DomainConfig::stateChanged, this, &Domain::stateChanged);
     connect(m_config, &DomainConfig::ramUsageChanged, this, &Domain::ramUsageChanged);
     connect(m_config, &DomainConfig::autostartChanged, this, &Domain::autostartChanged);
-    m_previewFrame.load(m_config->screenshotPreviewPath());
 }
 
 Domain::Domain(const virDomainPtr domainPtr, DomainConfig *config, QObject *parent)
@@ -46,7 +42,6 @@ Domain::Domain(const virDomainPtr domainPtr, DomainConfig *config, QObject *pare
     connect(m_config, &DomainConfig::stateChanged, this, &Domain::stateChanged);
     connect(m_config, &DomainConfig::ramUsageChanged, this, &Domain::ramUsageChanged);
     connect(m_config, &DomainConfig::autostartChanged, this, &Domain::autostartChanged);
-    m_previewFrame.load(m_config->screenshotPreviewPath());
 }
 
 Domain::~Domain()
@@ -129,11 +124,54 @@ void Domain::updateLivePreviewFrame(QImage frame)
     Q_EMIT previewChanged();
 }
 
+void Domain::appendConsolePreview(const QString &text)
+{
+    if (text.isEmpty()) {
+        return;
+    }
+    if (!m_consolePreviewActive) {
+        m_consolePreviewActive = true;
+        Q_EMIT consolePreviewActiveChanged();
+    }
+    m_consolePreviewText += text;
+    constexpr int maximumPreviewCharacters = 65536;
+    if (m_consolePreviewText.size() > maximumPreviewCharacters) {
+        m_consolePreviewText.remove(0, m_consolePreviewText.size() - maximumPreviewCharacters);
+    }
+    Q_EMIT consolePreviewTextChanged();
+}
+
+void Domain::setConsolePreviewActive(bool active)
+{
+    if (m_consolePreviewActive == active) {
+        return;
+    }
+    m_consolePreviewActive = active;
+    // Keep the last text when the stream is temporarily closed (for example
+    // while the viewer is promoted/demoted); a new serial stream has no
+    // screen replay and would otherwise leave the preview empty.
+    Q_EMIT consolePreviewActiveChanged();
+}
+
+void Domain::clearConsolePreview()
+{
+    if (!m_consolePreviewActive && m_consolePreviewText.isEmpty()) {
+        return;
+    }
+    m_consolePreviewActive = false;
+    m_consolePreviewText.clear();
+    Q_EMIT consolePreviewTextChanged();
+    Q_EMIT consolePreviewActiveChanged();
+}
+
 void Domain::clearPreviewFrame()
 {
     const QString previewPath = m_config->screenshotPreviewPath();
     if (!previewPath.isEmpty()) {
+        // Remove leftovers from versions that persisted previews.
         QFile::remove(previewPath);
+        QFile::remove(previewPath + QStringLiteral(".tmp.png"));
+        QFile::remove(previewPath + QStringLiteral(".png.tmp.png"));
     }
     if (m_previewFrame.isNull()) {
         return;
@@ -145,15 +183,6 @@ void Domain::clearPreviewFrame()
 
 void Domain::savePreviewFrame(QImage frame)
 {
-    qCDebug(KARTON_DEBUG) << "Saving preview to:" << m_config->screenshotPreviewPath();
-
-    const QString previewPath = m_config->screenshotPreviewPath();
-    QDir previewDir = QFileInfo(previewPath).dir();
-    if (!previewDir.exists() && !previewDir.mkpath(QStringLiteral("."))) {
-        qCWarning(KARTON_DEBUG) << "Failed to create preview directory:" << previewDir.absolutePath();
-        return;
-    }
-
     // QQuickItemGrabResult can be premultiplied/have alpha; compositing it
     // onto black first keeps its colours identical to the old virsh preview.
     if (frame.format() != QImage::Format_RGB32) {
@@ -169,12 +198,9 @@ void Domain::savePreviewFrame(QImage frame)
         frame = frame.scaledToWidth(640, Qt::SmoothTransformation);
     }
 
-    QSaveFile previewFile(previewPath);
-    if (!previewFile.open(QIODevice::WriteOnly) || !frame.save(&previewFile, "PNG") || !previewFile.commit()) {
-        qCWarning(KARTON_DEBUG) << "Failed to save preview image:" << previewPath;
-        return;
-    }
-
+    // Previews are kept in memory only. Persisting them to the state directory
+    // left readable screenshots of the guest on disk even though a stopped VM
+    // never shows a preview; the next start captures a fresh frame.
     m_previewFrame = std::move(frame);
     Q_EMIT previewFrameChanged();
     Q_EMIT previewChanged();

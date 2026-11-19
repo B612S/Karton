@@ -381,6 +381,21 @@ int Karton::consoleFontSize(const Domain *domain) const
     return overrideSize > 0 ? overrideSize : globalConsoleFontSize();
 }
 
+QString Karton::consoleCursorShape() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString shape = settings.value(QStringLiteral("console/cursorShape"), QStringLiteral("block")).toString();
+    return shape == QStringLiteral("bar") || shape == QStringLiteral("underline") ? shape : QStringLiteral("block");
+}
+
+void Karton::saveConsoleCursorShape(const QString &shape)
+{
+    const QString normalized = shape == QStringLiteral("bar") || shape == QStringLiteral("underline") ? shape : QStringLiteral("block");
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("console/cursorShape"), normalized);
+    Q_EMIT consoleCursorShapeChanged();
+}
+
 int Karton::cleanupStaleCaches()
 {
     if (!m_conn) {
@@ -864,6 +879,30 @@ QVariantMap Karton::domainDisplayResolution(const Domain *domain) const
         resolution.insert(QStringLiteral("height"), height);
     }
     return resolution;
+}
+
+bool Karton::domainDisplayFullscreen(const Domain *domain) const
+{
+    if (!domain) {
+        return false;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return settings.value(QStringLiteral("display/%1/fullscreen").arg(domain->config()->uuid()), false).toBool();
+}
+
+void Karton::saveDomainDisplayFullscreen(const Domain *domain, bool fullscreen)
+{
+    if (!domain) {
+        return;
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString prefix = QStringLiteral("display/%1/").arg(domain->config()->uuid());
+    settings.setValue(prefix + QStringLiteral("fullscreen"), fullscreen);
+    if (fullscreen) {
+        settings.remove(prefix + QStringLiteral("width"));
+        settings.remove(prefix + QStringLiteral("height"));
+    }
+    Q_EMIT displayResolutionChanged(domain);
 }
 
 void Karton::saveDomainDisplayResolution(const Domain *domain, int width, int height)

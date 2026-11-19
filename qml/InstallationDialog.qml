@@ -31,8 +31,8 @@ Kirigami.Dialog {
     readonly property int lastStep: 3
     modal: true
 
-    readonly property real cardWidth: applicationWindow() ? Math.min(900, applicationWindow().width - 48) : 900
-    readonly property real cardHeight: applicationWindow() ? Math.min(640, applicationWindow().height - 48) : 640
+    readonly property real cardWidth: applicationWindow() ? Math.max(640, Math.min(900, applicationWindow().width - 48)) : 900
+    readonly property real cardHeight: applicationWindow() ? Math.max(500, Math.min(640, applicationWindow().height - 48)) : 640
     width: cardWidth
     height: cardHeight
 

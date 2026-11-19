@@ -23,21 +23,22 @@ Kirigami.ScrollablePage {
         }
         const existing = Karton.viewerForDomain(domain);
         if (existing) {
-            existing.show();
-            existing.raise();
-            existing.requestActivate();
+            if (existing.previewMode) {
+                existing.openAsViewer();
+            } else {
+                existing.showViewer();
+            }
             return;
         }
-        const component = Qt.createComponent("VMViewerWindow.qml");
-        if (component.status !== Component.Ready) {
-            console.error("Failed to create VM viewer:", component.errorString());
+        if (!Karton.reserveViewer(domain)) {
             return;
         }
-        const window = component.createObject(null, {
-            domain: domain
-        });
+        // Create the window from the main window's context: viewer windows
+        // outlive the pages that open them and a page-owned context becomes
+        // invalid when switching to another VM.
+        const window = applicationWindow().createViewerWindow(domain, false);
         if (!window) {
-            console.error("Failed to create VM viewer window");
+            Karton.releaseViewerReservation(domain);
         }
     }
 

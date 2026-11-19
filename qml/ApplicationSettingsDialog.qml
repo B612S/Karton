@@ -35,8 +35,8 @@ Kirigami.Dialog {
 
     modal: true
     padding: 0
-    width: applicationWindow() ? Math.min(760, applicationWindow().width - 48) : 760
-    height: applicationWindow() ? Math.min(520, applicationWindow().height - 48) : 520
+    width: applicationWindow() ? Math.max(600, Math.min(760, applicationWindow().width - 48)) : 760
+    height: applicationWindow() ? Math.max(440, Math.min(520, applicationWindow().height - 48)) : 520
     header: Item {}
 
     background: Rectangle {
@@ -53,6 +53,8 @@ Kirigami.Dialog {
         spiceTlsCheck.checked = Karton.spiceTlsEnabled();
         spiceCaField.text = Karton.spiceCaCertificate();
         consoleFontSpin.value = Karton.globalConsoleFontSize();
+        const cursorShape = Karton.consoleCursorShape();
+        consoleCursorCombo.currentIndex = cursorShape === "bar" ? 1 : cursorShape === "underline" ? 2 : 0;
         imagesFolderField.text = Karton.imagesDirectory();
         imagesFolderError = "";
         grantedFolders = Karton.grantedDiskDirectories();
@@ -430,6 +432,19 @@ Kirigami.Dialog {
                                     Layout.preferredWidth: root.controlWidth
                                     Layout.alignment: Qt.AlignRight
                                     onValueModified: Karton.saveGlobalConsoleFontSize(value)
+                                }
+                                Controls.Label {
+                                    text: qsTr("cursor_shape")
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                                }
+                                Controls.ComboBox {
+                                    id: consoleCursorCombo
+                                    model: [qsTr("cursor_block"), qsTr("cursor_bar"), qsTr("cursor_underline")]
+                                    Layout.preferredWidth: root.controlWidth
+                                    Layout.alignment: Qt.AlignRight
+                                    onActivated: Karton.saveConsoleCursorShape(currentIndex === 1 ? "bar" : currentIndex === 2 ? "underline" : "block")
                                 }
                                 Controls.Label {
                                     Layout.columnSpan: 2

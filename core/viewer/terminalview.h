@@ -22,6 +22,7 @@ class TerminalView : public QQuickPaintedItem
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY fontSizeChanged)
+    Q_PROPERTY(QString cursorShape READ cursorShape WRITE setCursorShape NOTIFY cursorShapeChanged)
 
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
@@ -37,10 +38,16 @@ public:
         return m_fontSize;
     }
     void setFontSize(int pixels);
+    QString cursorShape() const
+    {
+        return m_cursorShape;
+    }
+    void setCursorShape(const QString &shape);
 
 Q_SIGNALS:
     void dataToSend(const QString &text);
     void fontSizeChanged();
+    void cursorShapeChanged();
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -148,6 +155,7 @@ private:
 
     QFont m_font;
     int m_fontSize = 12;
+    QString m_cursorShape = QStringLiteral("block");
     qreal m_cellWidth = 8;
     qreal m_cellHeight = 16;
     qreal m_originX = 0;

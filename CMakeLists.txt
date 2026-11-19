@@ -156,7 +156,6 @@ target_sources(karton
     core/app/karton_network.cpp
     core/app/karton_os.cpp
     core/app/karton_pci.cpp
-    core/app/karton_preview.cpp
     core/app/karton_settings.cpp
     core/app/karton_snapshots.cpp
     core/app/karton_usb.cpp
@@ -199,6 +198,7 @@ ecm_target_qml_sources(karton
     qml/InstallationDialog.qml
     qml/PermissionGrantDialog.qml
     qml/VMPage.qml
+    qml/UsageGraph.qml
     qml/AddHardwareDialog.qml
     qml/ApplicationSettingsDialog.qml
     qml/ScrollableSettingsView.qml

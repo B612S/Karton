@@ -163,6 +163,77 @@ QVariantList Karton::domainDisks(const Domain *domain) const
     return result;
 }
 
+QVariantList Karton::domainDiskStats(const Domain *domain) const
+{
+    QVariantList result;
+    if (!domain || !domain->domainPtr()) {
+        return result;
+    }
+
+    virDomainPtr domainPtr = domain->domainPtr();
+    const bool running = domain->isActive();
+    char *xml = virDomainGetXMLDesc(domainPtr, running ? 0 : VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        xml = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
+    }
+    if (!xml) {
+        return result;
+    }
+
+    QDomDocument document;
+    if (!document.setContent(QString::fromUtf8(xml))) {
+        free(xml);
+        return result;
+    }
+    free(xml);
+
+    const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+    for (int i = 0; i < disks.count(); ++i) {
+        const QDomElement element = disks.at(i).toElement();
+        const QDomElement source = element.firstChildElement(QStringLiteral("source"));
+        const QDomElement target = element.firstChildElement(QStringLiteral("target"));
+        const QDomElement driver = element.firstChildElement(QStringLiteral("driver"));
+        const QString device = element.attribute(QStringLiteral("device"));
+        const QString path = source.attribute(QStringLiteral("file"));
+        const bool isCdrom = device == QStringLiteral("cdrom");
+
+        qulonglong capacity = 0;
+        qulonglong allocation = 0;
+        virDomainBlockInfo blockInfo = {};
+        if (!path.isEmpty() && virDomainGetBlockInfo(domainPtr, path.toUtf8().constData(), &blockInfo, 0) == 0) {
+            capacity = blockInfo.capacity;
+            allocation = blockInfo.allocation;
+        }
+        const QFileInfo fileInfo(path);
+        if (fileInfo.exists()) {
+            if (allocation == 0) {
+                allocation = static_cast<qulonglong>(fileInfo.size());
+            }
+            if (capacity == 0) {
+                capacity = static_cast<qulonglong>(fileInfo.size());
+            }
+        }
+
+        QVariantMap info;
+        info.insert(QStringLiteral("device"), device);
+        info.insert(QStringLiteral("type"), element.attribute(QStringLiteral("type")));
+        info.insert(QStringLiteral("target"), target.attribute(QStringLiteral("dev")));
+        info.insert(QStringLiteral("bus"), target.attribute(QStringLiteral("bus")));
+        info.insert(QStringLiteral("source"), path.isEmpty() ? source.attribute(QStringLiteral("dev")) : path);
+        info.insert(QStringLiteral("format"), driver.attribute(QStringLiteral("type")));
+        info.insert(QStringLiteral("readonly"), !element.firstChildElement(QStringLiteral("readonly")).isNull());
+        info.insert(QStringLiteral("isCdrom"), isCdrom);
+        info.insert(QStringLiteral("hasMedia"), !path.isEmpty());
+        info.insert(QStringLiteral("capacityBytes"), capacity);
+        info.insert(QStringLiteral("allocationBytes"), allocation);
+        info.insert(QStringLiteral("usagePercent"),
+                    capacity > 0 ? qBound(0.0, static_cast<double>(allocation) * 100.0 / static_cast<double>(capacity), 100.0) : 0.0);
+        result.append(info);
+    }
+
+    return result;
+}
+
 bool Karton::addDisk(const Domain *domain, int sizeGB, const QString &format, const QVariantMap &options)
 {
     if (!domain || !domain->domainPtr()) {

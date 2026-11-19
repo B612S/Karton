@@ -23,10 +23,26 @@ Kirigami.ApplicationWindow {
 
     // Open large enough for a modern guest resolution instead of a small
     // fixed window; Actual Size and Fit Guest to Window remain available.
-    width: screenInfo ? Math.min(screenInfo.width, Math.max(Kirigami.Units.gridUnit * 60, Math.min(screenInfo.width * 0.85, Kirigami.Units.gridUnit * 120))) : Kirigami.Units.gridUnit * 70
-    height: screenInfo ? Math.min(screenInfo.height, Math.max(Kirigami.Units.gridUnit * 40, Math.min(screenInfo.height * 0.85, Kirigami.Units.gridUnit * 72))) : Kirigami.Units.gridUnit * 45
+    // Keep the toolbar and a usable guest area visible. A fixed display
+    // resolution overrides these limits while it is active.
+    // The guest area is what a fixed resolution sets; the window additionally
+    // contains the viewer toolbar. Keep these values in sync with
+    // SettingsDialog.minimumDisplayWidth/Height.
+    readonly property int minimumGuestWidth: Kirigami.Units.gridUnit * 40
+    readonly property int minimumGuestHeight: Kirigami.Units.gridUnit * 27
+    readonly property int baseMinimumWidth: minimumGuestWidth
+    readonly property int baseMinimumHeight: minimumGuestHeight + Kirigami.Units.gridUnit * 2
+    width: screenInfo ? Math.max(baseMinimumWidth, Math.min(screenInfo.width, Math.max(Kirigami.Units.gridUnit * 60, Math.min(screenInfo.width * 0.85, Kirigami.Units.gridUnit * 120)))) : Math.max(baseMinimumWidth, Kirigami.Units.gridUnit * 70)
+    height: screenInfo ? Math.max(baseMinimumHeight, Math.min(screenInfo.height, Math.max(Kirigami.Units.gridUnit * 40, Math.min(screenInfo.height * 0.85, Kirigami.Units.gridUnit * 72)))) : Math.max(baseMinimumHeight, Kirigami.Units.gridUnit * 45)
+    minimumWidth: baseMinimumWidth
+    minimumHeight: baseMinimumHeight
 
     property bool viewerRegistered: false
+    // A hidden viewer window kept alive for the VM page preview. It owns the
+    // single SPICE connection and is promoted to a real viewer when opened.
+    property bool previewMode: false
+    // True while a preview window is hidden with its SPICE session stopped.
+    property bool previewSuspended: false
     readonly property bool isRunning: domain ? domain.isActive : false
     // A running viewer captures shortcuts only while the pointer is over the
     // guest area. The toolbar, title bar and dialogs must keep normal
@@ -42,7 +58,26 @@ Kirigami.ApplicationWindow {
         && !(rebootMenu && rebootMenu.opened)
         && !(viewerMenu && viewerMenu.opened)
     property bool wasRunning: false
+
+
     property bool sizeRestored: false
+    // Set while the compositor minimizes or restores the viewer. Windowed
+    // size and min/max must not be applied during that transition; the
+    // compositor owns the animation.
+    property bool minimizing: false
+    // The mode the viewer must have when it is mapped again. It is set while
+    // the window is fullscreen and survives minimizing, hiding into preview
+    // mode and reopening from the taskbar or the VM preview. It is cleared
+    // only after a real user exit from fullscreen.
+    property bool restoreFullScreen: false
+    // True between a minimize request and the compositor bringing the window
+    // back. Minimize/restore is left entirely to the compositor; this flag
+    // only tells Karton not to touch windowed geometry during the transition.
+    property bool wasMinimized: false
+    // Pending re-application of the fixed windowed limits after leaving
+    // fullscreen. It is delayed until the compositor has restored the window
+    // position, so the window does not flash at the fullscreen origin.
+    property bool pendingWindowedLimits: false
     property int consoleFontSize: Karton.consoleFontSize(domain)
 
     // The guest agent is absent while the VM boots and while Windows is at the
@@ -167,10 +202,19 @@ Kirigami.ApplicationWindow {
     onIsFullScreenChanged: {
         fullScreenTransition = false;
         fullScreenTransitionTimer.stop();
+
         if (isFullScreen) {
-            windowedRestoreTimer.stop();
-            // Fixed-size limits must not constrain or stretch a fullscreen
-            // window; the guest follows the whole screen there.
+            // The compositor restored or entered fullscreen; this is the mode
+            // to keep when it minimizes the window later.
+            restoreFullScreen = true;
+            if (wasMinimized) {
+                // The compositor is still restoring the minimized window. Let
+                // its own animation finish; finishRestore() clears the flags.
+                return;
+            }
+            fullScreenExitTimer.stop();
+            pendingWindowedLimits = false;
+            windowedGeometryTimer.stop();
             resetWindowSizeLimits();
             fullScreenToolbarVisible = true;
             toolbarHideTimer.restart();
@@ -180,22 +224,46 @@ Kirigami.ApplicationWindow {
                     domainViewer.updateDisplayResolution();
                 }
             });
-        } else {
-            fullScreenToolbarVisible = true;
-            toolbarHideTimer.stop();
-            // Let the compositor finish restoring the windowed geometry before
-            // touching the size. Resizing from this handler used to race the
-            // fullscreen exit animation, which made the window flash while
-            // KWin was still moving it back.
-            windowedRestoreTimer.restart();
+            return;
+        }
+
+        // Minimizing or hiding a fullscreen window also reports a Windowed
+        // state. Keep the fullscreen intent: the compositor restores it.
+        if (visibility === Window.Minimized || visibility === Window.Hidden
+                || minimizing || wasMinimized) {
+            return;
+        }
+
+        // A compositor-initiated exit from fullscreen (shortcut, window menu).
+        fullScreenExitTimer.restart();
+        fullScreenToolbarVisible = true;
+        toolbarHideTimer.stop();
+    }
+
+    Timer {
+        id: fullScreenExitTimer
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (viewerWindow.isFullScreen || viewerWindow.minimizing
+                    || viewerWindow.wasMinimized
+                    || !viewerWindow.visible
+                    || viewerWindow.visibility === Window.Minimized
+                    || viewerWindow.visibility === Window.Hidden) {
+                return;
+            }
+            // A real user exit from fullscreen, not a minimize/restore cycle.
+            viewerWindow.restoreFullScreen = false;
+            viewerWindow.pendingWindowedLimits = true;
+            windowedGeometryTimer.restart();
         }
     }
 
     Timer {
-        id: windowedRestoreTimer
-        interval: 200
+        id: windowedGeometryTimer
+        interval: 300
         repeat: false
-        onTriggered: viewerWindow.applyDisplayMode()
+        onTriggered: viewerWindow.applyWindowedLimits()
     }
 
     Timer {
@@ -208,15 +276,146 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    // The compositor owns the minimize/restore transition and its animation.
+    // Called once the window is active again (taskbar restore), this only
+    // re-applies the mode Karton remembered; it never passes through a normal
+    // window state.
+    function finishRestore() {
+        if (previewMode || !visible || visibility === Window.Minimized || visibility === Window.Hidden) {
+            return;
+        }
+        wasMinimized = false;
+        minimizing = false;
+        fullScreenExitTimer.stop();
+        if (restoreFullScreen) {
+            // KWin restores a fullscreen surface as fullscreen itself.
+            // If a compositor brought it back windowed, request fullscreen
+            // once; showFullScreen() is idempotent and never drops the
+            // fullscreen state.
+            resetWindowSizeLimits();
+            if (!isFullScreen) {
+                showFullScreen();
+            }
+        } else {
+            // A windowed restore keeps the geometry the compositor restored;
+            // only re-apply the fixed-size limits (this does not resize unless
+            // they were released by a fullscreen round trip).
+            applyWindowedLimits();
+        }
+        fullScreenToolbarVisible = true;
+        toolbarHideTimer.restart();
+        raise();
+        requestActivate();
+        Qt.callLater(function() {
+            if (!viewerWindow.visible || viewerWindow.previewMode) {
+                return;
+            }
+            if (viewerWindow.restoreFullScreen) {
+                viewerWindow.resetWindowSizeLimits();
+                domainViewer.updateDisplayResolution();
+            }
+            if (viewerWindow.active) {
+                domainViewer.forceActiveFocus();
+            }
+        });
+    }
+
+    // Minimize the viewer to the taskbar. The compositor owns the transition
+    // and its animation; Karton only remembers the mode so it can re-apply the
+    // fixed windowed limits after the window comes back.
+    function requestMinimize() {
+        if (previewMode) {
+            return;
+        }
+        if (isFullScreen) {
+            restoreFullScreen = true;
+        }
+        minimizing = true;
+        wasMinimized = true;
+        fullScreenExitTimer.stop();
+        fullScreenTransitionTimer.stop();
+        pendingWindowedLimits = false;
+        windowedGeometryTimer.stop();
+        fullScreenToolbarVisible = true;
+        hoveredToolbarButton = "";
+        toolbarHideTimer.stop();
+        powerMenu.close();
+        rebootMenu.close();
+        viewerMenu.close();
+        domainViewer.releasePointerGrab();
+        showMinimized();
+    }
+
+    // Open a viewer that is hidden (preview mode, closed viewer) or minimized.
+    // The compositor owns the mapping and its animation; Karton only sets the
+    // state it wants and never maps a windowed window first.
+    function showViewer() {
+        if (previewMode) {
+            return;
+        }
+        const hiddenOrMinimized = !visible || visibility === Window.Minimized
+            || visibility === Window.Hidden || wasMinimized;
+        if (!hiddenOrMinimized) {
+            raise();
+            requestActivate();
+            if (restoreFullScreen && !isFullScreen) {
+                finishRestore();
+            }
+            Qt.callLater(focusDisplay);
+            return;
+        }
+        minimizing = true;
+        wasMinimized = false;
+        if (restoreFullScreen) {
+            // One request: the window is mapped fullscreen straight away.
+            // Mapping it windowed first to seed the compositor's windowed
+            // restore geometry made it flash as a small window in the corner.
+            resetWindowSizeLimits();
+            showFullScreen();
+        } else {
+            // showNormal() reliably unminimizes a windowed surface that a
+            // Wayland compositor still reports as visible; show() alone can
+            // leave it minimized.
+            showNormal();
+            show();
+        }
+        raise();
+        requestActivate();
+        Qt.callLater(function() {
+            if (!viewerWindow.visible || viewerWindow.previewMode) {
+                return;
+            }
+            if (viewerWindow.restoreFullScreen) {
+                viewerWindow.finishRestore();
+            } else {
+                viewerWindow.minimizing = false;
+                viewerWindow.applyDisplayMode();
+                viewerWindow.focusDisplay();
+            }
+        });
+    }
+
     function toggleFullScreen() {
         if (visibility === Window.FullScreen) {
+            // A real user exit: the viewer must come back as a normal window,
+            // including from a later taskbar restore. Drop any stale minimize
+            // state so windowed geometry is applied even if the window was
+            // restored by the compositor without being activated.
+            restoreFullScreen = false;
+            minimizing = false;
+            wasMinimized = false;
             showNormal();
+            fullScreenToolbarVisible = true;
+            toolbarHideTimer.stop();
+            pendingWindowedLimits = true;
+            windowedGeometryTimer.restart();
             return;
         }
         // Release fixed limits before asking the compositor for fullscreen.
         // Do it one event-loop turn before the request so KWin does not keep
         // the old fixed-size maximum for the fullscreen surface.
         fullScreenTransition = true;
+        restoreFullScreen = true;
         fullScreenTransitionTimer.restart();
         resetWindowSizeLimits();
         Qt.callLater(function() {
@@ -326,6 +525,9 @@ Kirigami.ApplicationWindow {
     onShortcutsCapturedChanged: syncShortcutCapture()
 
     function focusDisplay() {
+        if (previewMode) {
+            return;
+        }
         // A dialog opened from a menu is allowed to keep the keyboard focus.
         if ((usbDialog && usbDialog.opened) || (settingsDialog && settingsDialog.opened)
                 || (snapshotsDialog && snapshotsDialog.opened)) {
@@ -339,7 +541,7 @@ Kirigami.ApplicationWindow {
     }
 
     function registerViewer() {
-        if (!viewerRegistered) {
+        if (!previewMode && !viewerRegistered) {
             viewerRegistered = true;
             Karton.viewerOpened();
             Karton.registerViewer(viewerWindow.domain, viewerWindow);
@@ -363,9 +565,9 @@ Kirigami.ApplicationWindow {
     }
 
     function resetWindowSizeLimits() {
-        viewerWindow.minimumWidth = 0;
+        viewerWindow.minimumWidth = viewerWindow.baseMinimumWidth;
         viewerWindow.maximumWidth = viewerWindow.unlimitedWindowSize;
-        viewerWindow.minimumHeight = 0;
+        viewerWindow.minimumHeight = viewerWindow.baseMinimumHeight;
         viewerWindow.maximumHeight = viewerWindow.unlimitedWindowSize;
     }
 
@@ -389,22 +591,57 @@ Kirigami.ApplicationWindow {
     // The configured guest resolution always wins over whatever size was last
     // written to karton.conf. 1920x1080 is the guest area only, so the window
     // is sized to that content plus the toolbar and is then locked to it.
-    function applyFixedWindowSize() {
-        if (fixedContentWidth <= 0 || fixedContentHeight <= 0 || viewerWindow.isFullScreen || viewerWindow.fullScreenTransition) {
-            return;
-        }
+    function fixedWindowedSize() {
         const scale = Math.min(1.0, Screen.width * 0.9 / fixedContentWidth, Screen.height * 0.85 / fixedContentHeight);
         const contentWidth = Math.round(fixedContentWidth * scale);
         const contentHeight = Math.round(fixedContentHeight * scale);
         const chrome = chromeHeight();
-        const windowWidth = Math.max(320, contentWidth);
-        const windowHeight = Math.max(240, contentHeight + chrome);
+        return {
+            width: Math.max(320, contentWidth),
+            height: Math.max(240, contentHeight + chrome)
+        };
+    }
 
-        // A different fixed resolution selected in Settings may be larger than
-        // the old maximum, so clear the limits before applying the new size.
-        resetWindowSizeLimits();
-        viewerWindow.width = windowWidth;
-        viewerWindow.height = windowHeight;
+    // Re-apply only the size limits, not the geometry, when the window is
+    // already at the configured size. This is what avoids a visible move when
+    // returning from fullscreen.
+    function applyWindowedLimits() {
+        if (fixedContentWidth <= 0 || fixedContentHeight <= 0 || viewerWindow.isFullScreen || viewerWindow.fullScreenTransition
+                || viewerWindow.minimizing || viewerWindow.visibility === Window.Minimized
+                || viewerWindow.visibility === Window.Hidden || !viewerWindow.visible) {
+            return;
+        }
+        viewerWindow.pendingWindowedLimits = false;
+        const target = fixedWindowedSize();
+        if (viewerWindow.width !== target.width || viewerWindow.height !== target.height) {
+            applyFixedWindowSize();
+            return;
+        }
+        viewerWindow.minimumWidth = target.width;
+        viewerWindow.maximumWidth = target.width;
+        viewerWindow.minimumHeight = target.height;
+        viewerWindow.maximumHeight = target.height;
+    }
+
+    function applyFixedWindowSize() {
+        if (fixedContentWidth <= 0 || fixedContentHeight <= 0 || viewerWindow.isFullScreen || viewerWindow.fullScreenTransition
+                || viewerWindow.minimizing || viewerWindow.visibility === Window.Minimized) {
+            return;
+        }
+        const target = fixedWindowedSize();
+        const windowWidth = target.width;
+        const windowHeight = target.height;
+
+        if (viewerWindow.width !== windowWidth || viewerWindow.height !== windowHeight) {
+            // A different fixed resolution selected in Settings may be larger
+            // than the old maximum (or smaller than the base minimum), so
+            // clear both limits before resizing.
+            resetWindowSizeLimits();
+            viewerWindow.minimumWidth = 0;
+            viewerWindow.minimumHeight = 0;
+            viewerWindow.width = windowWidth;
+            viewerWindow.height = windowHeight;
+        }
         // In windowed mode the fixed guest resolution also fixes the window.
         // The limits are released before entering fullscreen and re-applied
         // after the compositor has restored the window; otherwise KWin keeps
@@ -417,7 +654,7 @@ Kirigami.ApplicationWindow {
     }
 
     function applyDisplayMode() {
-        if (viewerWindow.fullScreenTransition) {
+        if (viewerWindow.fullScreenTransition || viewerWindow.minimizing || viewerWindow.visibility === Window.Minimized) {
             return;
         }
         if (fixedContentWidth > 0 && fixedContentHeight > 0) {
@@ -456,12 +693,39 @@ Kirigami.ApplicationWindow {
     }
 
     Component.onCompleted: {
+        if (previewMode) {
+            previewSuspended = false;
+            domainViewer.setPreviewStopped(false);
+            Karton.registerPreviewViewer(domain, viewerWindow);
+            wasRunning = isRunning;
+            return;
+        }
         // Kirigami installs an application-wide Ctrl+Q shortcut. It is disabled
         // while the pointer is over the running guest; DomainViewer forwards
         // every key to the guest in that state, and the toolbar/title bar keep
         // the normal shortcut.
         syncShortcutCapture();
         registerViewer();
+        initializeViewer();
+        showInitialViewer();
+    }
+
+    // The window is created hidden so its very first map already uses the
+    // configured geometry and mode. The compositor animates that single map;
+    // there is no windowed intermediate state.
+    function showInitialViewer() {
+        if (!domain || previewMode || visible) {
+            return;
+        }
+        if (restoreFullScreen) {
+            resetWindowSizeLimits();
+            showFullScreen();
+        } else {
+            show();
+        }
+    }
+
+    function initializeViewer() {
         const resolution = Karton.domainDisplayResolution(domain);
         if (resolution.width > 0 && resolution.height > 0) {
             fixedContentWidth = resolution.width;
@@ -487,26 +751,117 @@ Kirigami.ApplicationWindow {
         Qt.callLater(applyDisplayMode);
         wasRunning = isRunning;
         reloadGuestAgentState();
+        const savedFullScreen = Karton.domainDisplayFullscreen(domain);
+        if (savedFullScreen) {
+            // A per-VM fullscreen preference also defines the mode the window
+            // returns to after a minimize. Do not clear an already set live
+            // fullscreen intent when the saved mode is windowed. The caller
+            // maps the window directly in this mode, so the compositor
+            // animates a single transition instead of a windowed window that
+            // grows into fullscreen.
+            restoreFullScreen = true;
+        }
         Qt.callLater(function() {
             domainViewer.forceActiveFocus();
         });
     }
 
+    function openAsViewer() {
+        if (!previewMode) {
+            showViewer();
+            return;
+        }
+        // Reserve the full-viewer entry before switching previewMode off.
+        // Toggling previewMode reconnects SPICE synchronously, and without the
+        // early registration a second open request in that gap saw no viewer
+        // for the VM and created a duplicate window.
+        if (!viewerRegistered) {
+            viewerRegistered = true;
+            Karton.viewerOpened();
+            Karton.registerViewer(domain, viewerWindow);
+        }
+        Karton.unregisterPreviewViewer(viewerWindow);
+        previewMode = false;
+        domainViewer.setPreviewStopped(false);
+        syncShortcutCapture();
+        initializeViewer();
+        showViewer();
+        Qt.callLater(focusDisplay);
+    }
+
+    function enterPreviewMode() {
+        if (previewMode) {
+            return;
+        }
+        if (viewerRegistered) {
+            viewerRegistered = false;
+            Karton.unregisterViewer(viewerWindow);
+            Karton.viewerClosed();
+        }
+        Karton.setViewerGlobalShortcutsBlocked(viewerWindow, false);
+        previewMode = true;
+        previewSuspended = false;
+        domainViewer.setPreviewStopped(false);
+        domainViewer.armPreviewSettle(1200);
+        Karton.registerPreviewViewer(domain, viewerWindow);
+        fullScreenToolbarVisible = true;
+        hide();
+    }
+
+    function suspendPreview() {
+        if (!previewMode) {
+            return;
+        }
+        // Keep the window and its registration alive. Destroying a QQuickWindow
+        // at runtime leaves style timers and the render thread pointing at
+        // freed objects (the cause of a crash in QTimerInfoList/ breeze6).
+        if (!previewSuspended) {
+            previewSuspended = true;
+            domainViewer.setPreviewStopped(true);
+        }
+        hide();
+    }
+
+    function resumePreview() {
+        if (!previewMode) {
+            return;
+        }
+        if (!Karton.viewerForDomain(domain)) {
+            Karton.registerPreviewViewer(domain, viewerWindow);
+        }
+        // Do not reconnect an already running preview: a redundant
+        // disconnect/reconnect made the preview blink when switching pages.
+        if (previewSuspended) {
+            previewSuspended = false;
+            domainViewer.setPreviewStopped(false);
+            domainViewer.armPreviewSettle(1200);
+            domainViewer.setupSpiceSession();
+        }
+        hide();
+    }
+
     onWidthChanged: {
-        if (sizeRestored && !isFullScreen) {
+        if (sizeRestored && !isFullScreen && !minimizing && !wasMinimized) {
             viewerSizeTimer.restart();
+        }
+        if (pendingWindowedLimits && !isFullScreen && !minimizing && !wasMinimized) {
+            windowedGeometryTimer.restart();
         }
         clampToolbar();
     }
     onHeightChanged: {
-        if (sizeRestored && !isFullScreen) {
+        if (sizeRestored && !isFullScreen && !minimizing && !wasMinimized) {
             viewerSizeTimer.restart();
+        }
+        if (pendingWindowedLimits && !isFullScreen && !minimizing && !wasMinimized) {
+            windowedGeometryTimer.restart();
         }
         clampToolbar();
     }
 
     Component.onDestruction: {
         Karton.setViewerGlobalShortcutsBlocked(viewerWindow, false);
+        Karton.unregisterPreviewViewer(viewerWindow);
         if (viewerRegistered) {
             viewerRegistered = false;
             Karton.unregisterViewer(viewerWindow);
@@ -516,21 +871,81 @@ Kirigami.ApplicationWindow {
 
     onActiveChanged: {
         if (active) {
+            if (isFullScreen) {
+                fullScreenToolbarVisible = true;
+                toolbarHideTimer.restart();
+            }
+            // The compositor restores a minimized window and animates it
+            // itself. Only update Karton's mode state once it is back.
+            if (wasMinimized) {
+                Qt.callLater(finishRestore);
+            }
             Qt.callLater(function() {
                 domainViewer.forceActiveFocus();
+            });
+        } else {
+            // A pointer grab that survives deactivation is what made the
+            // toolbar buttons stop reacting after minimizing and restoring the
+            // window (virt-manager with spice-gtk has the same problem).
+            domainViewer.releasePointerGrab();
+            powerMenu.close();
+            rebootMenu.close();
+            viewerMenu.close();
+        }
+    }
+
+    onVisibilityChanged: {
+        if (visibility === Window.Minimized || visibility === Window.Hidden) {
+            if (previewMode) {
+                // Hiding into preview mode is not a taskbar minimize; the
+                // preview is handled by suspendPreview()/hide().
+                minimizing = false;
+                wasMinimized = false;
+            } else {
+                wasMinimized = true;
+                minimizing = true;
+            }
+            fullScreenExitTimer.stop();
+            fullScreenTransitionTimer.stop();
+            pendingWindowedLimits = false;
+            windowedGeometryTimer.stop();
+            domainViewer.releasePointerGrab();
+            Karton.setViewerGlobalShortcutsBlocked(viewerWindow, false);
+            powerMenu.close();
+            rebootMenu.close();
+            viewerMenu.close();
+            fullScreenToolbarVisible = true;
+            hoveredToolbarButton = "";
+            toolbarHideTimer.stop();
+        } else if (visible) {
+            // Clear any grab left behind by the compositor and force a new
+            // frame, so the restored surface gets fresh input geometry and the
+            // toolbar can be clicked again without reopening the window.
+            Qt.callLater(function() {
+                domainViewer.releasePointerGrab();
+                viewerWindow.requestUpdate();
             });
         }
     }
 
     onVisibleChanged: {
         if (visible) {
-            // The toolbar is laid out by now; reapply the fixed size so the
-            // window opens at exactly the configured content size.
-            Qt.callLater(applyDisplayMode);
+            if (wasMinimized && !previewMode) {
+                Qt.callLater(finishRestore);
+            } else if (!minimizing) {
+                // The toolbar is laid out by now; reapply the fixed size so the
+                // window opens at exactly the configured content size.
+                Qt.callLater(applyDisplayMode);
+            }
         }
     }
 
     onClosing: (close) => {
+        if (previewMode) {
+            close.accepted = false;
+            suspendPreview();
+            return;
+        }
         // Keyboard shortcuts are inhibited at the compositor/KGlobalAccel
         // level while the guest is active, so a close request here is a real
         // user action (title-bar X, window menu, More -> Close Viewer), not
@@ -546,6 +961,12 @@ Kirigami.ApplicationWindow {
         // last normal size so a crash there cannot leave the next window huge.
         if (!viewerWindow.isFullScreen) {
             Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height);
+        }
+        if (isRunning && domain) {
+            // Text-only VMs have no graphics but still have a serial console
+            // preview; keep the window as the hidden preview client.
+            enterPreviewMode();
+            return;
         }
         if (viewerRegistered) {
             viewerRegistered = false;
@@ -566,7 +987,8 @@ Kirigami.ApplicationWindow {
         interval: 500
         repeat: false
         onTriggered: {
-            if (!viewerWindow.isFullScreen) {
+            if (!viewerWindow.isFullScreen && !viewerWindow.minimizing
+                    && !viewerWindow.wasMinimized && viewerWindow.visible) {
                 Karton.saveViewerWindowSize(viewerWindow.domain, viewerWindow.width, viewerWindow.height);
             }
         }
@@ -576,7 +998,13 @@ Kirigami.ApplicationWindow {
         target: Karton
         function onDomainRemoved(removedDomain) {
             if (removedDomain === viewerWindow.domain) {
-                viewerWindow.close();
+                if (viewerWindow.previewMode) {
+                    Karton.unregisterPreviewViewer(viewerWindow);
+                    domainViewer.domain = null;
+                    viewerWindow.suspendPreview();
+                } else {
+                    viewerWindow.close();
+                }
             }
         }
         function onDisplayResolutionChanged(changedDomain) {
@@ -594,6 +1022,9 @@ Kirigami.ApplicationWindow {
         }
         function onConsoleFontSizeChanged() {
             viewerWindow.consoleFontSize = Karton.consoleFontSize(viewerWindow.domain);
+        }
+        function onConsoleCursorShapeChanged() {
+            serialTerminal.cursorShape = Karton.consoleCursorShape();
         }
     }
 
@@ -615,7 +1046,15 @@ Kirigami.ApplicationWindow {
         target: pageStack.globalToolBar
         property: "preferredHeight"
         value: 0
+        // Keep the header out of the layout while minimizing a fullscreen
+        // viewer as well. On a fullscreen minimize visibility already leaves
+        // FullScreen before the window is hidden; restoring the header then
+        // reflowed the guest for a frame and made the image jump. A viewer
+        // minimized from windowed mode must keep its header: hiding it would
+        // reflow the window when it is restored.
         when: viewerWindow.isFullScreen
+            || (viewerWindow.restoreFullScreen
+                && (viewerWindow.minimizing || viewerWindow.visibility === Window.Minimized))
         restoreMode: Binding.RestoreBindingOrValue
     }
 
@@ -693,7 +1132,9 @@ Kirigami.ApplicationWindow {
             color: Qt.rgba(0, 0, 0, 0.72)
             visible: viewerWindow.isFullScreen && (viewerWindow.fullScreenToolbarVisible || opacity > 0.01)
             opacity: viewerWindow.fullScreenToolbarVisible ? 1 : 0
-            enabled: viewerWindow.fullScreenToolbarVisible && opacity > 0.5
+            // The bar is only drawn while it has opacity; never leave it
+            // visible but disabled after a minimize/restore cycle.
+            enabled: viewerWindow.fullScreenToolbarVisible || opacity > 0.01
             z: 100
 
             Behavior on opacity {
@@ -868,7 +1309,7 @@ Kirigami.ApplicationWindow {
                             Controls.ToolTip.text: qsTr("more")
                             onClicked: {
                                 domainViewer.releasePointerGrab();
-                                viewerMenu.popup();
+                                viewerMenu.popup(moreFrame, moreFrame.width - viewerMenu.implicitWidth, moreFrame.height);
                             }
                         }
                     }                    Rectangle {
@@ -890,8 +1331,7 @@ Kirigami.ApplicationWindow {
                             Controls.ToolTip.visible: hovered
                             Controls.ToolTip.text: qsTr("minimize")
                             onClicked: {
-                                domainViewer.releasePointerGrab();
-                                viewerWindow.showMinimized();
+                                viewerWindow.requestMinimize();
                             }
                         }
                     }
@@ -1025,9 +1465,73 @@ Kirigami.ApplicationWindow {
             Kirigami.Action {
                 text: qsTr("more")
                 icon.name: "view-more-symbolic"
-                onTriggered: {
-                    domainViewer.releasePointerGrab();
-                    viewerMenu.popup();
+
+                // Keep the overflow submenu anchored to the toolbar button;
+                // popup() at the cursor left it floating in a narrow window.
+                Kirigami.Action {
+                    text: qsTr("display")
+                    enabled: false
+                }
+                Kirigami.Action {
+                    text: qsTr("actual_size")
+                    icon.name: "zoom-original-symbolic"
+                    enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
+                    onTriggered: {
+                        viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
+                        viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
+                    }
+                }
+                Kirigami.Action {
+                    text: qsTr("fit_guest_to_window")
+                    icon.name: "transform-scale-symbolic"
+                    enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
+                    onTriggered: domainViewer.fitGuestToWindow()
+                }
+                Kirigami.Action { separator: true }
+                Kirigami.Action {
+                    text: qsTr("devices")
+                    enabled: false
+                }
+                Kirigami.Action {
+                    text: qsTr("usb_devices")
+                    icon.name: "drive-removable-media-usb-symbolic"
+                    onTriggered: usbDialog.open()
+                }
+                Kirigami.Action { separator: true }
+                Kirigami.Action {
+                    text: qsTr("machine")
+                    enabled: false
+                }
+                Kirigami.Action {
+                    text: qsTr("hibernate")
+                    icon.name: "document-save-symbolic"
+                    visible: viewerWindow.isRunning
+                    onTriggered: {
+                        if (Karton.saveDomainState(viewerWindow.domain)) {
+                            viewerWindow.showPassiveNotification(qsTr("hibernating_vm_1").arg(viewerWindow.domain.config.name));
+                        }
+                    }
+                }
+                Kirigami.Action {
+                    text: qsTr("snapshots")
+                    icon.name: "camera-photo-symbolic"
+                    onTriggered: snapshotsDialog.open()
+                }
+                Kirigami.Action { separator: true }
+                Kirigami.Action {
+                    text: qsTr("configuration")
+                    enabled: false
+                }
+                Kirigami.Action {
+                    text: qsTr("settings")
+                    icon.name: "preferences-system-symbolic"
+                    onTriggered: settingsDialog.open()
+                }
+                Kirigami.Action { separator: true }
+                Kirigami.Action {
+                    text: qsTr("close_viewer")
+                    icon.name: "window-close-symbolic"
+                    onTriggered: viewerWindow.closeViewer()
                 }
             },
             Kirigami.Action {
@@ -1176,6 +1680,7 @@ Kirigami.ApplicationWindow {
             width: Math.min(parent.width, parent.height * frameAspect)
             height: width / frameAspect
 
+            previewOnly: viewerWindow.previewMode
             domain: viewerWindow.domain
             spiceTlsEnabled: Karton.spiceTlsEnabled()
             spiceCaCertificate: Karton.spiceCaCertificate()
@@ -1192,6 +1697,7 @@ Kirigami.ApplicationWindow {
             id: serialTerminal
             anchors.fill: parent
             fontSize: viewerWindow.consoleFontSize
+            cursorShape: Karton.consoleCursorShape()
             visible: viewerWindow.isRunning && domainViewer.serialConsoleActive
             enabled: visible
             focus: visible
@@ -1217,6 +1723,15 @@ Kirigami.ApplicationWindow {
             target: domainViewer
             function onConsoleDataReceived(text) {
                 serialTerminal.feed(text);
+                if (viewerWindow.domain) {
+                    viewerWindow.domain.appendConsolePreview(text);
+                }
+            }
+            function onSerialConsoleActiveChanged() {
+                if (!viewerWindow.domain) {
+                    return;
+                }
+                viewerWindow.domain.setConsolePreviewActive(domainViewer.serialConsoleActive);
             }
         }
 

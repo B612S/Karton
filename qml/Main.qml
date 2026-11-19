@@ -4,16 +4,59 @@
 // SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
 import QtQuick
+import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 
 Kirigami.ApplicationWindow {
     id: root
     objectName: "mainWindow"
 
-    width: Kirigami.Units.gridUnit * 50
-    height: Kirigami.Units.gridUnit * 35
+    // The largest settings/add-hardware dialogs need roughly this much room
+    // once their own 48 px margins are subtracted; anything smaller clips
+    // controls or the dialog footer.
+    readonly property int minimumWindowWidth: Kirigami.Units.gridUnit * 44
+    readonly property int minimumWindowHeight: Kirigami.Units.gridUnit * 33
+    width: Math.max(Kirigami.Units.gridUnit * 50, minimumWindowWidth)
+    height: Math.max(Kirigami.Units.gridUnit * 35, minimumWindowHeight)
+    minimumWidth: minimumWindowWidth
+    minimumHeight: minimumWindowHeight
 
     property bool sizeRestored: false
+
+
+
+
+    // Viewer windows outlive the VM page that opens them. Creating them from
+    // a page's QML context leaves that context invalid as soon as the page is
+    // destroyed (switching to another VM), after which calls such as
+    // showViewer()/requestMinimize() fail with "invalid context". The main
+    // window lives for the whole application, so its context is safe.
+    property var viewerWindowComponent: null
+
+    function createViewerWindow(domain, previewMode) {
+        if (!domain) {
+            return null;
+        }
+        if (!viewerWindowComponent) {
+            viewerWindowComponent = Qt.createComponent("VMViewerWindow.qml", Component.PreferSynchronous);
+        }
+        if (!viewerWindowComponent || viewerWindowComponent.status !== Component.Ready) {
+            console.error("Failed to create VM viewer:",
+                          viewerWindowComponent ? viewerWindowComponent.errorString() : "no component");
+            return null;
+        }
+        const window = viewerWindowComponent.createObject(null, {
+            domain: domain,
+            previewMode: previewMode === true,
+            // The viewer maps itself once its geometry and fullscreen mode are
+            // known, so its first frame is already in the final state.
+            visible: false
+        });
+        if (!window) {
+            console.error("Failed to create VM viewer window");
+        }
+        return window;
+    }
 
     readonly property real wideScreenThreshold: Kirigami.Units.gridUnit * 40
     readonly property bool isWidescreen: (root.width >= wideScreenThreshold) && root.wideScreen // prevent being widescreen at first launch
@@ -28,8 +71,8 @@ Kirigami.ApplicationWindow {
     Component.onCompleted: {
         const saved = Karton.mainWindowSize();
         if (saved.width > 0 && saved.height > 0) {
-            width = Math.max(Kirigami.Units.gridUnit * 30, Math.min(saved.width, Screen.width * 0.95));
-            height = Math.max(Kirigami.Units.gridUnit * 20, Math.min(saved.height, Screen.height * 0.95));
+            width = Math.max(minimumWindowWidth, Math.min(saved.width, Screen.width * 0.95));
+            height = Math.max(minimumWindowHeight, Math.min(saved.height, Screen.height * 0.95));
         }
         sizeRestored = true;
     }
