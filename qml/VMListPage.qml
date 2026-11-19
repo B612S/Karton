@@ -43,7 +43,7 @@ Kirigami.ScrollablePage {
 
             Controls.ComboBox {
                 id: stateFilter
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 7
                 model: [qsTr("all"), qsTr("running"), qsTr("stopped")]
                 onActivated: index => VMModel.filterMode = index
                 Controls.ToolTip.visible: hovered
@@ -333,12 +333,14 @@ Kirigami.ScrollablePage {
         Kirigami.Action {
             icon.name: "document-open-symbolic"
             text: qsTr("import")
-            onTriggered: importDomainDialog.open()
-        },
-        Kirigami.Action {
-            icon.name: "package-x-generic-symbolic"
-            text: qsTr("import_ovf_ova")
-            onTriggered: ovfImportDialog.open()
+            Kirigami.Action {
+                text: qsTr("import_domain_xml")
+                onTriggered: importDomainDialog.open()
+            }
+            Kirigami.Action {
+                text: qsTr("import_ovf_ova")
+                onTriggered: ovfImportDialog.open()
+            }
         },
         Kirigami.Action {
             icon.name: "preferences-system-symbolic"

@@ -45,6 +45,11 @@ Kirigami.ApplicationWindow {
         visible: false
     }
 
+    OvfExportDialog {
+        domain: null
+        visible: false
+    }
+
     SnapshotsDialog {
         domain: null
         visible: false

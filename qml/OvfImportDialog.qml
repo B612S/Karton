@@ -20,6 +20,7 @@ Kirigami.Dialog {
 
     title: qsTr("import_ovf_ova")
     preferredWidth: Kirigami.Units.gridUnit * 40
+    padding: Kirigami.Units.largeSpacing
     modal: true
 
     function localPath(url) {

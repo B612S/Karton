@@ -421,9 +421,16 @@ Kirigami.Page {
                 separator: true
             }
             Kirigami.Action {
-                text: qsTr("export_domain_xml")
+                text: qsTr("export")
                 icon.name: "document-save-symbolic"
-                onTriggered: exportDomainDialog.open()
+                Kirigami.Action {
+                    text: qsTr("export_domain_xml")
+                    onTriggered: exportDomainDialog.open()
+                }
+                Kirigami.Action {
+                    text: qsTr("export_ovf_ova")
+                    onTriggered: ovfExportDialog.open()
+                }
             }
             Kirigami.Action {
                 text: qsTr("settings")
@@ -794,6 +801,11 @@ Kirigami.Page {
         }
 
 
+    }
+
+    OvfExportDialog {
+        id: ovfExportDialog
+        domain: root.domain
     }
 
     FileDialog {

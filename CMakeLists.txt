@@ -207,6 +207,7 @@ ecm_target_qml_sources(karton
     qml/ErrorLogDialog.qml
     qml/NetworkDhcpDialog.qml
     qml/OvfImportDialog.qml
+    qml/OvfExportDialog.qml
     qml/AddHardwareDialog.qml
     qml/ApplicationSettingsDialog.qml
     qml/ScrollableSettingsView.qml

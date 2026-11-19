@@ -18,6 +18,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QList>
+#include <QPair>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -632,4 +633,314 @@ void Karton::finishOvfImport(bool success, const QString &message)
     m_ovfNextDisk = 0;
 
     Q_EMIT ovfImportFinished(success, name, failure);
+}
+
+namespace
+{
+bool writeOvfDescriptor(const QString &packageDirectory, const QString &name, int cpus, int memoryMiB, const QVariantList &disks, const QString &networkName)
+{
+    const QString ovfNamespace = QStringLiteral("http://schemas.dmtf.org/ovf/envelope/1");
+    const QString rasdNamespace = QStringLiteral("http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData");
+    const QString vssdNamespace = QStringLiteral("http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_VirtualSystemSettingData");
+
+    QDomDocument document;
+    QDomElement envelope = document.createElement(QStringLiteral("Envelope"));
+    envelope.setAttribute(QStringLiteral("xmlns"), ovfNamespace);
+    envelope.setAttribute(QStringLiteral("xmlns:ovf"), ovfNamespace);
+    envelope.setAttribute(QStringLiteral("xmlns:rasd"), rasdNamespace);
+    envelope.setAttribute(QStringLiteral("xmlns:vssd"), vssdNamespace);
+    document.appendChild(envelope);
+
+    QDomElement references = document.createElement(QStringLiteral("References"));
+    envelope.appendChild(references);
+    for (int i = 0; i < disks.size(); ++i) {
+        QDomElement file = document.createElement(QStringLiteral("File"));
+        file.setAttribute(QStringLiteral("ovf:id"), QStringLiteral("file%1").arg(i + 1));
+        file.setAttribute(QStringLiteral("ovf:href"), QFileInfo(disks.at(i).toMap().value(QStringLiteral("path")).toString()).fileName());
+        file.setAttribute(QStringLiteral("ovf:size"), disks.at(i).toMap().value(QStringLiteral("fileSize")).toString());
+        references.appendChild(file);
+    }
+
+    QDomElement diskSection = document.createElement(QStringLiteral("DiskSection"));
+    envelope.appendChild(diskSection);
+    QDomElement diskInfo = document.createElement(QStringLiteral("Info"));
+    diskInfo.appendChild(document.createTextNode(QStringLiteral("Virtual disks")));
+    diskSection.appendChild(diskInfo);
+    for (int i = 0; i < disks.size(); ++i) {
+        QDomElement disk = document.createElement(QStringLiteral("Disk"));
+        disk.setAttribute(QStringLiteral("ovf:diskId"), QStringLiteral("disk%1").arg(i + 1));
+        disk.setAttribute(QStringLiteral("ovf:fileRef"), QStringLiteral("file%1").arg(i + 1));
+        disk.setAttribute(QStringLiteral("ovf:capacity"), disks.at(i).toMap().value(QStringLiteral("capacity")).toString());
+        disk.setAttribute(QStringLiteral("ovf:capacityAllocationUnits"), QStringLiteral("byte"));
+        diskSection.appendChild(disk);
+    }
+
+    QDomElement networkSection = document.createElement(QStringLiteral("NetworkSection"));
+    envelope.appendChild(networkSection);
+    QDomElement networkInfo = document.createElement(QStringLiteral("Info"));
+    networkInfo.appendChild(document.createTextNode(QStringLiteral("Virtual networks")));
+    networkSection.appendChild(networkInfo);
+    if (!networkName.isEmpty()) {
+        QDomElement network = document.createElement(QStringLiteral("Network"));
+        network.setAttribute(QStringLiteral("ovf:name"), networkName);
+        QDomElement nameElement = document.createElement(QStringLiteral("Description"));
+        nameElement.appendChild(document.createTextNode(networkName));
+        network.appendChild(nameElement);
+        networkSection.appendChild(network);
+    }
+
+    QDomElement system = document.createElement(QStringLiteral("VirtualSystem"));
+    system.setAttribute(QStringLiteral("ovf:id"), name);
+    envelope.appendChild(system);
+    QDomElement systemInfo = document.createElement(QStringLiteral("Info"));
+    systemInfo.appendChild(document.createTextNode(name));
+    system.appendChild(systemInfo);
+    QDomElement systemName = document.createElement(QStringLiteral("Name"));
+    systemName.appendChild(document.createTextNode(name));
+    system.appendChild(systemName);
+
+    QDomElement osSection = document.createElement(QStringLiteral("OperatingSystemSection"));
+    osSection.setAttribute(QStringLiteral("ovf:id"), QStringLiteral("other"));
+    QDomElement osInfo = document.createElement(QStringLiteral("Info"));
+    osInfo.appendChild(document.createTextNode(QStringLiteral("Karton virtual machine")));
+    osSection.appendChild(osInfo);
+    system.appendChild(osSection);
+
+    QDomElement hardware = document.createElement(QStringLiteral("VirtualHardwareSection"));
+    system.appendChild(hardware);
+    QDomElement hardwareInfo = document.createElement(QStringLiteral("Info"));
+    hardwareInfo.appendChild(document.createTextNode(QStringLiteral("Virtual hardware")));
+    hardware.appendChild(hardwareInfo);
+
+    QDomElement systemElement = document.createElement(QStringLiteral("System"));
+    QDomElement vssdName = document.createElement(QStringLiteral("vssd:ElementName"));
+    vssdName.appendChild(document.createTextNode(QStringLiteral("Virtual Hardware Family")));
+    systemElement.appendChild(vssdName);
+    QDomElement vssdInstance = document.createElement(QStringLiteral("vssd:InstanceID"));
+    vssdInstance.appendChild(document.createTextNode(QStringLiteral("0")));
+    systemElement.appendChild(vssdInstance);
+    QDomElement vssdIdentifier = document.createElement(QStringLiteral("vssd:VirtualSystemIdentifier"));
+    vssdIdentifier.appendChild(document.createTextNode(name));
+    systemElement.appendChild(vssdIdentifier);
+    QDomElement vssdType = document.createElement(QStringLiteral("vssd:VirtualSystemType"));
+    vssdType.appendChild(document.createTextNode(QStringLiteral("vmx-10")));
+    systemElement.appendChild(vssdType);
+    hardware.appendChild(systemElement);
+
+    auto appendItem = [&document, &hardware](const QList<QPair<QString, QString>> &values) {
+        QDomElement item = document.createElement(QStringLiteral("Item"));
+        for (const auto &value : values) {
+            QDomElement element = document.createElement(value.first);
+            element.appendChild(document.createTextNode(value.second));
+            item.appendChild(element);
+        }
+        hardware.appendChild(item);
+    };
+
+    appendItem({{QStringLiteral("rasd:AllocationUnits"), QStringLiteral("hertz * 10^6")},
+                {QStringLiteral("rasd:Description"), QStringLiteral("Number of Virtual CPUs")},
+                {QStringLiteral("rasd:ElementName"), QStringLiteral("%1 virtual CPU(s)").arg(cpus)},
+                {QStringLiteral("rasd:InstanceID"), QStringLiteral("1")},
+                {QStringLiteral("rasd:ResourceType"), QStringLiteral("3")},
+                {QStringLiteral("rasd:VirtualQuantity"), QString::number(cpus)}});
+    appendItem({{QStringLiteral("rasd:AllocationUnits"), QStringLiteral("byte * 2^20")},
+                {QStringLiteral("rasd:Description"), QStringLiteral("Memory Size")},
+                {QStringLiteral("rasd:ElementName"), QStringLiteral("%1 MB of memory").arg(memoryMiB)},
+                {QStringLiteral("rasd:InstanceID"), QStringLiteral("2")},
+                {QStringLiteral("rasd:ResourceType"), QStringLiteral("4")},
+                {QStringLiteral("rasd:VirtualQuantity"), QString::number(memoryMiB)}});
+    for (int i = 0; i < disks.size(); ++i) {
+        appendItem({{QStringLiteral("rasd:Description"), QStringLiteral("Disk Drive")},
+                    {QStringLiteral("rasd:ElementName"), QStringLiteral("Disk %1").arg(i + 1)},
+                    {QStringLiteral("rasd:HostResource"), QStringLiteral("ovf:/disk/disk%1").arg(i + 1)},
+                    {QStringLiteral("rasd:InstanceID"), QString::number(10 + i)},
+                    {QStringLiteral("rasd:ResourceType"), QStringLiteral("17")}});
+    }
+    if (!networkName.isEmpty()) {
+        appendItem({{QStringLiteral("rasd:Connection"), networkName},
+                    {QStringLiteral("rasd:Description"), QStringLiteral("Ethernet adapter")},
+                    {QStringLiteral("rasd:ElementName"), QStringLiteral("Network adapter")},
+                    {QStringLiteral("rasd:InstanceID"), QString::number(20)},
+                    {QStringLiteral("rasd:ResourceType"), QStringLiteral("10")}});
+    }
+
+    QFile file(QDir(packageDirectory).filePath(name + QStringLiteral(".ovf")));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    return file.write(document.toString(4).toUtf8()) >= 0;
+}
+} // namespace
+
+bool Karton::exportOvf(const Domain *domain, const QString &requestedName, const QString &destinationDirectory, bool asOva)
+{
+    if (m_ovfExportActive) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "another_ovf_export_is_already_running"));
+        return false;
+    }
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    const QVariantList allDisks = domainDiskStats(domain);
+    QVariantList disks;
+    for (const QVariant &value : allDisks) {
+        const QVariantMap disk = value.toMap();
+        if (disk.value(QStringLiteral("isCdrom")).toBool()) {
+            continue;
+        }
+        const QString source = disk.value(QStringLiteral("source")).toString();
+        if (source.isEmpty() || !QFileInfo::exists(source)) {
+            continue;
+        }
+        disks.append(disk);
+    }
+    if (disks.isEmpty()) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_vm_has_no_disk_images_to_export"));
+        return false;
+    }
+
+    const QString name = friendlyName(requestedName.trimmed().isEmpty() ? domain->config()->name() : requestedName);
+    QString destination = destinationDirectory.trimmed();
+    if (destination.isEmpty()) {
+        destination = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+    if (destination.isEmpty() || !QDir().mkpath(destination)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_the_folder_1").arg(destination));
+        return false;
+    }
+
+    QString target;
+    QString packageDirectory;
+    if (asOva) {
+        target = QDir(destination).filePath(name + QStringLiteral(".ova"));
+        if (QFileInfo::exists(target)) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_destination_1_already_exists").arg(target));
+            return false;
+        }
+        packageDirectory = QDir(destination).filePath(QStringLiteral(".%1-ovf-tmp-%2").arg(name, QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        if (!QDir().mkpath(packageDirectory)) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_the_folder_1").arg(packageDirectory));
+            return false;
+        }
+    } else {
+        target = QDir(destination).filePath(name);
+        if (QFileInfo::exists(target)) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_destination_1_already_exists").arg(target));
+            return false;
+        }
+        if (!QDir().mkpath(target)) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_the_folder_1").arg(target));
+            return false;
+        }
+        packageDirectory = target;
+    }
+
+    QString networkName;
+    const QVariantList interfaces = domainInterfaces(domain);
+    for (const QVariant &value : interfaces) {
+        const QVariantMap interface = value.toMap();
+        if (interface.value(QStringLiteral("type")).toString() == QStringLiteral("network")) {
+            networkName = interface.value(QStringLiteral("source")).toString();
+            break;
+        }
+    }
+
+    m_ovfExportActive = true;
+    m_ovfExportAsOva = asOva;
+    m_ovfExportName = name;
+    m_ovfExportTarget = target;
+    m_ovfExportPackageDirectory = packageDirectory;
+    m_ovfExportDisks = disks;
+    m_ovfExportCreatedFiles.clear();
+    m_ovfExportCpus = qMax(1, domain->config()->cpus());
+    m_ovfExportMemoryMiB = qMax(128, domain->config()->maxRam() * 1024);
+    m_ovfExportNextDisk = 0;
+    m_ovfExportNetwork = networkName;
+
+    Q_EMIT ovfExportStarted(name);
+    convertNextOvfExportDisk();
+    return true;
+}
+
+void Karton::convertNextOvfExportDisk()
+{
+    if (!m_ovfExportActive) {
+        return;
+    }
+    if (m_ovfExportNextDisk >= m_ovfExportDisks.size()) {
+        QVariantList exported;
+        for (int i = 0; i < m_ovfExportDisks.size(); ++i) {
+            const QVariantMap source = m_ovfExportDisks.at(i).toMap();
+            const QString path =
+                QDir(m_ovfExportPackageDirectory).filePath(m_ovfExportName + QStringLiteral("-disk") + QString::number(i + 1) + QStringLiteral(".qcow2"));
+            QVariantMap disk;
+            disk.insert(QStringLiteral("path"), path);
+            disk.insert(QStringLiteral("capacity"), source.value(QStringLiteral("capacityBytes")));
+            disk.insert(QStringLiteral("fileSize"), QFileInfo(path).size());
+            exported.append(disk);
+        }
+        if (!writeOvfDescriptor(m_ovfExportPackageDirectory, m_ovfExportName, m_ovfExportCpus, m_ovfExportMemoryMiB, exported, m_ovfExportNetwork)) {
+            finishOvfExport(false, QCoreApplication::translate("Karton", "failed_to_write_the_ovf_descriptor"));
+            return;
+        }
+        if (!m_ovfExportAsOva) {
+            finishOvfExport(true, QString());
+            return;
+        }
+
+        m_commandRunner->runCommand(QStringLiteral("tar"),
+                                    {QStringLiteral("-cf"), m_ovfExportTarget, QStringLiteral("-C"), m_ovfExportPackageDirectory, QStringLiteral(".")},
+                                    [this](bool success, const QString &output) {
+                                        if (!success) {
+                                            finishOvfExport(false, output.trimmed());
+                                            return;
+                                        }
+                                        QDir(m_ovfExportPackageDirectory).removeRecursively();
+                                        finishOvfExport(true, QString());
+                                    });
+        return;
+    }
+
+    const int index = m_ovfExportNextDisk;
+    const QString source = m_ovfExportDisks.at(index).toMap().value(QStringLiteral("source")).toString();
+    const QString destination =
+        QDir(m_ovfExportPackageDirectory).filePath(m_ovfExportName + QStringLiteral("-disk") + QString::number(index + 1) + QStringLiteral(".qcow2"));
+    m_commandRunner->runCommand(QStringLiteral("qemu-img"),
+                                {QStringLiteral("convert"), QStringLiteral("-O"), QStringLiteral("qcow2"), QStringLiteral("-U"), source, destination},
+                                [this, destination](bool success, const QString &output) {
+                                    if (!success) {
+                                        QFile::remove(destination);
+                                        finishOvfExport(false, output.trimmed());
+                                        return;
+                                    }
+                                    m_ovfExportCreatedFiles.append(destination);
+                                    ++m_ovfExportNextDisk;
+                                    convertNextOvfExportDisk();
+                                });
+}
+
+void Karton::finishOvfExport(bool success, const QString &message)
+{
+    const QString name = m_ovfExportName;
+    const QString target = m_ovfExportTarget;
+    if (!success) {
+        if (m_ovfExportAsOva) {
+            QFile::remove(m_ovfExportTarget);
+        }
+        if (!m_ovfExportPackageDirectory.isEmpty()) {
+            QDir(m_ovfExportPackageDirectory).removeRecursively();
+        }
+        if (!message.isEmpty()) {
+            Q_EMIT errorOccurred(message);
+        }
+    }
+    m_ovfExportActive = false;
+    m_ovfExportAsOva = false;
+    m_ovfExportPackageDirectory.clear();
+    m_ovfExportTarget.clear();
+    m_ovfExportDisks.clear();
+    m_ovfExportCreatedFiles.clear();
+    m_ovfExportNextDisk = 0;
+    Q_EMIT ovfExportFinished(success, name, target, message);
 }

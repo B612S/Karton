@@ -482,6 +482,10 @@
 <message><source>the_ovf_contains_no_disks</source><translation>The OVF contains no disks.</translation></message>
 <message><source>the_destination_disk_1_already_exists</source><translation>The destination disk already exists: %1</translation></message>
 <message><source>failed_to_create_the_folder_1</source><translation>Failed to create the folder: %1</translation></message>
+<message><source>another_ovf_export_is_already_running</source><translation>Another OVF export is already running.</translation></message>
+<message><source>the_vm_has_no_disk_images_to_export</source><translation>The VM has no disk images to export.</translation></message>
+<message><source>the_destination_1_already_exists</source><translation>The destination already exists: %1</translation></message>
+<message><source>failed_to_write_the_ovf_descriptor</source><translation>Failed to write the OVF descriptor.</translation></message>
 <message><source>failed_to_open_1_2</source><translation>Failed to open %1: %2</translation></message>
 <message><source>failed_to_parse_the_domain_xml_1</source><translation>Failed to parse the domain XML: %1</translation></message>
 <message><source>failed_to_define_the_domain_1</source><translation>Failed to define the domain: %1</translation></message>
@@ -723,6 +727,7 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>import_domain_xml</source><translation>Import domain XML…</translation></message>
 <message><source>import_ovf_ova</source><translation>Import OVF/OVA</translation></message>
 <message><source>all_files</source><translation>All files (*)</translation></message>
 <message><source>import</source><translation>Import</translation></message>
@@ -746,6 +751,8 @@
 </context>
 <context>
 <name>VMPage</name>
+<message><source>export</source><translation>Export</translation></message>
+<message><source>export_ovf_ova</source><translation>Export OVF/OVA…</translation></message>
 <message><source>libvirt_domain_xml</source><translation>Libvirt domain XML (*.xml)</translation></message>
 <message><source>export_domain_xml</source><translation>Export XML…</translation></message>
 <message><source>exported_vm_1</source><translation>Exported VM: %1</translation></message>
@@ -878,5 +885,21 @@ This action cannot be undone.</translation></message>
 <message><source>ovf_ova_packages</source><translation>OVF/OVA packages (*.ovf *.ova)</translation></message>
 <message><source>source</source><translation>Source</translation></message>
 <message><source>the_vm_is_created_stopped_and_can_be_started_from_the_list</source><translation>The VM is created stopped and can be started from the list.</translation></message>
+</context>
+<context>
+<name>OvfExportDialog</name>
+<message><source>cancel</source><translation>Cancel</translation></message>
+<message><source>choose</source><translation>Choose…</translation></message>
+<message><source>choose_destination_folder</source><translation>Choose destination folder</translation></message>
+<message><source>destination</source><translation>Destination</translation></message>
+<message><source>export</source><translation>Export</translation></message>
+<message><source>export_ovf_ova</source><translation>Export OVF/OVA…</translation></message>
+<message><source>exporting_a_running_vm_produces_a_crash_consistent_image</source><translation>Exporting a running VM produces a crash-consistent image.</translation></message>
+<message><source>exporting_the_disks_are_converted_to_qcow2</source><translation>Exporting. Disks are converted to qcow2…</translation></message>
+<message><source>format</source><translation>Format</translation></message>
+<message><source>name</source><translation>Name</translation></message>
+<message><source>ova_archive</source><translation>OVA archive</translation></message>
+<message><source>ovf_exported_1</source><translation>OVF package exported to %1</translation></message>
+<message><source>ovf_folder</source><translation>OVF folder</translation></message>
 </context>
 </TS>

@@ -99,6 +99,8 @@ Q_SIGNALS:
     void domainImported(bool success, const QString &name);
     void ovfImportStarted(const QString &name);
     void ovfImportFinished(bool success, const QString &name, const QString &message);
+    void ovfExportStarted(const QString &name);
+    void ovfExportFinished(bool success, const QString &name, const QString &path, const QString &message);
     void domainEdited(bool success, const QString &name);
     void domainCloned(bool success, const QString &sourceName, const QString &newName);
     void viewerCountChanged();
@@ -201,6 +203,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool importDomainXml(const QString &path);
     Q_INVOKABLE bool importOvf(const QString &path, const QString &requestedName, const QString &destinationDirectory, const QString &networkName);
+    Q_INVOKABLE bool exportOvf(const Domain *domain, const QString &requestedName, const QString &destinationDirectory, bool asOva);
     Q_INVOKABLE bool exportDomainXml(const Domain *domain, const QString &path);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
@@ -271,6 +274,8 @@ private:
     void stopPortForwardsForDomain(const Domain *domain);
     void convertNextOvfDisk();
     void finishOvfImport(bool success, const QString &message);
+    void convertNextOvfExportDisk();
+    void finishOvfExport(bool success, const QString &message);
 
     virConnectPtr m_conn;
     QString m_activeUri;
@@ -293,6 +298,18 @@ private:
     int m_ovfCpus = 2;
     int m_ovfMemoryMiB = 2048;
     int m_ovfNextDisk = 0;
+
+    bool m_ovfExportActive = false;
+    bool m_ovfExportAsOva = false;
+    QString m_ovfExportName;
+    QString m_ovfExportTarget;
+    QString m_ovfExportPackageDirectory;
+    QString m_ovfExportNetwork;
+    QVariantList m_ovfExportDisks;
+    QStringList m_ovfExportCreatedFiles;
+    int m_ovfExportCpus = 2;
+    int m_ovfExportMemoryMiB = 2048;
+    int m_ovfExportNextDisk = 0;
 
     struct CpuSample {
         qint64 cpuTime = 0;

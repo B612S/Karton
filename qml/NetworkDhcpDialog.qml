@@ -21,6 +21,7 @@ Kirigami.Dialog {
     title: networkName.length > 0 ? qsTr("dhcp_1").arg(networkName) : qsTr("dhcp")
     preferredWidth: applicationWindow() ? Math.max(640, Math.min(820, applicationWindow().width - 48)) : 820
     preferredHeight: applicationWindow() ? Math.max(480, Math.min(660, applicationWindow().height - 48)) : 660
+    padding: Kirigami.Units.largeSpacing
 
     background: Rectangle {
         color: Qt.rgba(Kirigami.Theme.backgroundColor.r,

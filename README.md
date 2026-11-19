@@ -24,8 +24,8 @@ with a desktop-oriented viewer.
 
 - List local libvirt domains with their OS icon and human-readable OS name.
 - Search and filter the list by name, OS, UUID or running state.
-- Import a VM from libvirt domain XML or from an OVF/OVA package; export its
-  domain XML.
+- Import a VM from libvirt domain XML or from an OVF/OVA package; export it
+  as domain XML, an OVF folder or an OVA archive.
 - Create VMs from an ISO or disk image.
 - Start, shut down, power off, pause, resume, reboot and reset.
 - Autostart on boot.

@@ -482,6 +482,10 @@
 <message><source>the_ovf_contains_no_disks</source><translation>В OVF нет дисков.</translation></message>
 <message><source>the_destination_disk_1_already_exists</source><translation>Целевой диск уже существует: %1</translation></message>
 <message><source>failed_to_create_the_folder_1</source><translation>Не удалось создать папку: %1</translation></message>
+<message><source>another_ovf_export_is_already_running</source><translation>Другой экспорт OVF уже выполняется.</translation></message>
+<message><source>the_vm_has_no_disk_images_to_export</source><translation>У ВМ нет образов дисков для экспорта.</translation></message>
+<message><source>the_destination_1_already_exists</source><translation>Назначение уже существует: %1</translation></message>
+<message><source>failed_to_write_the_ovf_descriptor</source><translation>Не удалось записать дескриптор OVF.</translation></message>
 <message><source>failed_to_open_1_2</source><translation>Не удалось открыть %1: %2</translation></message>
 <message><source>failed_to_parse_the_domain_xml_1</source><translation>Не удалось разобрать XML домена: %1</translation></message>
 <message><source>failed_to_define_the_domain_1</source><translation>Не удалось определить домен: %1</translation></message>
@@ -723,6 +727,7 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>import_domain_xml</source><translation>Импорт XML домена…</translation></message>
 <message><source>import_ovf_ova</source><translation>Импорт OVF/OVA</translation></message>
 <message><source>all_files</source><translation>Все файлы (*)</translation></message>
 <message><source>import</source><translation>Импорт</translation></message>
@@ -746,6 +751,8 @@
 </context>
 <context>
 <name>VMPage</name>
+<message><source>export</source><translation>Экспорт</translation></message>
+<message><source>export_ovf_ova</source><translation>Экспорт OVF/OVA…</translation></message>
 <message><source>libvirt_domain_xml</source><translation>XML домена libvirt (*.xml)</translation></message>
 <message><source>export_domain_xml</source><translation>Экспорт XML…</translation></message>
 <message><source>exported_vm_1</source><translation>ВМ экспортирована: %1</translation></message>
@@ -878,5 +885,21 @@
 <message><source>ovf_ova_packages</source><translation>Пакеты OVF/OVA (*.ovf *.ova)</translation></message>
 <message><source>source</source><translation>Источник</translation></message>
 <message><source>the_vm_is_created_stopped_and_can_be_started_from_the_list</source><translation>ВМ создаётся остановленной, запустить её можно из списка.</translation></message>
+</context>
+<context>
+<name>OvfExportDialog</name>
+<message><source>cancel</source><translation>Отмена</translation></message>
+<message><source>choose</source><translation>Выбрать…</translation></message>
+<message><source>choose_destination_folder</source><translation>Выберите папку назначения</translation></message>
+<message><source>destination</source><translation>Назначение</translation></message>
+<message><source>export</source><translation>Экспорт</translation></message>
+<message><source>export_ovf_ova</source><translation>Экспорт OVF/OVA…</translation></message>
+<message><source>exporting_a_running_vm_produces_a_crash_consistent_image</source><translation>Экспорт запущенной ВМ даёт crash-consistent образ.</translation></message>
+<message><source>exporting_the_disks_are_converted_to_qcow2</source><translation>Экспорт. Диски преобразуются в qcow2…</translation></message>
+<message><source>format</source><translation>Формат</translation></message>
+<message><source>name</source><translation>Имя</translation></message>
+<message><source>ova_archive</source><translation>Архив OVA</translation></message>
+<message><source>ovf_exported_1</source><translation>Пакет OVF экспортирован в %1</translation></message>
+<message><source>ovf_folder</source><translation>Папка OVF</translation></message>
 </context>
 </TS>
