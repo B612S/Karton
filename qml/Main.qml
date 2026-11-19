@@ -161,6 +161,9 @@ Kirigami.ApplicationWindow {
         id: mediaDropArea
         anchors.fill: parent
         z: 900
+        // Only a VM page knows what to do with media; disable the area
+        // elsewhere so drops still reach text fields and other targets.
+        enabled: pageStack.lastItem && typeof pageStack.lastItem.insertDroppedMedia === "function"
         onDropped: drop => {
             if (!drop.hasUrls) {
                 return;
