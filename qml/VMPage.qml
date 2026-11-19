@@ -404,10 +404,6 @@ Kirigami.Page {
                 }
             }
             Kirigami.Action {
-                separator: true
-                visible: hasSavedState || isRunning
-            }
-            Kirigami.Action {
                 text: qsTr("snapshots")
                 icon.name: "camera-photo-symbolic"
                 onTriggered: snapshotsDialog.open()
@@ -424,11 +420,11 @@ Kirigami.Page {
                 text: qsTr("export")
                 icon.name: "document-save-symbolic"
                 Kirigami.Action {
-                    text: qsTr("export_domain_xml")
+                    text: qsTr("domain_xml")
                     onTriggered: exportDomainDialog.open()
                 }
                 Kirigami.Action {
-                    text: qsTr("export_ovf_ova")
+                    text: qsTr("ovf_ova")
                     onTriggered: ovfExportDialog.open()
                 }
             }

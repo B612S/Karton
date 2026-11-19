@@ -337,11 +337,11 @@ Kirigami.ScrollablePage {
             icon.name: "document-open-symbolic"
             text: qsTr("import")
             Kirigami.Action {
-                text: qsTr("import_domain_xml")
+                text: qsTr("domain_xml")
                 onTriggered: importDomainDialog.open()
             }
             Kirigami.Action {
-                text: qsTr("import_ovf_ova")
+                text: qsTr("ovf_ova")
                 onTriggered: ovfImportDialog.open()
             }
         },

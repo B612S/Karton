@@ -727,6 +727,8 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>domain_xml</source><translation>XML домена…</translation></message>
+<message><source>ovf_ova</source><translation>OVF/OVA…</translation></message>
 <message><source>import_domain_xml</source><translation>Импорт XML домена…</translation></message>
 <message><source>import_ovf_ova</source><translation>Импорт OVF/OVA</translation></message>
 <message><source>all_files</source><translation>Все файлы (*)</translation></message>
@@ -751,6 +753,8 @@
 </context>
 <context>
 <name>VMPage</name>
+<message><source>domain_xml</source><translation>XML домена…</translation></message>
+<message><source>ovf_ova</source><translation>OVF/OVA…</translation></message>
 <message><source>export</source><translation>Экспорт</translation></message>
 <message><source>export_ovf_ova</source><translation>Экспорт OVF/OVA…</translation></message>
 <message><source>libvirt_domain_xml</source><translation>XML домена libvirt (*.xml)</translation></message>
