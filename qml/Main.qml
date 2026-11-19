@@ -68,6 +68,22 @@ Kirigami.ApplicationWindow {
 
     pageStack.initialPage: VMListPage { }
 
+    ErrorLogDialog {
+        id: errorLogDialog
+    }
+
+    Connections {
+        target: Karton
+        function onErrorOccurred(message) {
+            errorLogDialog.recordError(message);
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+E"
+        onActivated: errorLogDialog.open()
+    }
+
     Component.onCompleted: {
         const saved = Karton.mainWindowSize();
         if (saved.width > 0 && saved.height > 0) {
@@ -112,5 +128,76 @@ Kirigami.ApplicationWindow {
         interval: 500
         repeat: false
         onTriggered: Karton.saveMainWindowSize(root.width, root.height)
+    }
+
+    // A small always-available indicator for the error journal. It only shows
+    // up once something has actually failed.
+    QQC2.ToolButton {
+        id: errorBadge
+        z: 800
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: Kirigami.Units.largeSpacing
+        visible: errorLogDialog.errorCount > 0
+        icon.name: "data-error-symbolic"
+        text: errorLogDialog.errorCount
+        display: QQC2.AbstractButton.TextBesideIcon
+        onClicked: errorLogDialog.open()
+
+        background: Rectangle {
+            radius: height / 2
+            color: Kirigami.Theme.backgroundColor
+            border.width: 1
+            border.color: Kirigami.Theme.negativeTextColor
+        }
+
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.text: qsTr("error_log")
+    }
+
+    // Dropping an ISO or disk image anywhere on a VM page inserts/attaches it.
+    // The page, not the window, decides what the file becomes.
+    DropArea {
+        id: mediaDropArea
+        anchors.fill: parent
+        z: 900
+        onDropped: drop => {
+            if (!drop.hasUrls) {
+                return;
+            }
+            const page = pageStack.lastItem;
+            if (!page || typeof page.insertDroppedMedia !== "function") {
+                return;
+            }
+            for (let i = 0; i < drop.urls.length; ++i) {
+                page.insertDroppedMedia(page.localPath(drop.urls[i]));
+            }
+            drop.acceptProposedAction();
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        z: 901
+        visible: mediaDropArea.containsDrag && pageStack.lastItem
+            && typeof pageStack.lastItem.insertDroppedMedia === "function"
+        color: Qt.rgba(0, 0, 0, 0.45)
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: dropHint.implicitWidth + Kirigami.Units.gridUnit * 3
+            height: dropHint.implicitHeight + Kirigami.Units.gridUnit * 2
+            radius: Kirigami.Units.largeSpacing
+            color: Kirigami.Theme.backgroundColor
+            border.width: 2
+            border.color: Kirigami.Theme.highlightColor
+
+            Kirigami.Heading {
+                id: dropHint
+                anchors.centerIn: parent
+                level: 3
+                text: qsTr("drop_media_hint")
+            }
+        }
     }
 }

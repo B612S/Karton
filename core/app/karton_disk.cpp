@@ -11,6 +11,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
 #include <QDomDocument>
 #include <QDomElement>
@@ -31,6 +32,7 @@
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QUrl>
 #include <algorithm>
 #include <cstring>
 #include <functional>
@@ -954,4 +956,138 @@ bool Karton::ejectDisk(const Domain *domain)
     qCInfo(KARTON_DEBUG) << "Successfully ejected ISO disk from domain:" << domain->config()->name();
     refreshDomainList();
     return true;
+}
+
+bool Karton::checkDiskImage(const Domain *domain, const QString &path)
+{
+    Q_UNUSED(domain);
+    if (path.isEmpty() || !QFileInfo::exists(path)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "disk_image_does_not_exist_1").arg(path));
+        return false;
+    }
+
+    Q_EMIT diskMaintenanceStarted(QStringLiteral("check"), path);
+    // -U lets qemu-img inspect an image whose lock is held by a running VM;
+    // check does not modify the image.
+    m_commandRunner->runCommand(QStringLiteral("qemu-img"),
+                                {QStringLiteral("check"), QStringLiteral("-U"), path},
+                                [this, path](bool success, const QString &output) {
+                                    Q_EMIT diskMaintenanceFinished(QStringLiteral("check"), path, success, output.trimmed());
+                                });
+    return true;
+}
+
+bool Karton::compactDiskImage(const Domain *domain, const QString &path)
+{
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    if (domain->isActive()) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "stop_the_vm_before_compacting_its_disk"));
+        return false;
+    }
+    if (path.isEmpty() || !QFileInfo::exists(path)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "disk_image_does_not_exist_1").arg(path));
+        return false;
+    }
+
+    // Compact rewrites the image as qcow2. Converting a raw/vmdk image in
+    // place would make the format in the domain XML wrong, so only qcow2 is
+    // accepted.
+    QString infoOutput;
+    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
+                                            {QStringLiteral("info"), QStringLiteral("-U"), QStringLiteral("--output=json"), path},
+                                            &infoOutput)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_read_disk_image_information_1").arg(path));
+        return false;
+    }
+    const QString format = QJsonDocument::fromJson(infoOutput.toUtf8()).object().value(QStringLiteral("format")).toString();
+    if (format != QStringLiteral("qcow2")) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "only_qcow2_images_can_be_compacted"));
+        return false;
+    }
+
+    const QFileInfo sourceInfo(path);
+    const QString temporaryPath = path + QStringLiteral(".karton-compact");
+    QFile::remove(temporaryPath);
+    Q_EMIT diskMaintenanceStarted(QStringLiteral("compact"), path);
+
+    m_commandRunner->runCommand(QStringLiteral("qemu-img"),
+                                {QStringLiteral("convert"), QStringLiteral("-O"), QStringLiteral("qcow2"), QStringLiteral("-U"), path, temporaryPath},
+                                [this, path, temporaryPath, permissions = sourceInfo.permissions()](bool success, const QString &output) {
+                                    if (!success) {
+                                        QFile::remove(temporaryPath);
+                                        Q_EMIT diskMaintenanceFinished(QStringLiteral("compact"), path, false, output.trimmed());
+                                        return;
+                                    }
+
+                                    const QString backupPath = path + QStringLiteral(".karton-backup");
+                                    QFile::remove(backupPath);
+                                    if (!QFile::rename(path, backupPath)) {
+                                        QFile::remove(temporaryPath);
+                                        Q_EMIT diskMaintenanceFinished(QStringLiteral("compact"),
+                                                                       path,
+                                                                       false,
+                                                                       QCoreApplication::translate("Karton", "failed_to_replace_disk_image_1").arg(path));
+                                        return;
+                                    }
+                                    if (!QFile::rename(temporaryPath, path)) {
+                                        QFile::rename(backupPath, path);
+                                        QFile::remove(temporaryPath);
+                                        Q_EMIT diskMaintenanceFinished(QStringLiteral("compact"),
+                                                                       path,
+                                                                       false,
+                                                                       QCoreApplication::translate("Karton", "failed_to_replace_disk_image_1").arg(path));
+                                        return;
+                                    }
+                                    QFile::remove(backupPath);
+                                    QFile::setPermissions(path, permissions);
+                                    Q_EMIT diskMaintenanceFinished(QStringLiteral("compact"), path, true, output.trimmed());
+                                });
+    return true;
+}
+
+bool Karton::convertDiskImage(const QString &sourcePath, const QString &destinationPath, const QString &format)
+{
+    if (sourcePath.isEmpty() || destinationPath.isEmpty() || sourcePath == destinationPath) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "source_and_destination_must_differ"));
+        return false;
+    }
+    if (!QFileInfo::exists(sourcePath)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "disk_image_does_not_exist_1").arg(sourcePath));
+        return false;
+    }
+    const QString targetFormat = format.trimmed().toLower();
+    if (targetFormat != QStringLiteral("qcow2") && targetFormat != QStringLiteral("raw") && targetFormat != QStringLiteral("vmdk")) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "unsupported_disk_format_1").arg(format));
+        return false;
+    }
+
+    // The destination comes from a save dialog, so an existing file there has
+    // already been confirmed by the user. Remove it so qemu-img cannot fail on
+    // an existing target.
+    if (QFileInfo::exists(destinationPath)) {
+        QFile::remove(destinationPath);
+    }
+
+    Q_EMIT diskMaintenanceStarted(QStringLiteral("convert"), destinationPath);
+    m_commandRunner->runCommand(QStringLiteral("qemu-img"),
+                                {QStringLiteral("convert"), QStringLiteral("-O"), targetFormat, QStringLiteral("-U"), sourcePath, destinationPath},
+                                [this, destinationPath](bool success, const QString &output) {
+                                    if (!success) {
+                                        QFile::remove(destinationPath);
+                                    }
+                                    Q_EMIT diskMaintenanceFinished(QStringLiteral("convert"), destinationPath, success, output.trimmed());
+                                });
+    return true;
+}
+
+bool Karton::openDiskFolder(const QString &path)
+{
+    const QFileInfo info(path);
+    const QString folder = info.isDir() ? info.absoluteFilePath() : info.absolutePath();
+    if (folder.isEmpty()) {
+        return false;
+    }
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
 }

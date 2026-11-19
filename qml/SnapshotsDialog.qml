@@ -34,6 +34,17 @@ Kirigami.Dialog {
         return "snapshot-" + Qt.formatDateTime(new Date(), "yyyyMMdd-HHmmss");
     }
 
+    function formatSize(bytes) {
+        if (!bytes || bytes <= 0) {
+            return "";
+        }
+        const gib = bytes / (1024 * 1024 * 1024);
+        if (gib >= 1) {
+            return gib.toFixed(gib >= 10 ? 0 : 1) + " GiB";
+        }
+        return (bytes / (1024 * 1024)).toFixed(1) + " MiB";
+    }
+
     onOpened: {
         errorText = "";
         nameField.text = defaultName();
@@ -97,19 +108,53 @@ Kirigami.Dialog {
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.largeSpacing
 
+                    Rectangle {
+                        Layout.alignment: Qt.AlignTop
+                        Layout.topMargin: 6
+                        width: 8
+                        height: 8
+                        radius: 4
+                        color: modelData.current ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
+                    }
+
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 0
+                        spacing: 2
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: modelData.name + (modelData.current ? " (" + qsTr("current") + ")" : "")
+                                font.weight: modelData.current ? Font.DemiBold : Font.Normal
+                                elide: Text.ElideRight
+                            }
+                            Kirigami.Badge {
+                                text: modelData.type === "external" ? qsTr("external_snapshot") : qsTr("internal_snapshot")
+                                type: modelData.type === "external" ? Kirigami.Badge.Type.Warning : Kirigami.Badge.Type.Information
+                            }
+                        }
 
                         Controls.Label {
                             Layout.fillWidth: true
-                            text: modelData.name + (modelData.current ? " (" + qsTr("current") + ")" : "")
-                            elide: Text.ElideRight
-                        }
-                        Controls.Label {
-                            Layout.fillWidth: true
-                            text: modelData.creationTime + " · " + modelData.state
-                                  + (modelData.description.length > 0 ? " · " + modelData.description : "")
+                            text: {
+                                const parts = [modelData.creationTime, modelData.state];
+                                if (modelData.hasMemory) {
+                                    parts.push(qsTr("with_memory"));
+                                }
+                                if (modelData.sizeBytes > 0) {
+                                    parts.push(root.formatSize(modelData.sizeBytes));
+                                }
+                                if (modelData.parent.length > 0) {
+                                    parts.push(qsTr("from_snapshot_1").arg(modelData.parent));
+                                }
+                                if (modelData.description.length > 0) {
+                                    parts.push(modelData.description);
+                                }
+                                return parts.join(" · ");
+                            }
                             opacity: 0.7
                             elide: Text.ElideRight
                         }

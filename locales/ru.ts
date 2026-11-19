@@ -453,6 +453,13 @@
 <message><source>could_not_start_the_windows_driver_installer_1</source><translation>Не удалось запустить установщик драйверов Windows: %1</translation></message>
 
 <message><source>the_vm_has_no_cd_rom_drive_add_one_while_it_is_stopped</source><translation>У этой VM нет привода CD-ROM.</translation></message>
+
+<message><source>stop_the_vm_before_compacting_its_disk</source><translation>Остановите ВМ перед сжатием диска.</translation></message>
+<message><source>failed_to_read_disk_image_information_1</source><translation>Не удалось прочитать информацию об образе: %1</translation></message>
+<message><source>only_qcow2_images_can_be_compacted</source><translation>Сжимать можно только образы qcow2.</translation></message>
+<message><source>failed_to_replace_disk_image_1</source><translation>Не удалось заменить образ диска: %1</translation></message>
+<message><source>source_and_destination_must_differ</source><translation>Источник и назначение должны различаться.</translation></message>
+<message><source>unsupported_disk_format_1</source><translation>Неподдерживаемый формат диска: %1</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -460,6 +467,8 @@
 <message><source>c_kde</source><translation>(C) KDE</translation></message>
 <message><source>derek_lin</source><translation>Derek Lin</translation></message>
 <message><source>developer</source><translation>Разработчик</translation></message>
+<message><source>drop_media_hint</source><translation>Отпустите ISO или образ диска</translation></message>
+<message><source>error_log</source><translation>Журнал ошибок</translation></message>
 <message><source>initial_developer</source><translation>Первый разработчик</translation></message>
 <message><source>karton</source><translation>Karton</translation></message>
 <message><source>karton_virtual_machine_manager</source><translation>Диспетчер виртуальных машин Karton</translation></message>
@@ -623,6 +632,22 @@
 <message><source>width</source><translation>Ширина</translation></message>
 <message><source>windows</source><translation>Windows</translation></message>
 <message><source>xml</source><translation>XML</translation></message>
+<message><source>check_disk_image</source><translation>Проверить образ</translation></message>
+<message><source>choose</source><translation>Выбрать…</translation></message>
+<message><source>choose_destination_image</source><translation>Выберите образ назначения</translation></message>
+<message><source>compact_disk_image</source><translation>Сжать образ</translation></message>
+<message><source>conversion_runs_on_a_stopped_vm</source><translation>Преобразование выполняется для остановленной ВМ.</translation></message>
+<message><source>convert</source><translation>Преобразовать</translation></message>
+<message><source>convert_disk_image</source><translation>Преобразовать образ…</translation></message>
+<message><source>destination</source><translation>Назначение</translation></message>
+<message><source>disk_operation_failed_2</source><translation>%1 не удалось: %2</translation></message>
+<message><source>disk_operation_finished_2</source><translation>%1 завершено: %2</translation></message>
+<message><source>disk_operation_started_2</source><translation>%1: %2</translation></message>
+<message><source>disk_tools</source><translation>Инструменты диска</translation></message>
+<message><source>format</source><translation>Формат</translation></message>
+<message><source>open_disk_folder</source><translation>Открыть папку</translation></message>
+<message><source>source_image_1</source><translation>Источник: %1</translation></message>
+<message><source>stop_vm_to_modify_disks</source><translation>Остановите ВМ для изменения дисков</translation></message>
 </context>
 <context>
 <name>SnapshotsDialog</name>
@@ -631,12 +656,16 @@
 <message><source>current</source><translation>текущее</translation></message>
 <message><source>delete</source><translation>Удалить</translation></message>
 <message><source>description_optional</source><translation>Описание (необязательно)</translation></message>
+<message><source>external_snapshot</source><translation>Внешний</translation></message>
+<message><source>from_snapshot_1</source><translation>из %1</translation></message>
 <message><source>include_memory_internal_snapshot</source><translation>Включить память (внутренний снимок)</translation></message>
+<message><source>internal_snapshot</source><translation>Внутренний</translation></message>
 <message><source>no_snapshots_yet</source><translation>Снимков пока нет.</translation></message>
 <message><source>revert</source><translation>Вернуть</translation></message>
 <message><source>snapshot_name</source><translation>Имя снимка</translation></message>
 <message><source>snapshots</source><translation>Снимки</translation></message>
 <message><source>snapshots_1</source><translation>Снимки — %1</translation></message>
+<message><source>with_memory</source><translation>с памятью</translation></message>
 <message><source>without_memory_a_running_vm_gets_an_external_disk_only_snapshot</source><translation>Без памяти работающая ВМ получит внешний снимок только диска.</translation></message>
 </context>
 <context>
@@ -654,11 +683,18 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>all</source><translation>Все</translation></message>
 <message><source>cannot_connect_to_libvirt</source><translation>Не удалось подключиться к libvirt</translation></message>
 <message><source>check_that_libvirt_is_running_and_that_the_1_connection_is_available</source><translation>Проверьте, что libvirt запущен и подключение %1 доступно.</translation></message>
 <message><source>connected_to_1_create_a_new_virtual_machine_to_proceed</source><translation>Подключено к %1. Создайте новую виртуальную машину, чтобы продолжить.</translation></message>
 <message><source>create</source><translation>Создать</translation></message>
+<message><source>filter_by_state</source><translation>Фильтр по состоянию</translation></message>
+<message><source>no_matching_vms</source><translation>Нет подходящих виртуальных машин</translation></message>
+<message><source>running</source><translation>Запущенные</translation></message>
+<message><source>search_virtual_machines</source><translation>Поиск виртуальных машин</translation></message>
 <message><source>settings</source><translation>Настройки</translation></message>
+<message><source>stopped</source><translation>Остановленные</translation></message>
+<message><source>try_a_different_search_or_filter</source><translation>Попробуйте изменить запрос или фильтр.</translation></message>
 <message><source>virtual_machines</source><translation>Виртуальные машины</translation></message>
 <message><source>welcome_to_karton</source><translation>Добро пожаловать в Karton!</translation></message>
 </context>
@@ -711,8 +747,12 @@
 <message><source>choose_cd_rom_media</source><translation>Выбрать образ CD-ROM</translation></message>
 <message><source>disk</source><translation>Диск</translation></message>
 <message><source>disk_images_iso_img_raw</source><translation>Образы дисков (*.iso *.img *.raw)</translation></message>
+<message><source>disk_image_attached_for_vm_1</source><translation>Образ диска подключён к ВМ: %1</translation></message>
 <message><source>insert</source><translation>Вставить…</translation></message>
+<message><source>iso_inserted_for_vm_1</source><translation>ISO вставлен в ВМ: %1</translation></message>
+<message><source>media_already_attached_1</source><translation>Уже подключено: %1</translation></message>
 <message><source>no_disks</source><translation>Нет дисков</translation></message>
+<message><source>unsupported_image_format_1</source><translation>Неподдерживаемый формат образа: %1</translation></message>
 <message><source>no_media</source><translation>Нет носителя</translation></message>
 <message><source>performance</source><translation>Производительность</translation></message>
 <message><source>s_1_of_2</source><translation>%1 из %2</translation></message>
@@ -747,5 +787,12 @@
 <message><source>usb_devices</source><translation>Устройства USB</translation></message>
 <message><source>vm_viewer</source><translation>Просмотрщик ВМ</translation></message>
 <message><source>vm_viewer_1</source><translation>Просмотрщик ВМ - %1</translation></message>
+</context>
+<context>
+<name>ErrorLogDialog</name>
+<message><source>clear</source><translation>Очистить</translation></message>
+<message><source>close</source><translation>Закрыть</translation></message>
+<message><source>error_log</source><translation>Журнал ошибок</translation></message>
+<message><source>no_errors_recorded</source><translation>Ошибки не записаны.</translation></message>
 </context>
 </TS>

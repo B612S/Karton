@@ -453,6 +453,13 @@
 <message><source>could_not_start_the_windows_driver_installer_1</source><translation>Could not start the Windows driver installer: %1</translation></message>
 
 <message><source>the_vm_has_no_cd_rom_drive_add_one_while_it_is_stopped</source><translation>This VM has no CD-ROM drive.</translation></message>
+
+<message><source>stop_the_vm_before_compacting_its_disk</source><translation>Stop the VM before compacting its disk.</translation></message>
+<message><source>failed_to_read_disk_image_information_1</source><translation>Failed to read disk image information: %1</translation></message>
+<message><source>only_qcow2_images_can_be_compacted</source><translation>Only qcow2 images can be compacted.</translation></message>
+<message><source>failed_to_replace_disk_image_1</source><translation>Failed to replace the disk image: %1</translation></message>
+<message><source>source_and_destination_must_differ</source><translation>The source and destination must differ.</translation></message>
+<message><source>unsupported_disk_format_1</source><translation>Unsupported disk format: %1</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -460,6 +467,8 @@
 <message><source>c_kde</source><translation>(C) KDE</translation></message>
 <message><source>derek_lin</source><translation>Derek Lin</translation></message>
 <message><source>developer</source><translation>Developer</translation></message>
+<message><source>drop_media_hint</source><translation>Drop an ISO or disk image</translation></message>
+<message><source>error_log</source><translation>Error Log</translation></message>
 <message><source>initial_developer</source><translation>Initial developer</translation></message>
 <message><source>karton</source><translation>Karton</translation></message>
 <message><source>karton_virtual_machine_manager</source><translation>Karton Virtual Machine Manager</translation></message>
@@ -623,6 +632,22 @@
 <message><source>width</source><translation>Width</translation></message>
 <message><source>windows</source><translation>Windows</translation></message>
 <message><source>xml</source><translation>XML</translation></message>
+<message><source>check_disk_image</source><translation>Check image</translation></message>
+<message><source>choose</source><translation>Choose…</translation></message>
+<message><source>choose_destination_image</source><translation>Choose destination image</translation></message>
+<message><source>compact_disk_image</source><translation>Compact image</translation></message>
+<message><source>conversion_runs_on_a_stopped_vm</source><translation>Conversion is performed on a stopped VM.</translation></message>
+<message><source>convert</source><translation>Convert</translation></message>
+<message><source>convert_disk_image</source><translation>Convert image…</translation></message>
+<message><source>destination</source><translation>Destination</translation></message>
+<message><source>disk_operation_failed_2</source><translation>%1 failed: %2</translation></message>
+<message><source>disk_operation_finished_2</source><translation>%1 finished: %2</translation></message>
+<message><source>disk_operation_started_2</source><translation>%1: %2</translation></message>
+<message><source>disk_tools</source><translation>Disk tools</translation></message>
+<message><source>format</source><translation>Format</translation></message>
+<message><source>open_disk_folder</source><translation>Open folder</translation></message>
+<message><source>source_image_1</source><translation>Source: %1</translation></message>
+<message><source>stop_vm_to_modify_disks</source><translation>Stop the VM to modify disks</translation></message>
 </context>
 <context>
 <name>SnapshotsDialog</name>
@@ -631,12 +656,16 @@
 <message><source>current</source><translation>current</translation></message>
 <message><source>delete</source><translation>Delete</translation></message>
 <message><source>description_optional</source><translation>Description (optional)</translation></message>
+<message><source>external_snapshot</source><translation>External</translation></message>
+<message><source>from_snapshot_1</source><translation>from %1</translation></message>
 <message><source>include_memory_internal_snapshot</source><translation>Include memory (internal snapshot)</translation></message>
+<message><source>internal_snapshot</source><translation>Internal</translation></message>
 <message><source>no_snapshots_yet</source><translation>No snapshots yet.</translation></message>
 <message><source>revert</source><translation>Revert</translation></message>
 <message><source>snapshot_name</source><translation>Snapshot name</translation></message>
 <message><source>snapshots</source><translation>Snapshots</translation></message>
 <message><source>snapshots_1</source><translation>Snapshots — %1</translation></message>
+<message><source>with_memory</source><translation>with memory</translation></message>
 <message><source>without_memory_a_running_vm_gets_an_external_disk_only_snapshot</source><translation>Without memory, a running VM gets an external disk-only snapshot.</translation></message>
 </context>
 <context>
@@ -654,11 +683,18 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>all</source><translation>All</translation></message>
 <message><source>cannot_connect_to_libvirt</source><translation>Cannot connect to libvirt</translation></message>
 <message><source>check_that_libvirt_is_running_and_that_the_1_connection_is_available</source><translation>Check that libvirt is running and that the %1 connection is available.</translation></message>
 <message><source>connected_to_1_create_a_new_virtual_machine_to_proceed</source><translation>Connected to %1. Create a new virtual machine to proceed.</translation></message>
 <message><source>create</source><translation>Create</translation></message>
+<message><source>filter_by_state</source><translation>Filter by state</translation></message>
+<message><source>no_matching_vms</source><translation>No matching virtual machines</translation></message>
+<message><source>running</source><translation>Running</translation></message>
+<message><source>search_virtual_machines</source><translation>Search virtual machines</translation></message>
 <message><source>settings</source><translation>Settings</translation></message>
+<message><source>stopped</source><translation>Stopped</translation></message>
+<message><source>try_a_different_search_or_filter</source><translation>Try a different search or filter.</translation></message>
 <message><source>virtual_machines</source><translation>Virtual Machines</translation></message>
 <message><source>welcome_to_karton</source><translation>Welcome to Karton!</translation></message>
 </context>
@@ -711,8 +747,12 @@ This action cannot be undone.</translation></message>
 <message><source>choose_cd_rom_media</source><translation>Choose CD-ROM media</translation></message>
 <message><source>disk</source><translation>Disk</translation></message>
 <message><source>disk_images_iso_img_raw</source><translation>Disk images (*.iso *.img *.raw)</translation></message>
+<message><source>disk_image_attached_for_vm_1</source><translation>Disk image attached to VM: %1</translation></message>
 <message><source>insert</source><translation>Insert…</translation></message>
+<message><source>iso_inserted_for_vm_1</source><translation>ISO inserted for VM: %1</translation></message>
+<message><source>media_already_attached_1</source><translation>Already attached: %1</translation></message>
 <message><source>no_disks</source><translation>No disks</translation></message>
+<message><source>unsupported_image_format_1</source><translation>Unsupported image format: %1</translation></message>
 <message><source>no_media</source><translation>No media</translation></message>
 <message><source>performance</source><translation>Performance</translation></message>
 <message><source>s_1_of_2</source><translation>%1 of %2</translation></message>
@@ -747,5 +787,12 @@ This action cannot be undone.</translation></message>
 <message><source>usb_devices</source><translation>USB Devices</translation></message>
 <message><source>vm_viewer</source><translation>VM Viewer</translation></message>
 <message><source>vm_viewer_1</source><translation>VM Viewer - %1</translation></message>
+</context>
+<context>
+<name>ErrorLogDialog</name>
+<message><source>clear</source><translation>Clear</translation></message>
+<message><source>close</source><translation>Close</translation></message>
+<message><source>error_log</source><translation>Error Log</translation></message>
+<message><source>no_errors_recorded</source><translation>No errors have been recorded.</translation></message>
 </context>
 </TS>

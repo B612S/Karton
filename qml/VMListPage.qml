@@ -17,6 +17,40 @@ Kirigami.ScrollablePage {
     leftPadding: 0
     rightPadding: 0
 
+    // Fixed above the list so it stays reachable while scrolling. It is hidden
+    // when there is nothing to filter, but stays visible when a filter matches
+    // nothing so the user can clear it.
+    header: Item {
+        implicitHeight: searchRow.implicitHeight + Kirigami.Units.smallSpacing * 2
+        visible: Karton.connected && (view.count > 0 || VMModel.hasFilter)
+
+        RowLayout {
+            id: searchRow
+            anchors.fill: parent
+            anchors.leftMargin: Kirigami.Units.largeSpacing
+            anchors.rightMargin: Kirigami.Units.largeSpacing
+            anchors.topMargin: Kirigami.Units.smallSpacing
+            anchors.bottomMargin: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.SearchField {
+                id: searchField
+                Layout.fillWidth: true
+                placeholderText: qsTr("search_virtual_machines")
+                onTextChanged: VMModel.filterText = text
+            }
+
+            Controls.ComboBox {
+                id: stateFilter
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+                model: [qsTr("all"), qsTr("running"), qsTr("stopped")]
+                onActivated: index => VMModel.filterMode = index
+                Controls.ToolTip.visible: hovered
+                Controls.ToolTip.text: qsTr("filter_by_state")
+            }
+        }
+    }
+
     function openViewer(domain) {
         if (!domain) {
             return;
@@ -95,12 +129,20 @@ Kirigami.ScrollablePage {
     property real dragGlobalY: -1
     property int dragScrollDirection: 0
     readonly property real dragEdgeHeight: 40
+    // A filter change resets the model and re-emits the current-item change;
+    // that must not open the first matching VM's details page.
+    property bool autoOpenSuspended: false
 
     // A single hold timer for the whole list instead of one per delegate.
     property int dragHoldRow: -1
     property real dragHoldSceneY: -1
 
     function holdForDrag(index, sceneY) {
+        // Source and view rows differ while a filter is active, so reordering
+        // through the filtered list would move the wrong domains.
+        if (VMModel.hasFilter) {
+            return;
+        }
         dragHoldRow = index;
         dragHoldSceneY = sceneY;
         dragHoldTimer.start();
@@ -121,6 +163,9 @@ Kirigami.ScrollablePage {
     }
 
     function beginDrag(index, sceneY) {
+        if (VMModel.hasFilter) {
+            return;
+        }
         if (!view || index < 0 || index >= view.count) {
             return;
         }
@@ -230,6 +275,27 @@ Kirigami.ScrollablePage {
     Component.onDestruction: cancelDragHold()
 
     Connections {
+        target: VMModel
+        function onFilterChanged() {
+            root.cancelDragHold();
+            if (root.isDragging) {
+                root.endDrag();
+            }
+            // Suppress the detail-page auto-open caused by rebuilding the
+            // list; a real selection after the filter settles still opens it.
+            root.autoOpenSuspended = true;
+            filterSettleTimer.restart();
+        }
+    }
+
+    Timer {
+        id: filterSettleTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.autoOpenSuspended = false
+    }
+
+    Connections {
         target: Karton
         function onErrorOccurred(errorMessage) {
             applicationWindow().showPassiveNotification(errorMessage, "long");
@@ -278,7 +344,7 @@ Kirigami.ScrollablePage {
 
         // When the VM list is empty, make the placeholder welcome text the full page.
         onCountChanged: {
-            if (count === 0) {
+            if (count === 0 && !VMModel.hasFilter) {
                 while (applicationWindow().pageStack.depth > 1) {
                     applicationWindow().pageStack.pop();
                 }
@@ -305,7 +371,7 @@ Kirigami.ScrollablePage {
             readonly property bool isBeingDragged: root.draggedIndex === index
 
             ListView.onIsCurrentItemChanged: {
-                if (ListView.isCurrentItem && !root.isDragging) {
+                if (ListView.isCurrentItem && !root.isDragging && !root.autoOpenSuspended) {
                     root.selectedDomain = domain;
                     if (applicationWindow().isWidescreen) {
                         // Defer the push until the delegate has been placed in
@@ -427,9 +493,13 @@ Kirigami.ScrollablePage {
 
             visible: view.count === 0
 
-            text: Karton.connected ? qsTr("welcome_to_karton") : qsTr("cannot_connect_to_libvirt")
-            explanation: Karton.connected ? qsTr("connected_to_1_create_a_new_virtual_machine_to_proceed").arg(Karton.connectionUri) : qsTr("check_that_libvirt_is_running_and_that_the_1_connection_is_available").arg(Karton.connectionUri)
-            icon.name: Karton.connected ? "computer-symbolic" : "error-symbolic"
+            text: VMModel.hasFilter
+                ? qsTr("no_matching_vms")
+                : (Karton.connected ? qsTr("welcome_to_karton") : qsTr("cannot_connect_to_libvirt"))
+            explanation: VMModel.hasFilter
+                ? qsTr("try_a_different_search_or_filter")
+                : (Karton.connected ? qsTr("connected_to_1_create_a_new_virtual_machine_to_proceed").arg(Karton.connectionUri) : qsTr("check_that_libvirt_is_running_and_that_the_1_connection_is_available").arg(Karton.connectionUri))
+            icon.name: VMModel.hasFilter ? "edit-none-symbolic" : (Karton.connected ? "computer-symbolic" : "error-symbolic")
         }
     }
 }

@@ -401,6 +401,19 @@ Kirigami.Dialog {
         return decodeURIComponent(path);
     }
 
+    function diskOperationName(operation) {
+        switch (operation) {
+        case "check":
+            return qsTr("check_disk_image");
+        case "compact":
+            return qsTr("compact_disk_image");
+        case "convert":
+            return qsTr("convert_disk_image");
+        default:
+            return operation;
+        }
+    }
+
     onOpened: {
         if (!domain) {
             return;
@@ -1121,6 +1134,56 @@ Kirigami.Dialog {
                                         if (Karton.detachDisk(root.domain, modelData.target, false)) {
                                             root.refresh();
                                         }
+                                    }
+                                }
+                                Controls.Button {
+                                    display: Controls.AbstractButton.IconOnly
+                                    icon.name: "view-more-symbolic"
+                                    onClicked: diskToolsMenu.popup()
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.text: qsTr("disk_tools")
+                                }
+                                Controls.Menu {
+                                    id: diskToolsMenu
+                                    property string sourcePath: modelData.source
+                                    property bool isCdrom: modelData.device === "cdrom"
+
+                                    Controls.MenuItem {
+                                        text: qsTr("check_disk_image")
+                                        icon.name: "document-preview-symbolic"
+                                        enabled: diskToolsMenu.sourcePath.length > 0
+                                        onTriggered: Karton.checkDiskImage(root.domain, diskToolsMenu.sourcePath)
+                                    }
+                                    Controls.MenuItem {
+                                        text: qsTr("compact_disk_image")
+                                        icon.name: "archive-insert-symbolic"
+                                        enabled: !diskToolsMenu.isCdrom && root.domain && !root.domain.isActive
+                                            && (modelData.format === "qcow2" || diskToolsMenu.sourcePath.toLowerCase().endsWith(".qcow2"))
+                                        onTriggered: Karton.compactDiskImage(root.domain, diskToolsMenu.sourcePath)
+                                    }
+                                    Controls.MenuItem {
+                                        text: qsTr("convert_disk_image")
+                                        icon.name: "document-export-symbolic"
+                                        enabled: !diskToolsMenu.isCdrom && root.domain && !root.domain.isActive
+                                            && diskToolsMenu.sourcePath.length > 0
+                                        onTriggered: {
+                                            convertDiskDialog.sourcePath = diskToolsMenu.sourcePath;
+                                            convertDiskDialog.destinationPath = "";
+                                            convertDiskDialog.format = "qcow2";
+                                            convertDiskDialog.open();
+                                        }
+                                    }
+                                    Controls.MenuItem {
+                                        text: qsTr("stop_vm_to_modify_disks")
+                                        enabled: false
+                                        visible: root.domain && root.domain.isActive
+                                    }
+                                    Controls.MenuSeparator {}
+                                    Controls.MenuItem {
+                                        text: qsTr("open_disk_folder")
+                                        icon.name: "folder-open-symbolic"
+                                        enabled: diskToolsMenu.sourcePath.length > 0
+                                        onTriggered: Karton.openDiskFolder(diskToolsMenu.sourcePath)
                                     }
                                 }
                             }
@@ -2783,6 +2846,116 @@ Kirigami.Dialog {
             // to the settings card dismisses them when the frame/app is clicked.
             root.contentItem.forceActiveFocus();
         }
+        function onDiskMaintenanceStarted(operation, path) {
+            if (applicationWindow()) {
+                applicationWindow().showPassiveNotification(
+                    qsTr("disk_operation_started_2").arg(root.diskOperationName(operation)).arg(path));
+            }
+        }
+        function onDiskMaintenanceFinished(operation, path, success, message) {
+            if (!applicationWindow()) {
+                return;
+            }
+            if (success) {
+                applicationWindow().showPassiveNotification(
+                    qsTr("disk_operation_finished_2").arg(root.diskOperationName(operation)).arg(path));
+            } else {
+                applicationWindow().showPassiveNotification(
+                    qsTr("disk_operation_failed_2").arg(root.diskOperationName(operation)).arg(message), "long");
+            }
+        }
+    }
+
+    Kirigami.Dialog {
+        id: convertDiskDialog
+        title: qsTr("convert_disk_image")
+        preferredWidth: Kirigami.Units.gridUnit * 36
+        property string sourcePath: ""
+        property string destinationPath: ""
+        property string format: "qcow2"
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            width: convertDiskDialog.availableWidth
+            spacing: Kirigami.Units.largeSpacing
+
+            Controls.Label {
+                Layout.fillWidth: true
+                text: qsTr("source_image_1").arg(convertDiskDialog.sourcePath)
+                elide: Text.ElideMiddle
+                opacity: 0.8
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    text: qsTr("destination")
+                }
+                Controls.TextField {
+                    Layout.fillWidth: true
+                    readOnly: true
+                    text: convertDiskDialog.destinationPath
+                    placeholderText: qsTr("choose_destination_image")
+                }
+                Controls.Button {
+                    text: qsTr("choose")
+                    onClicked: convertDestinationDialog.open()
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    text: qsTr("format")
+                }
+                Controls.ComboBox {
+                    id: convertFormatCombo
+                    model: ["qcow2", "raw", "vmdk"]
+                    currentIndex: convertDiskDialog.format === "raw" ? 1 : (convertDiskDialog.format === "vmdk" ? 2 : 0)
+                    onActivated: convertDiskDialog.format = currentText
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+
+            Controls.Label {
+                Layout.fillWidth: true
+                text: qsTr("conversion_runs_on_a_stopped_vm")
+                opacity: 0.65
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: qsTr("cancel")
+                onTriggered: convertDiskDialog.close()
+            },
+            Kirigami.Action {
+                text: qsTr("convert")
+                icon.name: "document-export-symbolic"
+                enabled: convertDiskDialog.destinationPath.length > 0
+                onTriggered: {
+                    if (Karton.convertDiskImage(convertDiskDialog.sourcePath, convertDiskDialog.destinationPath, convertDiskDialog.format)) {
+                        convertDiskDialog.close();
+                    }
+                }
+            }
+        ]
+    }
+
+    FileDialog {
+        id: convertDestinationDialog
+        title: qsTr("choose_destination_image")
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["qcow2 (*.qcow2)", "raw (*.raw)", "vmdk (*.vmdk)"]
+        onAccepted: convertDiskDialog.destinationPath = root.localPath(selectedFile)
     }
 
 }

@@ -4,6 +4,8 @@
 
 #include "app/vmlistmodel.h"
 
+#include <QStringList>
+
 #include "app/karton.h"
 #include "karton_debug.h"
 
@@ -35,22 +37,23 @@ int VMModel::rowCount(const QModelIndex &parent) const
         return 0;
     }
 
-    return m_datas.size();
+    return m_filtered.size();
 }
 
 VMModel::~VMModel()
 {
     m_datas.clear();
+    m_filtered.clear();
 }
 
 QVariant VMModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() >= m_datas.size()) {
+    if (!index.isValid() || index.row() >= m_filtered.size()) {
         return {};
     }
 
     if (role == DomainRole) {
-        return QVariant::fromValue(m_datas[index.row()]);
+        return QVariant::fromValue(m_filtered[index.row()]);
     }
     return {};
 }
@@ -81,24 +84,34 @@ void VMModel::onDomainRemoved(Domain *domain)
         return;
     }
 
-    const int index = m_datas.indexOf(domain);
-    if (index < 0) {
+    const int sourceIndex = m_datas.indexOf(domain);
+    if (sourceIndex < 0) {
         return;
     }
+    m_datas.removeAt(sourceIndex);
 
-    beginRemoveRows(QModelIndex(), index, index);
-    m_datas.removeAt(index);
-    endRemoveRows();
+    const int visibleIndex = m_filtered.indexOf(domain);
+    if (visibleIndex >= 0) {
+        beginRemoveRows(QModelIndex(), visibleIndex, visibleIndex);
+        m_filtered.removeAt(visibleIndex);
+        endRemoveRows();
+    }
 }
 
 void VMModel::moveItem(int from, int to)
 {
-    if (from == to || from < 0 || to < 0 || from >= m_datas.size() || to >= m_datas.size()) {
+    // The view shows a filtered subset; source and view rows would no longer
+    // match, so reordering is disabled while a filter is active.
+    if (hasFilter()) {
+        return;
+    }
+    if (from == to || from < 0 || to < 0 || from >= m_filtered.size() || to >= m_filtered.size()) {
         return;
     }
 
     beginMoveRows(QModelIndex(), from, from, QModelIndex(), to > from ? to + 1 : to);
     m_datas.move(from, to);
+    m_filtered.move(from, to);
     endMoveRows();
 
     // Keep Karton's own domain list in the same order so a later refresh does
@@ -108,8 +121,8 @@ void VMModel::moveItem(int from, int to)
 
 int VMModel::rowOfUuid(const QString &uuid) const
 {
-    for (int i = 0; i < m_datas.size(); ++i) {
-        if (m_datas[i]->config()->uuid() == uuid) {
+    for (int i = 0; i < m_filtered.size(); ++i) {
+        if (m_filtered[i]->config()->uuid() == uuid) {
             return i;
         }
     }
@@ -122,8 +135,10 @@ void VMModel::refreshAllDomains()
     m_resetting = true;
     beginResetModel();
     m_datas.clear();
+    m_filtered.clear();
     m_karton->refreshDomainList();
     m_datas = m_karton->domains();
+    rebuildFiltered();
     endResetModel();
     m_resetting = false;
 }
@@ -151,9 +166,87 @@ void VMModel::updateDomains(const virDomainPtr domainPtr)
         qCDebug(KARTON_DEBUG) << "Found matching domain in model at index" << modelIndex;
         m_karton->refreshDomain(domainPtr);
 
-        QModelIndex qModelIndex = createIndex(modelIndex, 0);
-        Q_EMIT dataChanged(qModelIndex, qModelIndex);
+        if (hasFilter()) {
+            // Name, state and OS text may have changed, and with an
+            // active/stopped filter the row may have to appear or disappear.
+            beginResetModel();
+            rebuildFiltered();
+            endResetModel();
+        } else {
+            QModelIndex qModelIndex = createIndex(modelIndex, 0);
+            Q_EMIT dataChanged(qModelIndex, qModelIndex);
+        }
     } else {
         refreshAllDomains();
     }
+}
+
+void VMModel::setFilterText(const QString &text)
+{
+    const QString trimmed = text.trimmed();
+    if (m_filterText == trimmed) {
+        return;
+    }
+    m_filterText = trimmed;
+    applyFilter();
+}
+
+void VMModel::setFilterMode(int mode)
+{
+    const int bounded = qBound(int(AllVms), mode, int(StoppedVms));
+    if (m_filterMode == bounded) {
+        return;
+    }
+    m_filterMode = bounded;
+    applyFilter();
+}
+
+void VMModel::applyFilter()
+{
+    beginResetModel();
+    rebuildFiltered();
+    endResetModel();
+    Q_EMIT filterChanged();
+}
+
+void VMModel::rebuildFiltered()
+{
+    m_filtered.clear();
+    m_filtered.reserve(m_datas.size());
+    const QList<Domain *> &domains = m_datas;
+    for (Domain *domain : domains) {
+        if (matchesFilter(domain)) {
+            m_filtered.append(domain);
+        }
+    }
+}
+
+bool VMModel::matchesFilter(const Domain *domain) const
+{
+    if (!domain || !domain->config()) {
+        return false;
+    }
+    if (m_filterMode == RunningVms && !domain->isActive()) {
+        return false;
+    }
+    if (m_filterMode == StoppedVms && domain->isActive()) {
+        return false;
+    }
+    if (m_filterText.isEmpty()) {
+        return true;
+    }
+
+    const DomainConfig *config = domain->config();
+    const QStringList fields = {
+        config->name(),
+        config->uuid(),
+        config->state(),
+        m_karton ? m_karton->domainOsName(domain) : QString(),
+    };
+    for (const QString &field : fields) {
+        if (field.contains(m_filterText, Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+    return false;
 }

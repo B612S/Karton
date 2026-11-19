@@ -33,6 +33,10 @@ Kirigami.ApplicationWindow {
         visible: false
     }
 
+    ErrorLogDialog {
+        visible: false
+    }
+
     SnapshotsDialog {
         domain: null
         visible: false

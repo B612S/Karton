@@ -199,6 +199,7 @@ ecm_target_qml_sources(karton
     qml/PermissionGrantDialog.qml
     qml/VMPage.qml
     qml/UsageGraph.qml
+    qml/ErrorLogDialog.qml
     qml/AddHardwareDialog.qml
     qml/ApplicationSettingsDialog.qml
     qml/ScrollableSettingsView.qml

@@ -171,6 +171,51 @@ Kirigami.Page {
         return decodeURIComponent(path);
     }
 
+    function imageFormatFor(path) {
+        const lower = path.toLowerCase();
+        if (lower.endsWith(".qcow2")) {
+            return "qcow2";
+        }
+        if (lower.endsWith(".vmdk")) {
+            return "vmdk";
+        }
+        if (lower.endsWith(".raw") || lower.endsWith(".img")) {
+            return "raw";
+        }
+        return "";
+    }
+
+    // Used by the window-wide DropArea in Main.qml. An ISO replaces/inserts
+    // CD-ROM media; a disk image is attached as a new virtio disk.
+    function insertDroppedMedia(path) {
+        if (!root.domain || !path) {
+            return false;
+        }
+        if (root.diskStats.some(entry => entry.source === path)) {
+            applicationWindow().showPassiveNotification(qsTr("media_already_attached_1").arg(path));
+            return true;
+        }
+        if (path.toLowerCase().endsWith(".iso")) {
+            if (Karton.attachIso(root.domain, path)) {
+                root.refreshDiskStats();
+                applicationWindow().showPassiveNotification(qsTr("iso_inserted_for_vm_1").arg(root.domain.config.name));
+                return true;
+            }
+            return false;
+        }
+        const format = root.imageFormatFor(path);
+        if (format.length === 0) {
+            applicationWindow().showPassiveNotification(qsTr("unsupported_image_format_1").arg(path));
+            return false;
+        }
+        if (Karton.attachDiskImage(root.domain, path, format)) {
+            root.refreshDiskStats();
+            applicationWindow().showPassiveNotification(qsTr("disk_image_attached_for_vm_1").arg(root.domain.config.name));
+            return true;
+        }
+        return false;
+    }
+
     Timer {
         id: statsTimer
         interval: 2000

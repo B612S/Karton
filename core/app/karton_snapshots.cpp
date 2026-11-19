@@ -83,6 +83,35 @@ QVariantList Karton::domainSnapshots(const Domain *domain) const
                 creationTime = QDateTime::fromSecsSinceEpoch(creationElement.text().toLongLong()).toString(Qt::ISODate);
             }
 
+            // External disk-only snapshots keep one overlay per disk; their
+            // total file size is a useful indicator of how much space the
+            // snapshot uses. Internal snapshots live inside the disk image and
+            // have no separate size to report.
+            bool external = false;
+            bool hasMemory = false;
+            qint64 sizeBytes = 0;
+            QSet<QString> countedFiles;
+            const QDomElement disksElement = rootElement.firstChildElement(QStringLiteral("disks"));
+            const QDomNodeList diskNodes = disksElement.elementsByTagName(QStringLiteral("disk"));
+            for (int d = 0; d < diskNodes.count(); ++d) {
+                const QDomElement disk = diskNodes.at(d).toElement();
+                if (disk.attribute(QStringLiteral("snapshot")) == QStringLiteral("external")) {
+                    external = true;
+                }
+                const QString file = disk.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file"));
+                if (!file.isEmpty() && !countedFiles.contains(file)) {
+                    countedFiles.insert(file);
+                    const QFileInfo info(file);
+                    if (info.exists()) {
+                        sizeBytes += info.size();
+                    }
+                }
+            }
+            const QDomElement memoryElement = rootElement.firstChildElement(QStringLiteral("memory"));
+            if (!memoryElement.isNull() && memoryElement.attribute(QStringLiteral("snapshot")) != QStringLiteral("no")) {
+                hasMemory = true;
+            }
+
             QVariantMap info;
             info.insert(QStringLiteral("name"), nameElement.text());
             info.insert(QStringLiteral("description"), descriptionElement.text());
@@ -90,6 +119,9 @@ QVariantList Karton::domainSnapshots(const Domain *domain) const
             info.insert(QStringLiteral("state"), stateElement.text());
             info.insert(QStringLiteral("parent"), parentNameElement.text());
             info.insert(QStringLiteral("current"), virDomainSnapshotIsCurrent(snapshots[i], 0) == 1);
+            info.insert(QStringLiteral("type"), external ? QStringLiteral("external") : QStringLiteral("internal"));
+            info.insert(QStringLiteral("hasMemory"), hasMemory);
+            info.insert(QStringLiteral("sizeBytes"), sizeBytes);
             result.append(info);
         }
 
@@ -97,6 +129,12 @@ QVariantList Karton::domainSnapshots(const Domain *domain) const
         virDomainSnapshotFree(snapshots[i]);
     }
     free(snapshots);
+
+    // Newest first, so the list reads as a timeline regardless of libvirt's
+    // enumeration order.
+    std::sort(result.begin(), result.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("creationTime")).toString() > b.toMap().value(QStringLiteral("creationTime")).toString();
+    });
     return result;
 }
 

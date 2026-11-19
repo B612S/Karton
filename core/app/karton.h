@@ -101,6 +101,8 @@ Q_SIGNALS:
     void languageChanged();
     void holidayModeChanged();
     void domainStatsUpdated(const QString &uuid);
+    void diskMaintenanceStarted(const QString &operation, const QString &path);
+    void diskMaintenanceFinished(const QString &operation, const QString &path, bool success, const QString &message);
 
 public Q_SLOTS:
     Q_INVOKABLE bool startDomain(const Domain *domain);
@@ -237,6 +239,11 @@ public Q_SLOTS:
     Q_INVOKABLE bool detachDisk(const Domain *domain, const QString &targetDev, bool deleteFile);
     Q_INVOKABLE QVariantMap domainDiskAdvanced(const Domain *domain, const QString &targetDev) const;
     Q_INVOKABLE bool editDomainDiskAdvanced(const Domain *domain, const QString &targetDev, const QVariantMap &settings);
+    // Maintenance operations for a stopped VM's disk image.
+    Q_INVOKABLE bool checkDiskImage(const Domain *domain, const QString &path);
+    Q_INVOKABLE bool compactDiskImage(const Domain *domain, const QString &path);
+    Q_INVOKABLE bool convertDiskImage(const QString &sourcePath, const QString &destinationPath, const QString &format);
+    Q_INVOKABLE bool openDiskFolder(const QString &path);
 
 Q_SIGNALS:
     void networksChanged();
