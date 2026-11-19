@@ -43,25 +43,12 @@ Kirigami.ScrollablePage {
 
             Controls.ComboBox {
                 id: stateFilter
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 7
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 6
                 model: [qsTr("all"), qsTr("running"), qsTr("stopped")]
                 onActivated: index => VMModel.filterMode = index
-                // Keep the popup exactly as wide as the control and make the
-                // rows compact; the style's default popup grew to fit its
-                // padding and stuck out beyond the combo box.
+                // Keep the style's normal item delegates, but do not let the
+                // popup grow wider than the control.
                 popup.width: stateFilter.width
-                delegate: Controls.ItemDelegate {
-                    required property int index
-                    required property string modelData
-                    width: stateFilter.width
-                    text: modelData
-                    font.pixelSize: 13
-                    topPadding: 2
-                    bottomPadding: 2
-                    leftPadding: 8
-                    rightPadding: 8
-                    highlighted: stateFilter.highlightedIndex === index
-                }
                 Controls.ToolTip.visible: hovered
                 Controls.ToolTip.text: qsTr("filter_by_state")
             }
