@@ -404,6 +404,10 @@ Kirigami.Page {
                 }
             }
             Kirigami.Action {
+                separator: true
+                visible: hasSavedState || isRunning
+            }
+            Kirigami.Action {
                 text: qsTr("snapshots")
                 icon.name: "camera-photo-symbolic"
                 onTriggered: snapshotsDialog.open()
