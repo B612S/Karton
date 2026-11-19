@@ -9,19 +9,19 @@ import org.kde.kirigami as Kirigami
 import org.kde.karton
 
 // Import an OVF descriptor or an OVA archive. The VM is created stopped with
-// its disks converted to qcow2 in the chosen folder.
-Kirigami.Dialog {
+// its disks converted to qcow2 in the chosen folder. That folder is validated
+// and, when needed, granted access through the same dialog as disk creation.
+KartonDialog {
     id: root
 
     property string sourcePath: ""
     property bool importing: false
     property string errorText: ""
+    property string pendingGrantError: ""
     property var activeNetworks: []
 
     title: qsTr("import_ovf_ova")
-    preferredWidth: Kirigami.Units.gridUnit * 40
-    padding: Kirigami.Units.largeSpacing
-    modal: true
+    preferredDialogWidth: Kirigami.Units.gridUnit * 36
 
     function localPath(url) {
         let path = url.toString();
@@ -34,6 +34,35 @@ Kirigami.Dialog {
     function selectedNetwork() {
         const index = networkCombo.currentIndex - 1;
         return index >= 0 && index < root.activeNetworks.length ? root.activeNetworks[index].name : "";
+    }
+
+    function startImport() {
+        root.errorText = "";
+        root.importing = true;
+        if (!Karton.importOvf(root.sourcePath,
+                              nameField.text.trim(),
+                              destinationField.text.trim(),
+                              root.selectedNetwork())) {
+            root.importing = false;
+        }
+    }
+
+    function requestDestinationAccess() {
+        const destination = destinationField.text.trim();
+        if (destination.length === 0) {
+            return true;
+        }
+        const accessError = Karton.checkDiskDirectoryAccess(destination);
+        if (accessError.length === 0) {
+            return true;
+        }
+        root.pendingGrantError = accessError;
+        if (Karton.canGrantDiskDirectoryAccess(destination)) {
+            grantAccessDialog.openFor(destination);
+        } else {
+            root.errorText = accessError;
+        }
+        return false;
     }
 
     onOpened: {
@@ -68,7 +97,6 @@ Kirigami.Dialog {
     }
 
     ColumnLayout {
-        Layout.fillWidth: true
         width: root.availableWidth
         spacing: Kirigami.Units.largeSpacing
 
@@ -80,70 +108,77 @@ Kirigami.Dialog {
             wrapMode: Text.WordWrap
         }
 
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+            columns: 2
+            columnSpacing: Kirigami.Units.largeSpacing
+            rowSpacing: 12
 
             Controls.Label {
                 text: qsTr("source")
-            }
-            Controls.TextField {
                 Layout.fillWidth: true
-                readOnly: true
-                text: root.sourcePath
-                placeholderText: qsTr("choose_an_ovf_or_ova_file")
             }
-            Controls.Button {
-                text: qsTr("choose")
-                enabled: !root.importing
-                onClicked: ovfFileDialog.open()
-            }
-        }
+            RowLayout {
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+                spacing: Kirigami.Units.smallSpacing
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+                Controls.TextField {
+                    Layout.fillWidth: true
+                    readOnly: true
+                    text: root.sourcePath
+                    placeholderText: qsTr("choose_an_ovf_or_ova_file")
+                }
+                Controls.Button {
+                    text: qsTr("choose")
+                    icon.name: "document-open-symbolic"
+                    enabled: !root.importing
+                    onClicked: ovfFileDialog.open()
+                }
+            }
 
             Controls.Label {
                 text: qsTr("name")
+                Layout.fillWidth: true
             }
             Controls.TextField {
                 id: nameField
-                Layout.fillWidth: true
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
                 enabled: !root.importing
                 placeholderText: qsTr("name_from_the_ovf")
             }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
 
             Controls.Label {
                 text: qsTr("destination")
-            }
-            Controls.TextField {
-                id: destinationField
                 Layout.fillWidth: true
-                readOnly: true
             }
-            Controls.Button {
-                text: qsTr("choose")
-                enabled: !root.importing
-                onClicked: destinationDialog.open()
-            }
-        }
+            RowLayout {
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+                spacing: Kirigami.Units.smallSpacing
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+                Controls.TextField {
+                    id: destinationField
+                    Layout.fillWidth: true
+                    readOnly: true
+                }
+                Controls.Button {
+                    text: qsTr("choose")
+                    icon.name: "folder-open-symbolic"
+                    enabled: !root.importing
+                    onClicked: destinationDialog.open()
+                }
+            }
 
             Controls.Label {
                 text: qsTr("network")
+                Layout.fillWidth: true
             }
             Controls.ComboBox {
                 id: networkCombo
-                Layout.fillWidth: true
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
                 enabled: !root.importing
                 model: [qsTr("no_network")].concat(root.activeNetworks.map(network => network.name))
             }
@@ -178,6 +213,7 @@ Kirigami.Dialog {
     customFooterActions: [
         Kirigami.Action {
             text: qsTr("cancel")
+            icon.name: "dialog-cancel-symbolic"
             enabled: !root.importing
             onTriggered: root.close()
         },
@@ -186,17 +222,31 @@ Kirigami.Dialog {
             icon.name: "document-import-symbolic"
             enabled: root.sourcePath.length > 0 && !root.importing
             onTriggered: {
-                root.importing = true;
-                root.errorText = "";
-                if (!Karton.importOvf(root.sourcePath,
-                                       nameField.text.trim(),
-                                       destinationField.text.trim(),
-                                       root.selectedNetwork())) {
-                    root.importing = false;
+                if (root.requestDestinationAccess()) {
+                    root.startImport();
                 }
             }
         }
     ]
+
+    PermissionGrantDialog {
+        id: grantAccessDialog
+        onCancelled: root.errorText = root.pendingGrantError
+        onConfirmed: {
+            const error = Karton.grantDiskDirectoryAccess(targetPath);
+            if (error.length > 0) {
+                root.errorText = error;
+                return;
+            }
+            const check = Karton.checkDiskDirectoryAccess(targetPath);
+            if (check.length > 0) {
+                root.errorText = check;
+                return;
+            }
+            root.errorText = "";
+            root.startImport();
+        }
+    }
 
     FileDialog {
         id: ovfFileDialog

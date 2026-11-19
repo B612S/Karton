@@ -9,18 +9,19 @@ import org.kde.kirigami as Kirigami
 import org.kde.karton
 
 // Export a VM as an OVF folder or a single OVA archive. Disks are converted
-// to qcow2; exporting a running VM reads a crash-consistent image.
-Kirigami.Dialog {
+// to qcow2; exporting a running VM reads a crash-consistent image. Folder
+// permissions are checked before the export starts, exactly like disk
+// creation, so a missing ACL is fixed instead of ending as a qemu-img error.
+KartonDialog {
     id: root
 
     property Domain domain: null
     property bool exporting: false
     property string errorText: ""
+    property string pendingGrantError: ""
 
     title: qsTr("export_ovf_ova")
-    preferredWidth: Kirigami.Units.gridUnit * 40
-    padding: Kirigami.Units.largeSpacing
-    modal: true
+    preferredDialogWidth: Kirigami.Units.gridUnit * 36
 
     function localPath(url) {
         let path = url.toString();
@@ -28,6 +29,35 @@ Kirigami.Dialog {
             path = path.substring(7);
         }
         return decodeURIComponent(path);
+    }
+
+    function startExport() {
+        root.errorText = "";
+        root.exporting = true;
+        if (!Karton.exportOvf(root.domain,
+                               nameField.text.trim(),
+                               destinationField.text.trim(),
+                               formatCombo.currentIndex === 1)) {
+            root.exporting = false;
+        }
+    }
+
+    function requestDestinationAccess() {
+        const destination = destinationField.text.trim();
+        if (destination.length === 0) {
+            return true;
+        }
+        const accessError = Karton.checkDiskDirectoryAccess(destination);
+        if (accessError.length === 0) {
+            return true;
+        }
+        root.pendingGrantError = accessError;
+        if (Karton.canGrantDiskDirectoryAccess(destination)) {
+            grantAccessDialog.openFor(destination);
+        } else {
+            root.errorText = accessError;
+        }
+        return false;
     }
 
     onOpened: {
@@ -61,7 +91,6 @@ Kirigami.Dialog {
     }
 
     ColumnLayout {
-        Layout.fillWidth: true
         width: root.availableWidth
         spacing: Kirigami.Units.largeSpacing
 
@@ -73,49 +102,53 @@ Kirigami.Dialog {
             wrapMode: Text.WordWrap
         }
 
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+            columns: 2
+            columnSpacing: Kirigami.Units.largeSpacing
+            rowSpacing: 12
 
             Controls.Label {
                 text: qsTr("name")
+                Layout.fillWidth: true
             }
             Controls.TextField {
                 id: nameField
-                Layout.fillWidth: true
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
                 enabled: !root.exporting
             }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
 
             Controls.Label {
                 text: qsTr("destination")
-            }
-            Controls.TextField {
-                id: destinationField
                 Layout.fillWidth: true
-                readOnly: true
             }
-            Controls.Button {
-                text: qsTr("choose")
-                enabled: !root.exporting
-                onClicked: destinationDialog.open()
-            }
-        }
+            RowLayout {
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+                spacing: Kirigami.Units.smallSpacing
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+                Controls.TextField {
+                    id: destinationField
+                    Layout.fillWidth: true
+                    readOnly: true
+                }
+                Controls.Button {
+                    text: qsTr("choose")
+                    icon.name: "folder-open-symbolic"
+                    enabled: !root.exporting
+                    onClicked: destinationDialog.open()
+                }
+            }
 
             Controls.Label {
                 text: qsTr("format")
+                Layout.fillWidth: true
             }
             Controls.ComboBox {
                 id: formatCombo
-                Layout.fillWidth: true
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
                 enabled: !root.exporting
                 model: [qsTr("ovf_folder"), qsTr("ova_archive")]
             }
@@ -150,6 +183,7 @@ Kirigami.Dialog {
     customFooterActions: [
         Kirigami.Action {
             text: qsTr("cancel")
+            icon.name: "dialog-cancel-symbolic"
             enabled: !root.exporting
             onTriggered: root.close()
         },
@@ -158,17 +192,31 @@ Kirigami.Dialog {
             icon.name: "document-export-symbolic"
             enabled: root.domain && nameField.text.trim().length > 0 && !root.exporting
             onTriggered: {
-                root.exporting = true;
-                root.errorText = "";
-                if (!Karton.exportOvf(root.domain,
-                                       nameField.text.trim(),
-                                       destinationField.text.trim(),
-                                       formatCombo.currentIndex === 1)) {
-                    root.exporting = false;
+                if (root.requestDestinationAccess()) {
+                    root.startExport();
                 }
             }
         }
     ]
+
+    PermissionGrantDialog {
+        id: grantAccessDialog
+        onCancelled: root.errorText = root.pendingGrantError
+        onConfirmed: {
+            const error = Karton.grantDiskDirectoryAccess(targetPath);
+            if (error.length > 0) {
+                root.errorText = error;
+                return;
+            }
+            const check = Karton.checkDiskDirectoryAccess(targetPath);
+            if (check.length > 0) {
+                root.errorText = check;
+                return;
+            }
+            root.errorText = "";
+            root.startExport();
+        }
+    }
 
     FolderDialog {
         id: destinationDialog

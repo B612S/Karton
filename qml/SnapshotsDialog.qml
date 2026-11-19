@@ -7,24 +7,15 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: root
     property Domain domain: null
 
     title: domain ? qsTr("snapshots_1").arg(domain.config.name) : qsTr("snapshots")
-
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.95)
-        radius: 8
-        border.color: "transparent"
-    }
-
+    preferredDialogWidth: Kirigami.Units.gridUnit * 36
 
     property var snapshotList: []
     property string errorText: ""
-    preferredWidth: applicationWindow() ? Math.max(520, Math.min(700, applicationWindow().width - 48)) : 700
 
     function refresh() {
         snapshotList = domain ? Karton.domainSnapshots(domain) : [];
@@ -45,6 +36,14 @@ Kirigami.Dialog {
         return (bytes / (1024 * 1024)).toFixed(1) + " MiB";
     }
 
+    function createSnapshot() {
+        if (Karton.createSnapshot(root.domain, nameField.text, descriptionField.text, includeMemoryCheck.checked)) {
+            root.refresh();
+            nameField.text = root.defaultName();
+            descriptionField.text = "";
+        }
+    }
+
     onOpened: {
         errorText = "";
         nameField.text = defaultName();
@@ -63,21 +62,10 @@ Kirigami.Dialog {
     }
 
     ColumnLayout {
-        Layout.fillWidth: true
         width: root.availableWidth
         spacing: Kirigami.Units.largeSpacing
 
-        Kirigami.Heading {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            level: 3
-            text: qsTr("snapshots")
-        }
-
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
             visible: root.errorText.length > 0
             text: root.errorText
@@ -86,8 +74,7 @@ Kirigami.Dialog {
         }
 
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+            Layout.fillWidth: true
             visible: root.snapshotList.length === 0
             text: qsTr("no_snapshots_yet")
             opacity: 0.7
@@ -96,8 +83,7 @@ Kirigami.Dialog {
         ListView {
             Layout.fillWidth: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 10
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+            visible: root.snapshotList.length > 0
             clip: true
             model: root.snapshotList
             spacing: Kirigami.Units.smallSpacing
@@ -184,66 +170,69 @@ Kirigami.Dialog {
 
         Kirigami.Separator {
             Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+            visible: root.snapshotList.length > 0
         }
 
-        Controls.TextField {
-            id: nameField
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+        Controls.Label {
+            text: qsTr("create_snapshot")
+            font.pixelSize: 15
+            font.weight: Font.Bold
             Layout.fillWidth: true
-            placeholderText: qsTr("snapshot_name")
         }
 
-        Controls.TextField {
-            id: descriptionField
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+        GridLayout {
             Layout.fillWidth: true
-            placeholderText: qsTr("description_optional")
+            columns: 2
+            columnSpacing: Kirigami.Units.largeSpacing
+            rowSpacing: 12
+
+            Controls.Label {
+                text: qsTr("snapshot_name")
+                Layout.fillWidth: true
+            }
+            Controls.TextField {
+                id: nameField
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+            }
+
+            Controls.Label {
+                text: qsTr("description_optional")
+                Layout.fillWidth: true
+            }
+            Controls.TextField {
+                id: descriptionField
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+            }
         }
 
         Controls.CheckBox {
             id: includeMemoryCheck
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
             text: qsTr("include_memory_internal_snapshot")
             enabled: root.domain !== null && root.domain.isActive
         }
 
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
             visible: includeMemoryCheck.enabled && !includeMemoryCheck.checked
             text: qsTr("without_memory_a_running_vm_gets_an_external_disk_only_snapshot")
             opacity: 0.7
             wrapMode: Text.WordWrap
         }
+    }
 
-        Controls.Button {
-            Layout.alignment: Qt.AlignRight
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.bottomMargin: Kirigami.Units.largeSpacing
+    customFooterActions: [
+        Kirigami.Action {
+            text: qsTr("close")
+            icon.name: "dialog-cancel-symbolic"
+            onTriggered: root.close()
+        },
+        Kirigami.Action {
             text: qsTr("create_snapshot")
             icon.name: "camera-photo-symbolic"
             enabled: nameField.text.trim().length > 0 && root.domain !== null
-            onClicked: {
-                if (Karton.createSnapshot(root.domain, nameField.text, descriptionField.text, includeMemoryCheck.checked)) {
-                    root.refresh();
-                    nameField.text = root.defaultName();
-                    descriptionField.text = "";
-                }
-            }
+            onTriggered: root.createSnapshot()
         }
-
-        Controls.Button {
-            Layout.alignment: Qt.AlignRight
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.bottomMargin: Kirigami.Units.largeSpacing
-            text: qsTr("close")
-            onClicked: root.close()
-        }
-    }
+    ]
 }

@@ -204,6 +204,7 @@ ecm_target_qml_sources(karton
     qml/PermissionGrantDialog.qml
     qml/VMPage.qml
     qml/UsageGraph.qml
+    qml/KartonDialog.qml
     qml/ErrorLogDialog.qml
     qml/NetworkDhcpDialog.qml
     qml/OvfImportDialog.qml

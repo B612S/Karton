@@ -838,15 +838,9 @@ Kirigami.Page {
     }
 
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: deleteConfirmationDialog
         title: qsTr("delete_1").arg(deleteConfirmationDialog.domain ? deleteConfirmationDialog.domain.config.name : "")
-
-        padding: Kirigami.Units.largeSpacing
-        readonly property real maxDialogWidth: applicationWindow() ? applicationWindow().width - 48 : Kirigami.Units.gridUnit * 40
-        readonly property real maxDialogHeight: applicationWindow() ? applicationWindow().height - 48 : Kirigami.Units.gridUnit * 30
-        preferredWidth: Math.min(maxDialogWidth, Math.max(Kirigami.Units.gridUnit * 20, root.width - Kirigami.Units.gridUnit * 30))
-        preferredHeight: Math.min(maxDialogHeight, Math.max(Kirigami.Units.gridUnit * 14, root.height - Kirigami.Units.gridUnit * 30))
 
         showCloseButton: false
         standardButtons: Kirigami.Dialog.NoButton
@@ -854,10 +848,15 @@ Kirigami.Page {
 
         property var domain: null
 
-        Controls.Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            text: deleteConfirmationDialog.domain ? qsTr("delete_vm_confirmation").arg(deleteConfirmationDialog.domain.config.name) : ""
+        ColumnLayout {
+            width: deleteConfirmationDialog.availableWidth
+            spacing: Kirigami.Units.largeSpacing
+
+            Controls.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: deleteConfirmationDialog.domain ? qsTr("delete_vm_confirmation").arg(deleteConfirmationDialog.domain.config.name) : ""
+            }
         }
         customFooterActions: [
             Kirigami.Action {

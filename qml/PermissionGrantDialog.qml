@@ -5,8 +5,9 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
+import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: root
 
     property string targetPath: ""
@@ -17,17 +18,7 @@ Kirigami.Dialog {
     property bool granted: false
 
     title: qsTr("grant_access")
-    modal: true
-    padding: Kirigami.Units.largeSpacing
-    width: applicationWindow() ? Math.min(Kirigami.Units.gridUnit * 36, applicationWindow().width - 48) : Kirigami.Units.gridUnit * 36
-
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.98)
-        radius: 8
-        border.color: "transparent"
-    }
+    preferredDialogWidth: Kirigami.Units.gridUnit * 36
 
     function openFor(path) {
         targetPath = path;
@@ -42,7 +33,7 @@ Kirigami.Dialog {
     }
 
     ColumnLayout {
-        Layout.fillWidth: true
+        width: root.availableWidth
         spacing: 12
 
         Controls.Label {

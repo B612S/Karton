@@ -7,22 +7,13 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: root
     property Domain domain: null
 
     title: domain ? qsTr("usb_devices_1").arg(domain.config.name) : qsTr("usb_devices")
-    preferredWidth: applicationWindow() ? Math.max(560, Math.min(680, applicationWindow().width - 48)) : 680
+    preferredDialogWidth: Kirigami.Units.gridUnit * 36
     preferredHeight: applicationWindow() ? Math.max(460, Math.min(620, applicationWindow().height - 48)) : 620
-
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.95)
-        radius: 8
-        border.color: "transparent"
-    }
-
 
     property var hostDevices: []
     property var vmDevices: []
@@ -56,21 +47,10 @@ Kirigami.Dialog {
     ]
 
     ColumnLayout {
-        Layout.fillWidth: true
         width: root.availableWidth
         spacing: Kirigami.Units.largeSpacing
 
-        Kirigami.Heading {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            level: 3
-            text: qsTr("host_usb_devices")
-        }
-
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
             visible: root.errorText.length > 0
             text: root.errorText
@@ -79,8 +59,18 @@ Kirigami.Dialog {
         }
 
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+            text: qsTr("host_usb_devices")
+            font.pixelSize: 15
+            font.weight: Font.Bold
+            Layout.fillWidth: true
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+        }
+
+        Controls.Label {
+            Layout.fillWidth: true
             visible: root.hostDevices.length === 0
             text: qsTr("no_usb_devices_found")
             opacity: 0.7
@@ -89,8 +79,7 @@ Kirigami.Dialog {
         ListView {
             Layout.fillWidth: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 10
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+            visible: root.hostDevices.length > 0
             clip: true
             model: root.hostDevices
             spacing: Kirigami.Units.smallSpacing
@@ -139,27 +128,30 @@ Kirigami.Dialog {
             }
         }
 
+        Controls.Label {
+            visible: root.domain !== null
+            text: qsTr("attached_to_this_vm")
+            font.pixelSize: 15
+            font.weight: Font.Bold
+            Layout.fillWidth: true
+        }
+
         Kirigami.Separator {
             Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.domain !== null
         }
 
-        Kirigami.Heading {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            visible: root.domain !== null
-            level: 3
-            text: qsTr("attached_to_this_vm")
+        Controls.Label {
+            Layout.fillWidth: true
+            visible: root.domain !== null && root.vmDevices.length === 0
+            text: qsTr("no_usb_devices_attached")
+            opacity: 0.7
         }
 
         ListView {
             Layout.fillWidth: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 5
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            visible: root.domain !== null
+            visible: root.domain !== null && root.vmDevices.length > 0
             clip: true
             model: root.vmDevices
             spacing: Kirigami.Units.smallSpacing
@@ -203,6 +195,5 @@ Kirigami.Dialog {
                 }
             }
         }
-
     }
 }

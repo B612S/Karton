@@ -177,6 +177,8 @@
 </context>
 <context>
 <name>CloneDialog</name>
+<message><source>name</source><translation>Имя</translation></message>
+<message><source>cloning_the_disk_images</source><translation>Копирование образов дисков…</translation></message>
 <message><source>choose</source><translation>Выбрать…</translation></message>
 <message><source>choose_clone_destination_folder</source><translation>Выберите папку назначения для клона</translation></message>
 <message><source>clone</source><translation>Клонировать</translation></message>
@@ -483,6 +485,7 @@
 <message><source>the_destination_disk_1_already_exists</source><translation>Целевой диск уже существует: %1</translation></message>
 <message><source>failed_to_create_the_folder_1</source><translation>Не удалось создать папку: %1</translation></message>
 <message><source>another_ovf_export_is_already_running</source><translation>Другой экспорт OVF уже выполняется.</translation></message>
+<message><source>cannot_read_the_disk_image_1_stop_the_vm_that_uses_it_or_grant_read_access_and_try_again</source><translation>Не удалось прочитать образ диска %1. Остановите использующую его ВМ или предоставьте доступ на чтение к образу и повторите попытку.</translation></message>
 <message><source>the_vm_has_no_disk_images_to_export</source><translation>У ВМ нет образов дисков для экспорта.</translation></message>
 <message><source>the_destination_1_already_exists</source><translation>Назначение уже существует: %1</translation></message>
 <message><source>failed_to_write_the_ovf_descriptor</source><translation>Не удалось записать дескриптор OVF.</translation></message>
@@ -492,6 +495,11 @@
 <message><source>the_file_is_not_a_libvirt_domain</source><translation>Файл не содержит домен libvirt.</translation></message>
 <message><source>failed_to_write_1</source><translation>Не удалось записать %1</translation></message>
 <message><source>failed_to_read_the_virtual_machine_configuration</source><translation>Не удалось прочитать конфигурацию виртуальной машины.</translation></message>
+<message><source>the_ip_address_1_is_not_inside_the_network_2</source><translation>IP-адрес %1 не входит в сеть %2.</translation></message>
+<message><source>the_ip_address_1_cannot_be_used_for_a_reservation</source><translation>IP-адрес %1 нельзя использовать для резервирования: это адрес сети, широковещательный адрес или шлюз.</translation></message>
+<message><source>the_ip_address_1_is_already_reserved</source><translation>IP-адрес %1 уже зарезервирован.</translation></message>
+<message><source>the_mac_address_1_already_has_a_reservation</source><translation>Для MAC-адреса %1 уже есть резервирование.</translation></message>
+<message><source>the_mac_address_1_is_not_connected_to_network_2</source><translation>MAC-адрес %1 не подключён к сети %2.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -721,6 +729,7 @@
 <message><source>detach</source><translation>Отсоединить</translation></message>
 <message><source>host_usb_devices</source><translation>Устройства USB хоста</translation></message>
 <message><source>no_usb_devices_found</source><translation>Устройства USB не найдены.</translation></message>
+<message><source>no_usb_devices_attached</source><translation>Нет подключённых устройств USB.</translation></message>
 <message><source>usb_devices</source><translation>Устройства USB</translation></message>
 <message><source>usb_devices_1</source><translation>Устройства USB — %1</translation></message>
 </context>
@@ -870,6 +879,23 @@
 <message><source>remove</source><translation>Удалить</translation></message>
 <message><source>reservations</source><translation>Резервирования</translation></message>
 <message><source>reservations_apply_to_the_network_configuration</source><translation>Резервирования записываются в конфигурацию сети.</translation></message>
+<message><source>enter_only_the_host_part_inside_the_network_1</source><translation>Введите только адрес хоста; сеть — %1.</translation></message>
+<message><source>interface</source><translation>Интерфейс</translation></message>
+<message><source>no_vm_interfaces_are_connected_to_network_1</source><translation>К этой сети не подключено ни одного интерфейса ВМ: %1.</translation></message>
+<message><source>vm</source><translation>ВМ</translation></message>
+<message><source>added</source><translation>Добавлено</translation></message>
+<message><source>enter_an_address_inside_the_network_1</source><translation>Введите адрес внутри сети %1.</translation></message>
+<message><source>all_connected_interfaces_already_have_a_reservation</source><translation>У всех подключённых к этой сети интерфейсов уже есть резервирование.</translation></message>
+<message><source>no_ipv4_configuration_for_this_network</source><translation>У этой сети нет конфигурации IPv4, поэтому резервирование недоступно.</translation></message>
+<message><source>expires</source><translation>Истекает</translation></message>
+<message><source>hostname</source><translation>Имя хоста</translation></message>
+<message><source>select_a_reservation_to_remove_it</source><translation>Выберите резервирования для удаления (Ctrl+клик — несколько).</translation></message>
+<message><source>remove_reservation</source><translation>Удалить резервирование</translation></message>
+<message><source>remove_reservations</source><translation>Удалить резервирования</translation></message>
+<message><source>remove_the_selected_reservation</source><translation>Удалить выбранное резервирование?</translation></message>
+<message><source>remove_the_selected_reservations_1</source><translation>Удалить выбранные резервирования (%1)?</translation></message>
+<message><source>remove_selected_1</source><translation>Удалить выбранные (%1)</translation></message>
+<message><source>cancel</source><translation>Отмена</translation></message>
 </context>
 <context>
 <name>OvfImportDialog</name>

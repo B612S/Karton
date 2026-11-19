@@ -511,6 +511,23 @@ void Karton::saveImagesDirectory(const QString &path)
     Q_EMIT imagesDirectoryChanged();
 }
 
+bool Karton::canGrantDiskDirectoryAccess(const QString &path) const
+{
+    // A grant can only fix an ACL that Karton is allowed to add: the target
+    // must be a dedicated folder owned by the current user. Root, the home
+    // directory itself, system folders and other users' folders are refused by
+    // grantDiskDirectoryAccess(), so do not offer the dialog for them.
+    if (path.trimmed().isEmpty()) {
+        return false;
+    }
+    const QString directoryPath = QDir::cleanPath(QDir(path).absolutePath());
+    if (isUnsafeImageDirectory(directoryPath)) {
+        return false;
+    }
+    const QFileInfo info(directoryPath);
+    return info.exists() && info.isDir() && info.ownerId() == static_cast<uint>(::getuid());
+}
+
 QString Karton::grantDiskDirectoryAccess(const QString &path)
 {
     if (path.trimmed().isEmpty()) {

@@ -10,7 +10,7 @@ import org.kde.kirigamiaddons.delegates as Delegates
 import org.kde.kirigamiaddons.formcard 1.0 as FormCard
 import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: root
 
     modal: true
@@ -20,13 +20,6 @@ Kirigami.Dialog {
     width: cardWidth
     height: cardHeight
     header: Item {}
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.98)
-        radius: 8
-        border.color: "transparent"
-    }
 
     property Domain domain: null
     property var parentWindow: null
@@ -2363,23 +2356,14 @@ Kirigami.Dialog {
 
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: filesystemHelpDialog
         title: qsTr("mounting_filesystem_shares")
         modal: true
-        padding: Kirigami.Units.largeSpacing
-        preferredWidth: Kirigami.Units.gridUnit * 42
-
-        background: Rectangle {
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                           Kirigami.Theme.backgroundColor.g,
-                           Kirigami.Theme.backgroundColor.b, 0.95)
-            radius: 8
-            border.color: "transparent"
-        }
+        preferredDialogWidth: Kirigami.Units.gridUnit * 42
 
         ColumnLayout {
-            Layout.fillWidth: true
+            width: filesystemHelpDialog.availableWidth
             spacing: 10
 
             Controls.Label {
@@ -2443,12 +2427,10 @@ Kirigami.Dialog {
         ]
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: filesystemEditDialog
         title: qsTr("edit_filesystem_share")
         modal: true
-        padding: Kirigami.Units.largeSpacing
-        preferredWidth: Kirigami.Units.gridUnit * 32
         property int deviceIndex: -1
         property string shareSource: ""
         property string shareTarget: ""
@@ -2467,14 +2449,6 @@ Kirigami.Dialog {
             });
         }
 
-        background: Rectangle {
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                           Kirigami.Theme.backgroundColor.g,
-                           Kirigami.Theme.backgroundColor.b, 0.95)
-            radius: 8
-            border.color: "transparent"
-        }
-
         function prepare() {
             fsEditSource.text = shareSource;
             fsEditTarget.text = shareTarget;
@@ -2485,34 +2459,38 @@ Kirigami.Dialog {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true
+            width: filesystemEditDialog.availableWidth
             spacing: 12
 
             GridLayout {
                 columns: 2
-                columnSpacing: 12
+                columnSpacing: Kirigami.Units.largeSpacing
                 rowSpacing: 12
                 Layout.fillWidth: true
                 Controls.Label { text: qsTr("driver"); Layout.fillWidth: true }
                 Controls.ComboBox {
                     id: fsEditDriver
-                    Layout.preferredWidth: 220
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                     model: ["9p", "virtiofs"]
                 }
                 Controls.Label { text: qsTr("source_path"); Layout.fillWidth: true }
                 Controls.TextField {
                     id: fsEditSource
-                    Layout.preferredWidth: 220
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                 }
                 Controls.Label { text: qsTr("name_mount_tag"); Layout.fillWidth: true }
                 Controls.TextField {
                     id: fsEditTarget
-                    Layout.preferredWidth: 220
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                 }
                 Controls.Label { text: qsTr("access_mode"); Layout.fillWidth: true }
                 Controls.ComboBox {
                     id: fsEditAccess
-                    Layout.preferredWidth: 220
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                     model: ["passthrough", "mapped", "squash"]
                 }
                 Controls.Label { text: qsTr("read_only_2"); Layout.fillWidth: true }
@@ -2524,6 +2502,11 @@ Kirigami.Dialog {
         }
 
         customFooterActions: [
+            Kirigami.Action {
+                text: qsTr("cancel")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: filesystemEditDialog.close()
+            },
             Kirigami.Action {
                 text: qsTr("save")
                 icon.name: "dialog-ok-symbolic"
@@ -2547,11 +2530,6 @@ Kirigami.Dialog {
                         root.refresh();
                     }
                 }
-            },
-            Kirigami.Action {
-                text: qsTr("cancel")
-                icon.name: "dialog-cancel-symbolic"
-                onTriggered: filesystemEditDialog.close()
             }
         ]
     }
@@ -2568,11 +2546,9 @@ Kirigami.Dialog {
         }
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: editDiskDialog
         title: isCdrom ? qsTr("cd_rom_options") : qsTr("advanced_disk_options")
-        padding: Kirigami.Units.largeSpacing
-        width: Kirigami.Units.gridUnit * 34
         property string targetDev: ""
         property string savedState: ""
         property bool isCdrom: false
@@ -2607,14 +2583,6 @@ Kirigami.Dialog {
             }
         }
 
-        background: Rectangle {
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                           Kirigami.Theme.backgroundColor.g,
-                           Kirigami.Theme.backgroundColor.b, 1.0)
-            radius: 8
-            border.color: "transparent"
-        }
-
         function prepare(dev) {
             targetDev = dev;
             const advanced = Karton.domainDiskAdvanced(root.domain, targetDev);
@@ -2633,7 +2601,7 @@ Kirigami.Dialog {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true
+            width: editDiskDialog.availableWidth
             spacing: 16
 
             GridLayout {
@@ -2814,11 +2782,9 @@ Kirigami.Dialog {
         ]
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: editInterfaceDialog
         title: qsTr("edit_network_interface")
-        padding: Kirigami.Units.largeSpacing
-        preferredWidth: Kirigami.Units.gridUnit * 28
         property string originalMac: ""
         property string model: "virtio"
         property string savedState: ""
@@ -2830,14 +2796,6 @@ Kirigami.Dialog {
             });
         }
 
-        background: Rectangle {
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                           Kirigami.Theme.backgroundColor.g,
-                           Kirigami.Theme.backgroundColor.b, 0.95)
-            radius: 8
-            border.color: "transparent"
-        }
-
         function prepare(macAddress, networkModel) {
             originalMac = macAddress;
             model = networkModel;
@@ -2847,19 +2805,35 @@ Kirigami.Dialog {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true
+            width: editInterfaceDialog.availableWidth
             spacing: 16
 
-            Controls.Label { text: qsTr("mac_address"); font.pixelSize: 14 }
-            Controls.TextField {
-                id: macField
+            GridLayout {
+                columns: 2
+                columnSpacing: 16
+                rowSpacing: 12
                 Layout.fillWidth: true
-            }
-            Controls.Label { text: qsTr("model"); font.pixelSize: 14; Layout.topMargin: 8 }
-            Controls.ComboBox {
-                id: modelCombo
-                model: ["virtio", "e1000"]
-                Layout.fillWidth: true
+
+                Controls.Label {
+                    text: qsTr("mac_address")
+                    Layout.fillWidth: true
+                }
+                Controls.TextField {
+                    id: macField
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
+                }
+
+                Controls.Label {
+                    text: qsTr("model")
+                    Layout.fillWidth: true
+                }
+                Controls.ComboBox {
+                    id: modelCombo
+                    model: ["virtio", "e1000"]
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
+                }
             }
         }
 
@@ -2980,14 +2954,12 @@ Kirigami.Dialog {
         }
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: portForwardDialog
         title: qsTr("add_port_forward")
-        preferredWidth: Kirigami.Units.gridUnit * 34
         modal: true
 
         ColumnLayout {
-            Layout.fillWidth: true
             width: portForwardDialog.availableWidth
             spacing: Kirigami.Units.largeSpacing
 
@@ -3015,7 +2987,8 @@ Kirigami.Dialog {
                     to: 65535
                     value: 2222
                     editable: true
-                    Layout.preferredWidth: 180
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                 }
 
                 Controls.Label {
@@ -3025,7 +2998,8 @@ Kirigami.Dialog {
                 Controls.ComboBox {
                     id: portGuestIpCombo
                     editable: true
-                    Layout.preferredWidth: 180
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                 }
 
                 Controls.Label {
@@ -3038,7 +3012,8 @@ Kirigami.Dialog {
                     to: 65535
                     value: 22
                     editable: true
-                    Layout.preferredWidth: 180
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                 }
             }
 
@@ -3059,6 +3034,7 @@ Kirigami.Dialog {
         customFooterActions: [
             Kirigami.Action {
                 text: qsTr("cancel")
+                icon.name: "dialog-cancel-symbolic"
                 onTriggered: portForwardDialog.close()
             },
             Kirigami.Action {
@@ -3079,16 +3055,14 @@ Kirigami.Dialog {
         ]
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: convertDiskDialog
         title: qsTr("convert_disk_image")
-        preferredWidth: Kirigami.Units.gridUnit * 36
         property string sourcePath: ""
         property string destinationPath: ""
         property string format: "qcow2"
 
         ColumnLayout {
-            Layout.fillWidth: true
             width: convertDiskDialog.availableWidth
             spacing: Kirigami.Units.largeSpacing
 
@@ -3099,40 +3073,45 @@ Kirigami.Dialog {
                 opacity: 0.8
             }
 
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
+                columns: 2
+                columnSpacing: 16
+                rowSpacing: 12
 
                 Controls.Label {
                     text: qsTr("destination")
-                }
-                Controls.TextField {
                     Layout.fillWidth: true
-                    readOnly: true
-                    text: convertDiskDialog.destinationPath
-                    placeholderText: qsTr("choose_destination_image")
                 }
-                Controls.Button {
-                    text: qsTr("choose")
-                    onClicked: convertDestinationDialog.open()
-                }
-            }
+                RowLayout {
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
+                    spacing: Kirigami.Units.smallSpacing
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
+                    Controls.TextField {
+                        Layout.fillWidth: true
+                        readOnly: true
+                        text: convertDiskDialog.destinationPath
+                        placeholderText: qsTr("choose_destination_image")
+                    }
+                    Controls.Button {
+                        text: qsTr("choose")
+                        icon.name: "document-save-as-symbolic"
+                        onClicked: convertDestinationDialog.open()
+                    }
+                }
 
                 Controls.Label {
                     text: qsTr("format")
+                    Layout.fillWidth: true
                 }
                 Controls.ComboBox {
                     id: convertFormatCombo
                     model: ["qcow2", "raw", "vmdk"]
                     currentIndex: convertDiskDialog.format === "raw" ? 1 : (convertDiskDialog.format === "vmdk" ? 2 : 0)
                     onActivated: convertDiskDialog.format = currentText
-                }
-                Item {
-                    Layout.fillWidth: true
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                 }
             }
 
@@ -3148,6 +3127,7 @@ Kirigami.Dialog {
         customFooterActions: [
             Kirigami.Action {
                 text: qsTr("cancel")
+                icon.name: "dialog-cancel-symbolic"
                 onTriggered: convertDiskDialog.close()
             },
             Kirigami.Action {

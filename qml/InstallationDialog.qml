@@ -9,20 +9,11 @@ import org.kde.kirigami as Kirigami
 import QtQuick.Dialogs as Dialogs
 import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: addDomainDialog
 
     title: qsTr("add_new_virtual_machine")
 
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 1.0)
-        radius: 8
-        border.color: "transparent"
-    }
-
-    padding: Kirigami.Units.largeSpacing
     property bool showError: false
     property bool creating: false
     property string pendingName: ""

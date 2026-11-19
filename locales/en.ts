@@ -177,6 +177,8 @@
 </context>
 <context>
 <name>CloneDialog</name>
+<message><source>name</source><translation>Name</translation></message>
+<message><source>cloning_the_disk_images</source><translation>Copying the disk images…</translation></message>
 <message><source>choose</source><translation>Choose…</translation></message>
 <message><source>choose_clone_destination_folder</source><translation>Choose clone destination folder</translation></message>
 <message><source>clone</source><translation>Clone</translation></message>
@@ -483,6 +485,7 @@
 <message><source>the_destination_disk_1_already_exists</source><translation>The destination disk already exists: %1</translation></message>
 <message><source>failed_to_create_the_folder_1</source><translation>Failed to create the folder: %1</translation></message>
 <message><source>another_ovf_export_is_already_running</source><translation>Another OVF export is already running.</translation></message>
+<message><source>cannot_read_the_disk_image_1_stop_the_vm_that_uses_it_or_grant_read_access_and_try_again</source><translation>Cannot read the disk image %1. Stop the VM that uses it or grant read access to the image, then try again.</translation></message>
 <message><source>the_vm_has_no_disk_images_to_export</source><translation>The VM has no disk images to export.</translation></message>
 <message><source>the_destination_1_already_exists</source><translation>The destination already exists: %1</translation></message>
 <message><source>failed_to_write_the_ovf_descriptor</source><translation>Failed to write the OVF descriptor.</translation></message>
@@ -492,6 +495,11 @@
 <message><source>the_file_is_not_a_libvirt_domain</source><translation>The file does not contain a libvirt domain.</translation></message>
 <message><source>failed_to_write_1</source><translation>Failed to write %1</translation></message>
 <message><source>failed_to_read_the_virtual_machine_configuration</source><translation>Failed to read the virtual machine configuration.</translation></message>
+<message><source>the_ip_address_1_is_not_inside_the_network_2</source><translation>The IP address %1 is not inside the network %2.</translation></message>
+<message><source>the_ip_address_1_cannot_be_used_for_a_reservation</source><translation>The IP address %1 cannot be used for a reservation: it is the network, broadcast or gateway address.</translation></message>
+<message><source>the_ip_address_1_is_already_reserved</source><translation>The IP address %1 is already reserved.</translation></message>
+<message><source>the_mac_address_1_already_has_a_reservation</source><translation>MAC address %1 already has a reservation.</translation></message>
+<message><source>the_mac_address_1_is_not_connected_to_network_2</source><translation>MAC address %1 is not connected to the network %2.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -721,6 +729,7 @@
 <message><source>detach</source><translation>Detach</translation></message>
 <message><source>host_usb_devices</source><translation>Host USB devices</translation></message>
 <message><source>no_usb_devices_found</source><translation>No USB devices found.</translation></message>
+<message><source>no_usb_devices_attached</source><translation>No USB devices attached.</translation></message>
 <message><source>usb_devices</source><translation>USB Devices</translation></message>
 <message><source>usb_devices_1</source><translation>USB Devices — %1</translation></message>
 </context>
@@ -870,6 +879,23 @@ This action cannot be undone.</translation></message>
 <message><source>remove</source><translation>Remove</translation></message>
 <message><source>reservations</source><translation>Reservations</translation></message>
 <message><source>reservations_apply_to_the_network_configuration</source><translation>Reservations are written to the network configuration.</translation></message>
+<message><source>enter_only_the_host_part_inside_the_network_1</source><translation>Enter only the host part; the network is %1.</translation></message>
+<message><source>interface</source><translation>Interface</translation></message>
+<message><source>no_vm_interfaces_are_connected_to_network_1</source><translation>No VM interfaces are connected to the network %1.</translation></message>
+<message><source>vm</source><translation>VM</translation></message>
+<message><source>added</source><translation>Added</translation></message>
+<message><source>enter_an_address_inside_the_network_1</source><translation>Enter an address inside the network %1.</translation></message>
+<message><source>all_connected_interfaces_already_have_a_reservation</source><translation>All interfaces connected to this network already have a reservation.</translation></message>
+<message><source>no_ipv4_configuration_for_this_network</source><translation>This network has no IPv4 configuration, so reservations are unavailable.</translation></message>
+<message><source>expires</source><translation>Expires</translation></message>
+<message><source>hostname</source><translation>Hostname</translation></message>
+<message><source>select_a_reservation_to_remove_it</source><translation>Select reservations to remove them (Ctrl+click for several).</translation></message>
+<message><source>remove_reservation</source><translation>Remove reservation</translation></message>
+<message><source>remove_reservations</source><translation>Remove reservations</translation></message>
+<message><source>remove_the_selected_reservation</source><translation>Remove the selected reservation?</translation></message>
+<message><source>remove_the_selected_reservations_1</source><translation>Remove the %1 selected reservations?</translation></message>
+<message><source>remove_selected_1</source><translation>Remove selected (%1)</translation></message>
+<message><source>cancel</source><translation>Cancel</translation></message>
 </context>
 <context>
 <name>OvfImportDialog</name>

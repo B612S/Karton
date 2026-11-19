@@ -210,8 +210,25 @@ Karton style; do not invent a separate layout for a new screen.
 - Keep dialog widths consistent between related dialogs. Long notes must wrap
   inside the dialog width instead of resizing the dialog; use an explicit
   `width` when `Kirigami.Dialog` would otherwise size itself to a long label.
-- Match the established translucent/opaque background, radius, padding and
-  footer/action placement of neighbouring dialogs.
+- Every dialog derives from `qml/KartonDialog.qml`, the shared shell that owns
+  the translucent background, 8 px radius, `largeSpacing` padding and the
+  window-relative width. Do not redeclare `background` in a dialog. Override
+  `preferredDialogWidth` when the content truly needs more room. Card-style
+  screens that own a fixed header and their own margins (`SettingsDialog`,
+  `AddHardwareDialog`, `ApplicationSettingsDialog`) may keep `padding: 0` and
+  their `cardWidth`/`cardHeight`; every other dialog uses the shell defaults.
+  The shell sets an explicit `width`, so a long path or libvirt message wraps
+  inside the dialog instead of stretching it. Never use `preferredWidth` for
+  this purpose: `Kirigami.Dialog` then grows to the content's unwrapped width.
+- Content that can outgrow the window scrolls with `ScrollableSettingsView`,
+  the same wrapper the Settings pages use, inside a custom `contentItem`; give
+  the dialog an explicit `height` so its header and footer stay fixed and the
+  page scrolls under them. Do not rely on the default Kirigami content
+  ScrollView for a tall form. Short forms stay non-scrollable, and fixed-height
+  lists (snapshots, USB, error log) keep scrolling internally.
+- Footer actions are `customFooterActions`: Cancel/Close first, the primary
+  action last, both with symbolic icons. Inline buttons stay in the content only
+  for per-row actions such as Revert/Delete on a list entry.
 - Long values (paths, UUIDs, disk targets) are elided or wrapped deliberately;
   never let them push the layout or clip controls.
 - After UI changes, compare the result with the existing Settings/Add Hardware
@@ -300,6 +317,22 @@ Karton style; do not invent a separate layout for a new screen.
   detach removes the CONFIG device even if the guest cannot hot-unplug the live
   device. Interface rows show IP addresses obtained from the guest agent/lease
   and provide an Edit dialog for MAC/model changes.
+- DHCP reservations are managed in `NetworkDhcpDialog.qml` and are bound to a
+  VM interface: the VM picker lists only VMs that still have an unreserved
+  interface in this network, and the interface picker then shows those
+  interfaces by MAC. A VM with two interfaces stays listed until both are
+  reserved. The IP field shows the fixed network prefix (`192.168.122.` for
+  /24, `10.7.` for /16) and accepts only the host octets; `addNetworkDhcpHost()`
+  validates subnet membership, rejects the network/broadcast/gateway addresses
+  and duplicate MAC/IP entries, and derives the libvirt host name from the VM:
+  the name is sanitized to ASCII (dnsmasq cannot use spaces) and gets a numeric
+  suffix when one VM has several reservations, because libvirt requires unique
+  host names. Reservation times are stored in
+  `karton.conf` under `dhcpReservation/<network>/<mac>/addedAt` because libvirt
+  does not record them, and are removed with the reservation. Note that
+  `virNetworkUpdate()` takes the command before the section (see
+  `libvirt-network.h`); passing the section first silently updates the wrong
+  `<ip>` section.
 - Attaching an already-present USB or PCI host device is rejected instead of
   creating duplicate `<hostdev>` entries. Device lists use the inactive XML so
   persistent changes are visible immediately on running domains.
@@ -328,6 +361,15 @@ Karton style; do not invent a separate layout for a new screen.
   clone. A clone of a BitLocker VM gets a fresh TPM state and will require the
   BitLocker recovery key, so decrypt/suspend BitLocker before cloning. The copy runs asynchronously through
   `CommandRunner`; partial destination files are removed on failure.
+- OVF/OVA export and import live in `core/app/karton_ovf.cpp` with
+  `qml/OvfExportDialog.qml` and `qml/OvfImportDialog.qml`. Both write as the
+  Karton user; the destination folder goes through the same
+  `checkDiskDirectoryAccess()` / `grantDiskDirectoryAccess()` confirmation as
+  disk creation, and the permission dialog is only offered for dedicated,
+  user-owned folders. Export refuses to start when a disk image is not readable
+  by Karton — a running system VM's image can still be owned by libvirt-qemu —
+  and reports the exact image instead of qemu-img's duplicated error. Import
+  always defines the VM stopped.
 - Disk/ISO hotplug is exposed through `Karton::domainDisks()`, `addDisk()`,
   `attachDiskImage()`, `attachIso()`, `setDiskMedia()` and `detachDisk()`, with
   the UI inline in the Disks page of `qml/SettingsDialog.qml`. New disks are

@@ -5,15 +5,16 @@ import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.kde.karton
 
 // Session-wide record of libvirt/SPICE errors. Short-lived passive
 // notifications disappear before the user can read a long libvirt message;
 // this keeps the last messages available for inspection.
-Kirigami.Dialog {
+KartonDialog {
     id: root
 
     title: qsTr("error_log")
-    preferredWidth: Kirigami.Units.gridUnit * 38
+    preferredDialogWidth: Kirigami.Units.gridUnit * 42
     preferredHeight: Kirigami.Units.gridUnit * 26
     modal: true
     showCloseButton: true
@@ -39,13 +40,13 @@ Kirigami.Dialog {
     }
 
     ColumnLayout {
-        Layout.fillWidth: true
         width: root.availableWidth
         spacing: Kirigami.Units.smallSpacing
 
         Controls.Label {
             Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.largeSpacing
+            Layout.topMargin: Kirigami.Units.largeSpacing
+            Layout.bottomMargin: Kirigami.Units.largeSpacing
             visible: errorModel.count === 0
             text: qsTr("no_errors_recorded")
             opacity: 0.7

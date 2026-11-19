@@ -8,7 +8,7 @@ import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: root
 
     property Domain domain: null
@@ -44,13 +44,6 @@ Kirigami.Dialog {
         { label: qsTr("filesystem") }
     ]
 
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.98)
-        radius: 8
-        border.color: "transparent"
-    }
 
     function openAt(category) {
         initialCategory = category;

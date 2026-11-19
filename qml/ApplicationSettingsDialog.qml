@@ -8,7 +8,7 @@ import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: root
 
     property var networks: []
@@ -39,13 +39,6 @@ Kirigami.Dialog {
     height: applicationWindow() ? Math.max(440, Math.min(520, applicationWindow().height - 48)) : 520
     header: Item {}
 
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.95)
-        radius: 8
-        border.color: "transparent"
-    }
 
     onOpened: {
         uriField.text = Karton.connectionUri;
@@ -759,11 +752,11 @@ Kirigami.Dialog {
         id: networkDhcpDialog
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: networkEditor
         title: editing ? qsTr("edit_network") : qsTr("create_network")
         modal: true
-        padding: Kirigami.Units.largeSpacing
+        padding: 0
         showCloseButton: true
         standardButtons: Kirigami.Dialog.NoButton
 
@@ -776,14 +769,6 @@ Kirigami.Dialog {
         property string savedState: ""
         readonly property int bridgeMode: 4
         readonly property bool isBridgeMode: modeCombo.currentIndex === bridgeMode
-
-        background: Rectangle {
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                           Kirigami.Theme.backgroundColor.g,
-                           Kirigami.Theme.backgroundColor.b, 0.97)
-            radius: 8
-            border.color: "transparent"
-        }
 
         function targetName(index) {
             if (index < 0 || index >= forwardTargets.length) {
@@ -979,7 +964,7 @@ Kirigami.Dialog {
                     Controls.Label { text: qsTr("name"); Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
                 Controls.TextField {
                     id: nameField
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     validator: RegularExpressionValidator {
                         regularExpression: /^[A-Za-z0-9._-]+$/
@@ -988,7 +973,7 @@ Kirigami.Dialog {
                 Controls.Label { text: qsTr("mode"); Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
                 Controls.ComboBox {
                     id: modeCombo
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     model: root.networkModeLabels
                 }
@@ -1000,7 +985,7 @@ Kirigami.Dialog {
                 }
                 Controls.ComboBox {
                     id: forwardToCombo
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     model: networkEditor.forwardTargets
                     textRole: "label"
@@ -1015,7 +1000,7 @@ Kirigami.Dialog {
                 Controls.TextField {
                     id: bridgeNameField
                     visible: networkEditor.isBridgeMode
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     placeholderText: "br0"
                 }
@@ -1057,7 +1042,7 @@ Kirigami.Dialog {
                 Controls.Label { text: qsTr("network"); Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
                 Controls.TextField {
                     id: ipv4NetworkField
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     placeholderText: "192.168.100.0/24"
                     enabled: networkEditor.ipv4Active()
@@ -1070,7 +1055,7 @@ Kirigami.Dialog {
                 }
                 Controls.Label { text: qsTr("dhcpv4_range"); Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
                 RowLayout {
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     spacing: 6
                     Controls.TextField {
@@ -1116,7 +1101,7 @@ Kirigami.Dialog {
                 Controls.Label { text: qsTr("network"); Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
                 Controls.TextField {
                     id: ipv6NetworkField
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     placeholderText: "fd00::/64"
                     enabled: networkEditor.ipv6Active()
@@ -1129,7 +1114,7 @@ Kirigami.Dialog {
                 }
                 Controls.Label { text: qsTr("dhcpv6_range"); Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter }
                 RowLayout {
-                    Layout.preferredWidth: 280
+                    Layout.preferredWidth: 260
                     Layout.alignment: Qt.AlignRight
                     spacing: 6
                     Controls.TextField {
@@ -1168,8 +1153,8 @@ Kirigami.Dialog {
 
                 Controls.Label { text: qsTr("domain"); Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignTop }
                 ColumnLayout {
-                    Layout.preferredWidth: 280
-                    Layout.maximumWidth: 280
+                    Layout.preferredWidth: 260
+                    Layout.maximumWidth: 260
                     Layout.alignment: Qt.AlignRight
                     spacing: 6
                     Controls.RadioButton {
@@ -1210,15 +1195,15 @@ Kirigami.Dialog {
 
         customFooterActions: [
             Kirigami.Action {
+                text: qsTr("cancel")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: networkEditor.close()
+            },
+            Kirigami.Action {
                 text: networkEditor.editing ? qsTr("save") : qsTr("create")
                 icon.name: "dialog-ok-symbolic"
                 enabled: networkEditor.isValidConfig() && networkEditor.currentState() !== networkEditor.savedState
                 onTriggered: networkEditor.save()
-            },
-            Kirigami.Action {
-                text: qsTr("cancel")
-                icon.name: "dialog-cancel-symbolic"
-                onTriggered: networkEditor.close()
             }
         ]
     }
@@ -1269,23 +1254,13 @@ Kirigami.Dialog {
         }
     }
 
-    Kirigami.Dialog {
+    KartonDialog {
         id: revokeAccessDialog
         title: qsTr("clear_granted_permissions_2")
         modal: true
-        padding: Kirigami.Units.largeSpacing
-        width: Kirigami.Units.gridUnit * 36
-
-        background: Rectangle {
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                           Kirigami.Theme.backgroundColor.g,
-                           Kirigami.Theme.backgroundColor.b, 0.98)
-            radius: 8
-            border.color: "transparent"
-        }
 
         ColumnLayout {
-            Layout.fillWidth: true
+            width: revokeAccessDialog.availableWidth
             spacing: 12
             Controls.Label {
                 Layout.fillWidth: true

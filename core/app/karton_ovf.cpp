@@ -799,6 +799,17 @@ bool Karton::exportOvf(const Domain *domain, const QString &requestedName, const
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_vm_has_no_disk_images_to_export"));
         return false;
     }
+    // qemu-img runs as the Karton user. A running system VM may still own its
+    // images as libvirt-qemu, so report the exact image instead of passing
+    // qemu-img's duplicated Permission denied message to the dialog.
+    for (const QVariant &value : std::as_const(disks)) {
+        const QString source = value.toMap().value(QStringLiteral("source")).toString();
+        if (!QFileInfo(source).isReadable()) {
+            Q_EMIT errorOccurred(
+                QCoreApplication::translate("Karton", "cannot_read_the_disk_image_1_stop_the_vm_that_uses_it_or_grant_read_access_and_try_again").arg(source));
+            return false;
+        }
+    }
 
     const QString name = friendlyName(requestedName.trimmed().isEmpty() ? domain->config()->name() : requestedName);
     QString destination = destinationDirectory.trimmed();

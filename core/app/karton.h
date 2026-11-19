@@ -146,6 +146,7 @@ public Q_SLOTS:
     Q_INVOKABLE void saveImagesDirectory(const QString &path);
     Q_INVOKABLE QString suggestedDiskPath(const QString &name, const QString &format) const;
     Q_INVOKABLE QString checkDiskDirectoryAccess(const QString &path) const;
+    Q_INVOKABLE bool canGrantDiskDirectoryAccess(const QString &path) const;
     Q_INVOKABLE QString grantDiskDirectoryAccess(const QString &path);
     Q_INVOKABLE QStringList grantedDiskDirectories() const;
     Q_INVOKABLE QString revokeGrantedDiskAccess();
@@ -223,7 +224,8 @@ public Q_SLOTS:
     Q_INVOKABLE bool deleteNetwork(const QString &name);
     Q_INVOKABLE QVariantList networkLeases(const QString &name) const;
     Q_INVOKABLE QVariantList networkDhcpHosts(const QString &name) const;
-    Q_INVOKABLE bool addNetworkDhcpHost(const QString &name, const QString &mac, const QString &ip, const QString &hostname);
+    Q_INVOKABLE QVariantList networkDhcpCandidates(const QString &name) const;
+    Q_INVOKABLE bool addNetworkDhcpHost(const QString &name, const QString &mac, const QString &ip);
     Q_INVOKABLE bool removeNetworkDhcpHost(const QString &name, const QString &mac);
     Q_INVOKABLE QVariantList domainPortForwards(const Domain *domain) const;
     Q_INVOKABLE bool addPortForward(const Domain *domain, int hostPort, const QString &guestIp, int guestPort, bool localOnly);

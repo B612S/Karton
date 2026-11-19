@@ -8,28 +8,46 @@ import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
-Kirigami.Dialog {
+KartonDialog {
     id: root
     property Domain domain: null
 
     title: domain ? qsTr("clone_1").arg(domain.config.name) : qsTr("clone_vm")
-
-    background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                       Kirigami.Theme.backgroundColor.g,
-                       Kirigami.Theme.backgroundColor.b, 0.95)
-        radius: 8
-        border.color: "transparent"
-    }
+    preferredDialogWidth: Kirigami.Units.gridUnit * 36
 
     property string errorText: ""
     property bool cloning: false
     property string destinationDirectory: ""
-    preferredWidth: applicationWindow() ? Math.max(480, Math.min(640, applicationWindow().width - 48)) : 640
+    property string pendingGrantError: ""
 
     function defaultName() {
         const base = (domain ? domain.config.name : "vm").replace(/[^A-Za-z0-9._-]/g, "-");
         return base + "-clone";
+    }
+
+    function startClone() {
+        root.errorText = "";
+        root.cloning = true;
+        if (!Karton.cloneDomain(root.domain, nameField.text, root.destinationDirectory)) {
+            root.cloning = false;
+        }
+    }
+
+    function requestDestinationAccess() {
+        if (root.destinationDirectory.trim().length === 0) {
+            return true;
+        }
+        const accessError = Karton.checkDiskDirectoryAccess(root.destinationDirectory);
+        if (accessError.length === 0) {
+            return true;
+        }
+        root.pendingGrantError = accessError;
+        if (Karton.canGrantDiskDirectoryAccess(root.destinationDirectory)) {
+            grantAccessDialog.openFor(root.destinationDirectory);
+        } else {
+            root.errorText = accessError;
+        }
+        return false;
     }
 
     onOpened: {
@@ -53,7 +71,11 @@ Kirigami.Dialog {
                 }
             } else {
                 root.cloning = false;
-                root.errorText = qsTr("cloning_failed_see_the_notification_for_details");
+                // errorOccurred() usually carries the qemu-img message; keep it
+                // instead of replacing it with the generic hint.
+                if (root.errorText.length === 0) {
+                    root.errorText = qsTr("cloning_failed_see_the_notification_for_details");
+                }
             }
         }
         function onErrorOccurred(errorMessage) {
@@ -62,14 +84,10 @@ Kirigami.Dialog {
     }
 
     ColumnLayout {
-        Layout.fillWidth: true
         width: root.availableWidth
         spacing: Kirigami.Units.largeSpacing
 
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.topMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
             text: qsTr("the_configuration_and_all_local_disk_images_will_be_copied_the_clone_is_created_stopped")
             wrapMode: Text.WordWrap
@@ -77,8 +95,6 @@ Kirigami.Dialog {
         }
 
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
             visible: root.errorText.length > 0
             text: root.errorText
@@ -86,44 +102,51 @@ Kirigami.Dialog {
             wrapMode: Text.WordWrap
         }
 
-        Controls.TextField {
-            id: nameField
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
+        GridLayout {
             Layout.fillWidth: true
-            placeholderText: qsTr("new_vm_name")
-            enabled: !root.cloning
-        }
+            columns: 2
+            columnSpacing: Kirigami.Units.largeSpacing
+            rowSpacing: 12
 
-        RowLayout {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.fillWidth: true
-            spacing: 8
+            Controls.Label {
+                text: qsTr("name")
+                Layout.fillWidth: true
+            }
+            Controls.TextField {
+                id: nameField
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+                placeholderText: qsTr("new_vm_name")
+                enabled: !root.cloning
+            }
 
             Controls.Label {
                 text: qsTr("destination_folder")
                 Layout.fillWidth: true
             }
-            Controls.TextField {
-                id: destinationField
-                Layout.preferredWidth: 240
-                text: root.destinationDirectory
-                readOnly: true
-                enabled: !root.cloning
-                placeholderText: Karton.imagesDirectory()
-            }
-            Controls.Button {
-                text: qsTr("choose")
-                icon.name: "folder-open-symbolic"
-                enabled: !root.cloning
-                onClicked: destinationFolderDialog.open()
+            RowLayout {
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.TextField {
+                    id: destinationField
+                    Layout.fillWidth: true
+                    text: root.destinationDirectory
+                    readOnly: true
+                    enabled: !root.cloning
+                    placeholderText: Karton.imagesDirectory()
+                }
+                Controls.Button {
+                    text: qsTr("choose")
+                    icon.name: "folder-open-symbolic"
+                    enabled: !root.cloning
+                    onClicked: destinationFolderDialog.open()
+                }
             }
         }
 
         Controls.Label {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             opacity: 0.65
@@ -132,45 +155,58 @@ Kirigami.Dialog {
         }
 
         RowLayout {
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.bottomMargin: Kirigami.Units.largeSpacing
             Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+            visible: root.cloning
 
             Controls.BusyIndicator {
-                visible: root.cloning
                 running: root.cloning
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
             }
-
-            Item {
+            Controls.Label {
                 Layout.fillWidth: true
+                text: qsTr("cloning_the_disk_images")
+                wrapMode: Text.WordWrap
             }
+        }
+    }
 
-            Controls.Button {
-                text: qsTr("close")
-                enabled: !root.cloning
-                onClicked: root.close()
-            }
-
-            Controls.Button {
-                text: qsTr("clone")
-                icon.name: "edit-copy-symbolic"
-                enabled: !root.cloning && nameField.text.trim().length > 0 && root.domain !== null
-                onClicked: {
-                    root.errorText = "";
-                    if (root.destinationDirectory.trim().length > 0) {
-                        const accessError = Karton.checkDiskDirectoryAccess(root.destinationDirectory);
-                        if (accessError.length > 0) {
-                            root.errorText = accessError;
-                            return;
-                        }
-                    }
-                    root.cloning = true;
-                    if (!Karton.cloneDomain(root.domain, nameField.text)) {
-                        root.cloning = false;
-                    }
+    customFooterActions: [
+        Kirigami.Action {
+            text: qsTr("close")
+            icon.name: "dialog-cancel-symbolic"
+            enabled: !root.cloning
+            onTriggered: root.close()
+        },
+        Kirigami.Action {
+            text: qsTr("clone")
+            icon.name: "edit-copy-symbolic"
+            enabled: !root.cloning && nameField.text.trim().length > 0 && root.domain !== null
+            onTriggered: {
+                if (root.requestDestinationAccess()) {
+                    root.startClone();
                 }
             }
+        }
+    ]
+
+    PermissionGrantDialog {
+        id: grantAccessDialog
+        onCancelled: root.errorText = root.pendingGrantError
+        onConfirmed: {
+            const error = Karton.grantDiskDirectoryAccess(targetPath);
+            if (error.length > 0) {
+                root.errorText = error;
+                return;
+            }
+            const check = Karton.checkDiskDirectoryAccess(targetPath);
+            if (check.length > 0) {
+                root.errorText = check;
+                return;
+            }
+            root.errorText = "";
+            root.startClone();
         }
     }
 
