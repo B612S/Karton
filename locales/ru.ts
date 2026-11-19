@@ -173,6 +173,7 @@
 <message><source>virtual_machine_manager</source><translation>Диспетчер виртуальных машин</translation></message>
 <message><source>virtual_networks</source><translation>Виртуальные сети</translation></message>
 <message><source>vm_storage</source><translation>Хранилище ВМ</translation></message>
+<message><source>dhcp</source><translation>DHCP</translation></message>
 </context>
 <context>
 <name>CloneDialog</name>
@@ -460,6 +461,21 @@
 <message><source>failed_to_replace_disk_image_1</source><translation>Не удалось заменить образ диска: %1</translation></message>
 <message><source>source_and_destination_must_differ</source><translation>Источник и назначение должны различаться.</translation></message>
 <message><source>unsupported_disk_format_1</source><translation>Неподдерживаемый формат диска: %1</translation></message>
+<message><source>invalid_mac_address_1</source><translation>Неверный MAC-адрес: %1</translation></message>
+<message><source>invalid_ipv4_address_1</source><translation>Неверный IPv4-адрес: %1</translation></message>
+<message><source>network_1_has_no_ipv4_dhcp_configuration</source><translation>У сети %1 нет конфигурации DHCP для IPv4.</translation></message>
+<message><source>failed_to_add_the_dhcp_reservation_1</source><translation>Не удалось добавить резервирование DHCP: %1</translation></message>
+<message><source>failed_to_remove_the_dhcp_reservation_1</source><translation>Не удалось удалить резервирование DHCP: %1</translation></message>
+<message><source>port_forward_ports_must_be_between_1_and_65535</source><translation>Порты должны быть от 1 до 65535.</translation></message>
+<message><source>invalid_guest_address_1</source><translation>Неверный адрес гостя: %1</translation></message>
+<message><source>a_port_forward_for_port_1_already_exists</source><translation>Проброс для порта %1 уже существует.</translation></message>
+<message><source>failed_to_start_port_forward_on_port_1_2</source><translation>Не удалось запустить проброс порта %1: %2</translation></message>
+<message><source>failed_to_open_1_2</source><translation>Не удалось открыть %1: %2</translation></message>
+<message><source>failed_to_parse_the_domain_xml_1</source><translation>Не удалось разобрать XML домена: %1</translation></message>
+<message><source>failed_to_define_the_domain_1</source><translation>Не удалось определить домен: %1</translation></message>
+<message><source>the_file_is_not_a_libvirt_domain</source><translation>Файл не содержит домен libvirt.</translation></message>
+<message><source>failed_to_write_1</source><translation>Не удалось записать %1</translation></message>
+<message><source>failed_to_read_the_virtual_machine_configuration</source><translation>Не удалось прочитать конфигурацию виртуальной машины.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -648,6 +664,18 @@
 <message><source>open_disk_folder</source><translation>Открыть папку</translation></message>
 <message><source>source_image_1</source><translation>Источник: %1</translation></message>
 <message><source>stop_vm_to_modify_disks</source><translation>Остановите ВМ для изменения дисков</translation></message>
+<message><source>active</source><translation>Активно</translation></message>
+<message><source>inactive</source><translation>Неактивно</translation></message>
+<message><source>allow_lan_access</source><translation>Разрешить доступ с других машин</translation></message>
+<message><source>add_port_forward</source><translation>Добавить проброс порта</translation></message>
+<message><source>guest_address</source><translation>Адрес гостя</translation></message>
+<message><source>guest_port</source><translation>Порт гостя</translation></message>
+<message><source>host_port</source><translation>Порт хоста</translation></message>
+<message><source>no_port_forwards</source><translation>Пробросов портов нет.</translation></message>
+<message><source>port_forwarding</source><translation>Проброс портов</translation></message>
+<message><source>port_forwarding_forwards_tcp_connections_from_this_machine_to_the_guest</source><translation>Пробрасывает TCP-подключения с этой машины в гостя. UDP не пробрасывается.</translation></message>
+<message><source>port_forwarding_is_tcp_only_use_ports_above_1024</source><translation>Только TCP. Порты ниже 1024 обычно требуют прав root.</translation></message>
+<message><source>remove</source><translation>Удалить</translation></message>
 </context>
 <context>
 <name>SnapshotsDialog</name>
@@ -683,6 +711,11 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>all_files</source><translation>Все файлы (*)</translation></message>
+<message><source>import</source><translation>Импорт</translation></message>
+<message><source>import_vm</source><translation>Импорт виртуальной машины</translation></message>
+<message><source>imported_vm_1</source><translation>ВМ импортирована: %1</translation></message>
+<message><source>libvirt_domain_xml</source><translation>XML домена libvirt (*.xml)</translation></message>
 <message><source>all</source><translation>Все</translation></message>
 <message><source>cannot_connect_to_libvirt</source><translation>Не удалось подключиться к libvirt</translation></message>
 <message><source>check_that_libvirt_is_running_and_that_the_1_connection_is_available</source><translation>Проверьте, что libvirt запущен и подключение %1 доступно.</translation></message>
@@ -700,6 +733,9 @@
 </context>
 <context>
 <name>VMPage</name>
+<message><source>libvirt_domain_xml</source><translation>XML домена libvirt (*.xml)</translation></message>
+<message><source>export_domain_xml</source><translation>Экспорт XML…</translation></message>
+<message><source>exported_vm_1</source><translation>ВМ экспортирована: %1</translation></message>
 <message><source>cancel</source><translation>Отмена</translation></message>
 <message><source>clone</source><translation>Клонировать</translation></message>
 <message><source>cpu_usage</source><translation>Загрузка ЦП</translation></message>
@@ -794,5 +830,21 @@
 <message><source>close</source><translation>Закрыть</translation></message>
 <message><source>error_log</source><translation>Журнал ошибок</translation></message>
 <message><source>no_errors_recorded</source><translation>Ошибки не записаны.</translation></message>
+</context>
+<context>
+<name>NetworkDhcpDialog</name>
+<message><source>active_leases</source><translation>Активные аренды</translation></message>
+<message><source>add_reservation</source><translation>Добавить резервирование</translation></message>
+<message><source>close</source><translation>Закрыть</translation></message>
+<message><source>dhcp</source><translation>DHCP</translation></message>
+<message><source>dhcp_1</source><translation>DHCP — %1</translation></message>
+<message><source>hostname_optional</source><translation>Имя хоста (необязательно)</translation></message>
+<message><source>ip_address</source><translation>IP-адрес</translation></message>
+<message><source>mac_address</source><translation>MAC-адрес</translation></message>
+<message><source>no_active_leases</source><translation>Активных аренд нет.</translation></message>
+<message><source>no_reservations</source><translation>Резервирований нет.</translation></message>
+<message><source>remove</source><translation>Удалить</translation></message>
+<message><source>reservations</source><translation>Резервирования</translation></message>
+<message><source>reservations_apply_to_the_network_configuration</source><translation>Резервирования записываются в конфигурацию сети.</translation></message>
 </context>
 </TS>

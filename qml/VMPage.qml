@@ -421,6 +421,11 @@ Kirigami.Page {
                 separator: true
             }
             Kirigami.Action {
+                text: qsTr("export_domain_xml")
+                icon.name: "document-save-symbolic"
+                onTriggered: exportDomainDialog.open()
+            }
+            Kirigami.Action {
                 text: qsTr("settings")
                 icon.name: "preferences-system-symbolic"
                 onTriggered: settingsDialog.open()
@@ -789,6 +794,18 @@ Kirigami.Page {
         }
 
 
+    }
+
+    FileDialog {
+        id: exportDomainDialog
+        title: qsTr("export_domain_xml")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("libvirt_domain_xml")]
+        onAccepted: {
+            if (Karton.exportDomainXml(root.domain, root.localPath(selectedFile))) {
+                applicationWindow().showPassiveNotification(qsTr("exported_vm_1").arg(root.domain.config.name));
+            }
+        }
     }
 
     FileDialog {

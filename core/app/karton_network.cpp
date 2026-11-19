@@ -1244,3 +1244,184 @@ bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, cons
     Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "no_interface_with_mac_address_1_was_found").arg(mac));
     return false;
 }
+
+QVariantList Karton::networkLeases(const QString &name) const
+{
+    QVariantList result;
+    if (!m_conn || name.isEmpty()) {
+        return result;
+    }
+    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    if (!network) {
+        return result;
+    }
+
+    virNetworkDHCPLeasePtr *leases = nullptr;
+    const int count = virNetworkGetDHCPLeases(network, nullptr, &leases, 0);
+    for (int i = 0; i < count; ++i) {
+        const virNetworkDHCPLeasePtr lease = leases[i];
+        QVariantMap info;
+        info.insert(QStringLiteral("mac"), QString::fromUtf8(lease->mac ? lease->mac : ""));
+        info.insert(QStringLiteral("ip"), QString::fromUtf8(lease->ipaddr ? lease->ipaddr : ""));
+        info.insert(QStringLiteral("hostname"), QString::fromUtf8(lease->hostname ? lease->hostname : ""));
+        info.insert(QStringLiteral("clientId"), QString::fromUtf8(lease->clientid ? lease->clientid : ""));
+        info.insert(QStringLiteral("expiryTime"), QDateTime::fromSecsSinceEpoch(lease->expirytime).toString(Qt::ISODate));
+        info.insert(QStringLiteral("type"), lease->type == VIR_IP_ADDR_TYPE_IPV6 ? QStringLiteral("ipv6") : QStringLiteral("ipv4"));
+        result.append(info);
+        virNetworkDHCPLeaseFree(lease);
+    }
+    free(leases);
+    virNetworkFree(network);
+    return result;
+}
+
+QVariantList Karton::networkDhcpHosts(const QString &name) const
+{
+    QVariantList result;
+    if (!m_conn || name.isEmpty()) {
+        return result;
+    }
+    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    if (!network) {
+        return result;
+    }
+
+    char *xml = virNetworkGetXMLDesc(network, VIR_NETWORK_XML_INACTIVE);
+    if (xml) {
+        QDomDocument document;
+        if (document.setContent(QString::fromUtf8(xml))) {
+            const QDomNodeList hosts = document.elementsByTagName(QStringLiteral("host"));
+            for (int i = 0; i < hosts.count(); ++i) {
+                const QDomElement host = hosts.at(i).toElement();
+                QVariantMap info;
+                info.insert(QStringLiteral("mac"), host.attribute(QStringLiteral("mac")));
+                info.insert(QStringLiteral("ip"), host.attribute(QStringLiteral("ip")));
+                info.insert(QStringLiteral("hostname"), host.attribute(QStringLiteral("name")));
+                result.append(info);
+            }
+        }
+        free(xml);
+    }
+    virNetworkFree(network);
+    return result;
+}
+
+bool Karton::addNetworkDhcpHost(const QString &name, const QString &mac, const QString &ip, const QString &hostname)
+{
+    if (!m_conn) {
+        return false;
+    }
+    static const QRegularExpression macPattern(QStringLiteral("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
+    if (!macPattern.match(mac.trimmed()).hasMatch()) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_mac_address_1").arg(mac));
+        return false;
+    }
+    QHostAddress address;
+    if (!address.setAddress(ip.trimmed()) || address.protocol() != QAbstractSocket::IPv4Protocol) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_ipv4_address_1").arg(ip));
+        return false;
+    }
+
+    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    if (!network) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(name));
+        return false;
+    }
+
+    char *networkXml = virNetworkGetXMLDesc(network, VIR_NETWORK_XML_INACTIVE);
+    int parentIndex = -1;
+    if (networkXml) {
+        QDomDocument document;
+        if (document.setContent(QString::fromUtf8(networkXml))) {
+            const QDomNodeList addresses = document.documentElement().elementsByTagName(QStringLiteral("ip"));
+            for (int i = 0; i < addresses.count(); ++i) {
+                const QDomElement candidate = addresses.at(i).toElement();
+                if (candidate.attribute(QStringLiteral("family"), QStringLiteral("ipv4")) == QStringLiteral("ipv4")) {
+                    parentIndex = i;
+                    break;
+                }
+            }
+        }
+        free(networkXml);
+    }
+    if (parentIndex < 0) {
+        virNetworkFree(network);
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_has_no_ipv4_dhcp_configuration").arg(name));
+        return false;
+    }
+
+    QString escapedHostname = hostname;
+    escapedHostname.replace(QLatin1Char('&'), QStringLiteral("&amp;"));
+    escapedHostname.replace(QLatin1Char('<'), QStringLiteral("&lt;"));
+    escapedHostname.replace(QLatin1Char('>'), QStringLiteral("&gt;"));
+    escapedHostname.replace(QLatin1Char('"'), QStringLiteral("&quot;"));
+    QString hostXml = QStringLiteral("<host mac='%1' ip='%2'").arg(mac.trimmed(), address.toString());
+    if (!escapedHostname.isEmpty()) {
+        hostXml += QStringLiteral(" name='%1'").arg(escapedHostname);
+    }
+    hostXml += QStringLiteral("/>");
+
+    unsigned int flags = VIR_NETWORK_UPDATE_AFFECT_CONFIG;
+    if (virNetworkIsActive(network) == 1) {
+        flags |= VIR_NETWORK_UPDATE_AFFECT_LIVE;
+    }
+    const int result =
+        virNetworkUpdate(network, VIR_NETWORK_SECTION_IP_DHCP_HOST, VIR_NETWORK_UPDATE_COMMAND_ADD_LAST, parentIndex, hostXml.toUtf8().constData(), flags);
+    if (result < 0) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_add_the_dhcp_reservation_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
+    }
+    virNetworkFree(network);
+    if (result == 0) {
+        Q_EMIT networksChanged();
+    }
+    return result == 0;
+}
+
+bool Karton::removeNetworkDhcpHost(const QString &name, const QString &mac)
+{
+    if (!m_conn) {
+        return false;
+    }
+    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    if (!network) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(name));
+        return false;
+    }
+
+    char *networkXml = virNetworkGetXMLDesc(network, VIR_NETWORK_XML_INACTIVE);
+    int parentIndex = -1;
+    if (networkXml) {
+        QDomDocument document;
+        if (document.setContent(QString::fromUtf8(networkXml))) {
+            const QDomNodeList addresses = document.documentElement().elementsByTagName(QStringLiteral("ip"));
+            for (int i = 0; i < addresses.count(); ++i) {
+                if (addresses.at(i).toElement().attribute(QStringLiteral("family"), QStringLiteral("ipv4")) == QStringLiteral("ipv4")) {
+                    parentIndex = i;
+                    break;
+                }
+            }
+        }
+        free(networkXml);
+    }
+    if (parentIndex < 0) {
+        virNetworkFree(network);
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_has_no_ipv4_dhcp_configuration").arg(name));
+        return false;
+    }
+
+    const QString hostXml = QStringLiteral("<host mac='%1'/>").arg(mac.trimmed());
+    unsigned int flags = VIR_NETWORK_UPDATE_AFFECT_CONFIG;
+    if (virNetworkIsActive(network) == 1) {
+        flags |= VIR_NETWORK_UPDATE_AFFECT_LIVE;
+    }
+    const int result =
+        virNetworkUpdate(network, VIR_NETWORK_SECTION_IP_DHCP_HOST, VIR_NETWORK_UPDATE_COMMAND_DELETE, parentIndex, hostXml.toUtf8().constData(), flags);
+    if (result < 0) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_remove_the_dhcp_reservation_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
+    }
+    virNetworkFree(network);
+    if (result == 0) {
+        Q_EMIT networksChanged();
+    }
+    return result == 0;
+}

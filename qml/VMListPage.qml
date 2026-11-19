@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
+import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.karton
 
@@ -49,6 +50,14 @@ Kirigami.ScrollablePage {
                 Controls.ToolTip.text: qsTr("filter_by_state")
             }
         }
+    }
+
+    function localPath(url) {
+        let path = url.toString();
+        if (path.startsWith("file://")) {
+            path = path.substring(7);
+        }
+        return decodeURIComponent(path);
     }
 
     function openViewer(domain) {
@@ -300,6 +309,11 @@ Kirigami.ScrollablePage {
         function onErrorOccurred(errorMessage) {
             applicationWindow().showPassiveNotification(errorMessage, "long");
         }
+        function onDomainImported(success, name) {
+            if (success) {
+                applicationWindow().showPassiveNotification(qsTr("imported_vm_1").arg(name));
+            }
+        }
         function onDomainRemoved(removedDomain) {
             // Do not keep a pointer to a Domain that is about to be destroyed.
             if (root.selectedDomain === removedDomain) {
@@ -317,6 +331,11 @@ Kirigami.ScrollablePage {
             }
         },
         Kirigami.Action {
+            icon.name: "document-open-symbolic"
+            text: qsTr("import")
+            onTriggered: importDomainDialog.open()
+        },
+        Kirigami.Action {
             icon.name: "preferences-system-symbolic"
             text: qsTr("settings")
             onTriggered: applicationSettingsDialog.open()
@@ -329,6 +348,14 @@ Kirigami.ScrollablePage {
 
     ApplicationSettingsDialog {
         id: applicationSettingsDialog
+    }
+
+    FileDialog {
+        id: importDomainDialog
+        title: qsTr("import_vm")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("libvirt_domain_xml"), qsTr("all_files")]
+        onAccepted: Karton.importDomainXml(root.localPath(selectedFile))
     }
 
     ListView {

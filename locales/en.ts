@@ -173,6 +173,7 @@
 <message><source>virtual_machine_manager</source><translation>Virtual Machine Manager</translation></message>
 <message><source>virtual_networks</source><translation>Virtual networks</translation></message>
 <message><source>vm_storage</source><translation>VM storage</translation></message>
+<message><source>dhcp</source><translation>DHCP</translation></message>
 </context>
 <context>
 <name>CloneDialog</name>
@@ -460,6 +461,21 @@
 <message><source>failed_to_replace_disk_image_1</source><translation>Failed to replace the disk image: %1</translation></message>
 <message><source>source_and_destination_must_differ</source><translation>The source and destination must differ.</translation></message>
 <message><source>unsupported_disk_format_1</source><translation>Unsupported disk format: %1</translation></message>
+<message><source>invalid_mac_address_1</source><translation>Invalid MAC address: %1</translation></message>
+<message><source>invalid_ipv4_address_1</source><translation>Invalid IPv4 address: %1</translation></message>
+<message><source>network_1_has_no_ipv4_dhcp_configuration</source><translation>The network %1 has no IPv4 DHCP configuration.</translation></message>
+<message><source>failed_to_add_the_dhcp_reservation_1</source><translation>Failed to add the DHCP reservation: %1</translation></message>
+<message><source>failed_to_remove_the_dhcp_reservation_1</source><translation>Failed to remove the DHCP reservation: %1</translation></message>
+<message><source>port_forward_ports_must_be_between_1_and_65535</source><translation>Ports must be between 1 and 65535.</translation></message>
+<message><source>invalid_guest_address_1</source><translation>Invalid guest address: %1</translation></message>
+<message><source>a_port_forward_for_port_1_already_exists</source><translation>A port forward for port %1 already exists.</translation></message>
+<message><source>failed_to_start_port_forward_on_port_1_2</source><translation>Failed to start the port forward on port %1: %2</translation></message>
+<message><source>failed_to_open_1_2</source><translation>Failed to open %1: %2</translation></message>
+<message><source>failed_to_parse_the_domain_xml_1</source><translation>Failed to parse the domain XML: %1</translation></message>
+<message><source>failed_to_define_the_domain_1</source><translation>Failed to define the domain: %1</translation></message>
+<message><source>the_file_is_not_a_libvirt_domain</source><translation>The file does not contain a libvirt domain.</translation></message>
+<message><source>failed_to_write_1</source><translation>Failed to write %1</translation></message>
+<message><source>failed_to_read_the_virtual_machine_configuration</source><translation>Failed to read the virtual machine configuration.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -648,6 +664,18 @@
 <message><source>open_disk_folder</source><translation>Open folder</translation></message>
 <message><source>source_image_1</source><translation>Source: %1</translation></message>
 <message><source>stop_vm_to_modify_disks</source><translation>Stop the VM to modify disks</translation></message>
+<message><source>active</source><translation>Active</translation></message>
+<message><source>inactive</source><translation>Inactive</translation></message>
+<message><source>allow_lan_access</source><translation>Allow access from other machines</translation></message>
+<message><source>add_port_forward</source><translation>Add port forward</translation></message>
+<message><source>guest_address</source><translation>Guest address</translation></message>
+<message><source>guest_port</source><translation>Guest port</translation></message>
+<message><source>host_port</source><translation>Host port</translation></message>
+<message><source>no_port_forwards</source><translation>No port forwards.</translation></message>
+<message><source>port_forwarding</source><translation>Port forwarding</translation></message>
+<message><source>port_forwarding_forwards_tcp_connections_from_this_machine_to_the_guest</source><translation>Forward TCP connections from this machine to the guest. UDP is not forwarded.</translation></message>
+<message><source>port_forwarding_is_tcp_only_use_ports_above_1024</source><translation>TCP only. Ports below 1024 usually require root privileges.</translation></message>
+<message><source>remove</source><translation>Remove</translation></message>
 </context>
 <context>
 <name>SnapshotsDialog</name>
@@ -683,6 +711,11 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>all_files</source><translation>All files (*)</translation></message>
+<message><source>import</source><translation>Import</translation></message>
+<message><source>import_vm</source><translation>Import virtual machine</translation></message>
+<message><source>imported_vm_1</source><translation>Imported VM: %1</translation></message>
+<message><source>libvirt_domain_xml</source><translation>Libvirt domain XML (*.xml)</translation></message>
 <message><source>all</source><translation>All</translation></message>
 <message><source>cannot_connect_to_libvirt</source><translation>Cannot connect to libvirt</translation></message>
 <message><source>check_that_libvirt_is_running_and_that_the_1_connection_is_available</source><translation>Check that libvirt is running and that the %1 connection is available.</translation></message>
@@ -700,6 +733,9 @@
 </context>
 <context>
 <name>VMPage</name>
+<message><source>libvirt_domain_xml</source><translation>Libvirt domain XML (*.xml)</translation></message>
+<message><source>export_domain_xml</source><translation>Export XML…</translation></message>
+<message><source>exported_vm_1</source><translation>Exported VM: %1</translation></message>
 <message><source>cancel</source><translation>Cancel</translation></message>
 <message><source>clone</source><translation>Clone</translation></message>
 <message><source>cpu_usage</source><translation>CPU Usage</translation></message>
@@ -794,5 +830,21 @@ This action cannot be undone.</translation></message>
 <message><source>close</source><translation>Close</translation></message>
 <message><source>error_log</source><translation>Error Log</translation></message>
 <message><source>no_errors_recorded</source><translation>No errors have been recorded.</translation></message>
+</context>
+<context>
+<name>NetworkDhcpDialog</name>
+<message><source>active_leases</source><translation>Active leases</translation></message>
+<message><source>add_reservation</source><translation>Add reservation</translation></message>
+<message><source>close</source><translation>Close</translation></message>
+<message><source>dhcp</source><translation>DHCP</translation></message>
+<message><source>dhcp_1</source><translation>DHCP — %1</translation></message>
+<message><source>hostname_optional</source><translation>Hostname (optional)</translation></message>
+<message><source>ip_address</source><translation>IP address</translation></message>
+<message><source>mac_address</source><translation>MAC address</translation></message>
+<message><source>no_active_leases</source><translation>No active leases.</translation></message>
+<message><source>no_reservations</source><translation>No reservations.</translation></message>
+<message><source>remove</source><translation>Remove</translation></message>
+<message><source>reservations</source><translation>Reservations</translation></message>
+<message><source>reservations_apply_to_the_network_configuration</source><translation>Reservations are written to the network configuration.</translation></message>
 </context>
 </TS>

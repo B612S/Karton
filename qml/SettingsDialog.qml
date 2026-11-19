@@ -43,6 +43,8 @@ Kirigami.Dialog {
     property var hardware: ({})
     property var disks: []
     property var interfaces: []
+    property var portForwards: []
+    property string portForwardError: ""
     property var usbDevices: []
     property var pciDevices: []
     property var networks: []
@@ -123,6 +125,7 @@ Kirigami.Dialog {
         hardware = Karton.domainHardwareInfo(domain);
         disks = Karton.domainDisks(domain);
         interfaces = Karton.domainInterfaces(domain);
+        portForwards = Karton.domainPortForwards(domain);
         usbDevices = Karton.domainUsbDevices(domain);
         pciDevices = Karton.domainPciDevices(domain);
         networks = Karton.networks();
@@ -399,6 +402,41 @@ Kirigami.Dialog {
             path = path.substring(7);
         }
         return decodeURIComponent(path);
+    }
+
+    function guestAddresses() {
+        const result = [];
+        for (let i = 0; i < root.interfaces.length; ++i) {
+            const iface = root.interfaces[i];
+            const ips = (iface.ip || "").split(",");
+            for (let j = 0; j < ips.length; ++j) {
+                const ip = ips[j].trim();
+                if (ip.length > 0 && result.indexOf(ip) < 0) {
+                    result.push(ip);
+                }
+            }
+            if (iface.type === "network" && iface.source) {
+                const leases = Karton.networkLeases(iface.source);
+                for (let j = 0; j < leases.length; ++j) {
+                    const ip = leases[j].ip;
+                    if (ip && result.indexOf(ip) < 0) {
+                        result.push(ip);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    function openPortForwardDialog() {
+        portForwardError = "";
+        const addresses = root.guestAddresses();
+        portGuestIpCombo.model = addresses;
+        portGuestIpCombo.editText = addresses.length > 0 ? addresses[0] : "";
+        portHostPortSpin.value = 2222;
+        portGuestPortSpin.value = 22;
+        portLanCheck.checked = false;
+        portForwardDialog.open();
     }
 
     function diskOperationName(operation) {
@@ -1276,6 +1314,77 @@ Kirigami.Dialog {
                         opacity: 0.65
                         font.pixelSize: 12
                         text: qsTr("mac_and_model_changes_are_applied_to_the_persistent_configuration_restart_the_vm_to_use_th")
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
+
+                    Controls.Label {
+                        text: qsTr("port_forwarding")
+                        font.pixelSize: 15
+                        font.weight: Font.Bold
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                    }
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        opacity: 0.65
+                        font.pixelSize: 12
+                        text: qsTr("port_forwarding_forwards_tcp_connections_from_this_machine_to_the_guest")
+                    }
+                    Controls.Label {
+                        visible: root.portForwards.length === 0
+                        text: qsTr("no_port_forwards")
+                        opacity: 0.7
+                    }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(Kirigami.Units.gridUnit * 10,
+                                                         Math.max(Kirigami.Units.gridUnit * 4, contentHeight))
+                        clip: true
+                        model: root.portForwards
+                        spacing: 4
+
+                        delegate: Controls.ItemDelegate {
+                            width: ListView.view.width
+                            focusPolicy: Qt.NoFocus
+
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: (modelData.localOnly ? "127.0.0.1" : "0.0.0.0") + ":" + modelData.hostPort
+                                          + " → " + modelData.guestIp + ":" + modelData.guestPort
+                                    elide: Text.ElideRight
+                                }
+                                Kirigami.Badge {
+                                    text: modelData.active ? qsTr("active") : qsTr("inactive")
+                                    type: modelData.active ? Kirigami.Badge.Type.Positive : Kirigami.Badge.Type.Information
+                                }
+                                Controls.Button {
+                                    text: qsTr("remove")
+                                    icon.name: "list-remove-symbolic"
+                                    onClicked: {
+                                        if (Karton.removePortForward(root.domain, modelData.hostPort)) {
+                                            root.portForwards = Karton.domainPortForwards(root.domain);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Controls.Button {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("add_port_forward")
+                        icon.name: "list-add-symbolic"
+                        onClicked: root.openPortForwardDialog()
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -2846,6 +2955,11 @@ Kirigami.Dialog {
             // to the settings card dismisses them when the frame/app is clicked.
             root.contentItem.forceActiveFocus();
         }
+        function onErrorOccurred(message) {
+            if (portForwardDialog.opened) {
+                root.portForwardError = message;
+            }
+        }
         function onDiskMaintenanceStarted(operation, path) {
             if (applicationWindow()) {
                 applicationWindow().showPassiveNotification(
@@ -2864,6 +2978,105 @@ Kirigami.Dialog {
                     qsTr("disk_operation_failed_2").arg(root.diskOperationName(operation)).arg(message), "long");
             }
         }
+    }
+
+    Kirigami.Dialog {
+        id: portForwardDialog
+        title: qsTr("add_port_forward")
+        preferredWidth: Kirigami.Units.gridUnit * 34
+        modal: true
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            width: portForwardDialog.availableWidth
+            spacing: Kirigami.Units.largeSpacing
+
+            Controls.Label {
+                Layout.fillWidth: true
+                visible: root.portForwardError.length > 0
+                text: root.portForwardError
+                color: Kirigami.Theme.negativeTextColor
+                wrapMode: Text.WordWrap
+            }
+
+            GridLayout {
+                columns: 2
+                columnSpacing: 16
+                rowSpacing: 12
+                Layout.fillWidth: true
+
+                Controls.Label {
+                    text: qsTr("host_port")
+                    Layout.fillWidth: true
+                }
+                Controls.SpinBox {
+                    id: portHostPortSpin
+                    from: 1
+                    to: 65535
+                    value: 2222
+                    editable: true
+                    Layout.preferredWidth: 180
+                }
+
+                Controls.Label {
+                    text: qsTr("guest_address")
+                    Layout.fillWidth: true
+                }
+                Controls.ComboBox {
+                    id: portGuestIpCombo
+                    editable: true
+                    Layout.preferredWidth: 180
+                }
+
+                Controls.Label {
+                    text: qsTr("guest_port")
+                    Layout.fillWidth: true
+                }
+                Controls.SpinBox {
+                    id: portGuestPortSpin
+                    from: 1
+                    to: 65535
+                    value: 22
+                    editable: true
+                    Layout.preferredWidth: 180
+                }
+            }
+
+            Controls.CheckBox {
+                id: portLanCheck
+                text: qsTr("allow_lan_access")
+            }
+
+            Controls.Label {
+                Layout.fillWidth: true
+                text: qsTr("port_forwarding_is_tcp_only_use_ports_above_1024")
+                opacity: 0.65
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: qsTr("cancel")
+                onTriggered: portForwardDialog.close()
+            },
+            Kirigami.Action {
+                text: qsTr("add")
+                icon.name: "list-add-symbolic"
+                enabled: portGuestIpCombo.currentText.trim().length > 0
+                onTriggered: {
+                    if (Karton.addPortForward(root.domain,
+                                              portHostPortSpin.value,
+                                              portGuestIpCombo.currentText.trim(),
+                                              portGuestPortSpin.value,
+                                              !portLanCheck.checked)) {
+                        root.portForwards = Karton.domainPortForwards(root.domain);
+                        portForwardDialog.close();
+                    }
+                }
+            }
+        ]
     }
 
     Kirigami.Dialog {

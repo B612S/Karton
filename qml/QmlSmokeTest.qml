@@ -37,6 +37,10 @@ Kirigami.ApplicationWindow {
         visible: false
     }
 
+    NetworkDhcpDialog {
+        visible: false
+    }
+
     SnapshotsDialog {
         domain: null
         visible: false

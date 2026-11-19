@@ -53,6 +53,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/portforwarder.h"
 
 using namespace KartonCommon;
 
@@ -68,7 +69,9 @@ Karton::Karton(QObject *parent)
     , m_conn(nullptr)
     , m_monitor(nullptr)
     , m_commandRunner(new CommandRunner(this))
+    , m_portForwarder(new PortForwarder(this))
 {
+    connect(m_portForwarder, &PortForwarder::errorOccurred, this, &Karton::errorOccurred);
     if (QCoreApplication::instance()) {
         QCoreApplication::instance()->installEventFilter(this);
     }
@@ -158,6 +161,20 @@ void Karton::onDomainStateChanged(virDomainPtr domainPtr, int event, int detail)
     // Reference for event/details: https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType
 
     Q_EMIT domainsChanged(domainPtr, event, detail);
+
+    const QString uuid = Domain::uuidString(domainPtr);
+    for (Domain *domain : std::as_const(m_domains)) {
+        if (!domain || domain->config()->uuid() != uuid) {
+            continue;
+        }
+        if (event == VIR_DOMAIN_EVENT_STARTED || event == VIR_DOMAIN_EVENT_RESUMED) {
+            startPortForwardsForDomain(domain);
+        } else if (event == VIR_DOMAIN_EVENT_STOPPED || event == VIR_DOMAIN_EVENT_SUSPENDED || event == VIR_DOMAIN_EVENT_PMSUSPENDED
+                   || event == VIR_DOMAIN_EVENT_CRASHED) {
+            stopPortForwardsForDomain(domain);
+        }
+        break;
+    }
 }
 
 bool Karton::init()
@@ -262,6 +279,7 @@ bool Karton::init()
     connect(m_monitor, &LibvirtMonitor::domainStateChanged, this, &Karton::onDomainStateChanged);
 
     refreshDomainList();
+    startPortForwardsForActiveDomains();
 
     return true;
 }

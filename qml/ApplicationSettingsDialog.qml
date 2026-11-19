@@ -659,6 +659,12 @@ Kirigami.Dialog {
                                             }
                                         }
                                         Controls.Button {
+                                            text: qsTr("dhcp")
+                                            icon.name: "network-wired-symbolic"
+                                            enabled: modelData.ipv4Dhcp
+                                            onClicked: networkDhcpDialog.openFor(modelData.name)
+                                        }
+                                        Controls.Button {
                                             text: qsTr("edit")
                                             icon.name: "document-edit-symbolic"
                                             onClicked: root.openNetworkEditor(modelData)
@@ -747,6 +753,10 @@ Kirigami.Dialog {
 
     Controls.ButtonGroup {
         id: dnsDomainGroup
+    }
+
+    NetworkDhcpDialog {
+        id: networkDhcpDialog
     }
 
     Kirigami.Dialog {

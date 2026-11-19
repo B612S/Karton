@@ -153,9 +153,11 @@ target_sources(karton
     core/app/karton_devices.cpp
     core/app/karton_disk.cpp
     core/app/karton_domain.cpp
+    core/app/karton_import.cpp
     core/app/karton_network.cpp
     core/app/karton_os.cpp
     core/app/karton_pci.cpp
+    core/app/karton_portforward.cpp
     core/app/karton_settings.cpp
     core/app/karton_snapshots.cpp
     core/app/karton_usb.cpp
@@ -182,6 +184,8 @@ target_sources(karton
     core/os/osinfoconfig.cpp
     core/domain/domainxmlreader.cpp
     core/util/commandrunner.cpp
+    core/util/portforwarder.cpp
+    core/util/portforwarder.h
     core/util/xmlhighlighter.cpp
     core/util/xmlhighlighter.h
     core/util/evdev_to_xtkbd_map.c
@@ -200,6 +204,7 @@ ecm_target_qml_sources(karton
     qml/VMPage.qml
     qml/UsageGraph.qml
     qml/ErrorLogDialog.qml
+    qml/NetworkDhcpDialog.qml
     qml/AddHardwareDialog.qml
     qml/ApplicationSettingsDialog.qml
     qml/ScrollableSettingsView.qml

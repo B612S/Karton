@@ -30,6 +30,7 @@ Q_DECLARE_OPAQUE_POINTER(_virDomain *)
 Q_DECLARE_METATYPE(_virDomain *)
 
 class ShortcutInhibitor;
+class PortForwarder;
 
 class Karton : public QObject
 {
@@ -95,6 +96,7 @@ Q_SIGNALS:
     void domainRemoved(Domain *domain);
     void displayResolutionChanged(const Domain *domain);
     void domainCreated(bool success, const QString &name);
+    void domainImported(bool success, const QString &name);
     void domainEdited(bool success, const QString &name);
     void domainCloned(bool success, const QString &sourceName, const QString &newName);
     void viewerCountChanged();
@@ -195,6 +197,8 @@ public Q_SLOTS:
     Q_INVOKABLE void setViewerGlobalShortcutsBlocked(QObject *viewer, bool blocked);
     Q_INVOKABLE void closeAllViewers();
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
+    Q_INVOKABLE bool importDomainXml(const QString &path);
+    Q_INVOKABLE bool exportDomainXml(const Domain *domain, const QString &path);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
     Q_INVOKABLE void moveDomain(int fromRow, int toRow);
@@ -211,6 +215,13 @@ public Q_SLOTS:
     Q_INVOKABLE bool setNetworkAutostart(const QString &name, bool autostart);
     Q_INVOKABLE bool createNatNetwork(const QString &name);
     Q_INVOKABLE bool deleteNetwork(const QString &name);
+    Q_INVOKABLE QVariantList networkLeases(const QString &name) const;
+    Q_INVOKABLE QVariantList networkDhcpHosts(const QString &name) const;
+    Q_INVOKABLE bool addNetworkDhcpHost(const QString &name, const QString &mac, const QString &ip, const QString &hostname);
+    Q_INVOKABLE bool removeNetworkDhcpHost(const QString &name, const QString &mac);
+    Q_INVOKABLE QVariantList domainPortForwards(const Domain *domain) const;
+    Q_INVOKABLE bool addPortForward(const Domain *domain, int hostPort, const QString &guestIp, int guestPort, bool localOnly);
+    Q_INVOKABLE bool removePortForward(const Domain *domain, int hostPort);
     Q_INVOKABLE QVariantList domainInterfaces(const Domain *domain) const;
     Q_INVOKABLE bool attachNetwork(const Domain *domain, const QString &network, const QString &model);
     Q_INVOKABLE bool detachNetwork(const Domain *domain, const QString &mac);
@@ -252,11 +263,16 @@ private Q_SLOTS:
     void onDomainStateChanged(const virDomainPtr domainPtr, int event, int detail);
 
 private:
+    void startPortForwardsForActiveDomains();
+    void startPortForwardsForDomain(const Domain *domain);
+    void stopPortForwardsForDomain(const Domain *domain);
+
     virConnectPtr m_conn;
     QString m_activeUri;
     QVector<Domain *> m_domains;
     LibvirtMonitor *m_monitor;
     CommandRunner *m_commandRunner;
+    PortForwarder *m_portForwarder;
     QHash<QString, int> m_diskSizeCache;
 
     struct CpuSample {
