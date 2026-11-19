@@ -97,6 +97,8 @@ Q_SIGNALS:
     void displayResolutionChanged(const Domain *domain);
     void domainCreated(bool success, const QString &name);
     void domainImported(bool success, const QString &name);
+    void ovfImportStarted(const QString &name);
+    void ovfImportFinished(bool success, const QString &name, const QString &message);
     void domainEdited(bool success, const QString &name);
     void domainCloned(bool success, const QString &sourceName, const QString &newName);
     void viewerCountChanged();
@@ -198,6 +200,7 @@ public Q_SLOTS:
     Q_INVOKABLE void closeAllViewers();
     Q_INVOKABLE bool createDomain(const QVariantMap &config);
     Q_INVOKABLE bool importDomainXml(const QString &path);
+    Q_INVOKABLE bool importOvf(const QString &path, const QString &requestedName, const QString &destinationDirectory, const QString &networkName);
     Q_INVOKABLE bool exportDomainXml(const Domain *domain, const QString &path);
     Q_INVOKABLE bool editDomain(const Domain *domain, const QVariantMap &config);
     Q_INVOKABLE bool deleteDomain(const Domain *domain, const bool deleteDisk);
@@ -266,6 +269,8 @@ private:
     void startPortForwardsForActiveDomains();
     void startPortForwardsForDomain(const Domain *domain);
     void stopPortForwardsForDomain(const Domain *domain);
+    void convertNextOvfDisk();
+    void finishOvfImport(bool success, const QString &message);
 
     virConnectPtr m_conn;
     QString m_activeUri;
@@ -274,6 +279,20 @@ private:
     CommandRunner *m_commandRunner;
     PortForwarder *m_portForwarder;
     QHash<QString, int> m_diskSizeCache;
+
+    // OVF/OVA import state. Only one import runs at a time.
+    bool m_ovfActive = false;
+    QString m_ovfName;
+    QString m_ovfDestinationDirectory;
+    QString m_ovfNetwork;
+    QString m_ovfTemporaryDirectory;
+    QStringList m_ovfDiskSources;
+    QStringList m_ovfDiskDestinations;
+    QStringList m_ovfDiskCreateCapacities;
+    QStringList m_ovfCreatedFiles;
+    int m_ovfCpus = 2;
+    int m_ovfMemoryMiB = 2048;
+    int m_ovfNextDisk = 0;
 
     struct CpuSample {
         qint64 cpuTime = 0;

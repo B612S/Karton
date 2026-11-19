@@ -41,6 +41,10 @@ Kirigami.ApplicationWindow {
         visible: false
     }
 
+    OvfImportDialog {
+        visible: false
+    }
+
     SnapshotsDialog {
         domain: null
         visible: false

@@ -336,6 +336,11 @@ Kirigami.ScrollablePage {
             onTriggered: importDomainDialog.open()
         },
         Kirigami.Action {
+            icon.name: "package-x-generic-symbolic"
+            text: qsTr("import_ovf_ova")
+            onTriggered: ovfImportDialog.open()
+        },
+        Kirigami.Action {
             icon.name: "preferences-system-symbolic"
             text: qsTr("settings")
             onTriggered: applicationSettingsDialog.open()
@@ -348,6 +353,10 @@ Kirigami.ScrollablePage {
 
     ApplicationSettingsDialog {
         id: applicationSettingsDialog
+    }
+
+    OvfImportDialog {
+        id: ovfImportDialog
     }
 
     FileDialog {

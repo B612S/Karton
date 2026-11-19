@@ -23,11 +23,15 @@ with a desktop-oriented viewer.
 ### Virtual machines
 
 - List local libvirt domains with their OS icon and human-readable OS name.
+- Search and filter the list by name, OS, UUID or running state.
+- Import a VM from libvirt domain XML or from an OVF/OVA package; export its
+  domain XML.
 - Create VMs from an ISO or disk image.
 - Start, shut down, power off, pause, resume, reboot and reset.
 - Autostart on boot.
 - Hibernate and restore a running VM through libvirt managed save.
 - Clone a VM, copy its disks and regenerate UUID/MAC addresses.
+- Forward TCP ports from the host to a guest, with rules stored per VM.
 - Take snapshots, revert to them and delete them.
 - Delete a VM together with its local disks when requested.
 - Live CPU and memory usage on the VM page.
@@ -124,6 +128,7 @@ Global Application Settings provide:
 - the libvirt connection URI;
 - SPICE TLS: prefer TLS when the VM exposes a TLS port, and the CA certificate path;
 - shared libvirt networks (start/stop, autostart, create NAT, delete);
+- DHCP leases and static reservations for libvirt networks;
 - About information.
 
 ## Guest tools

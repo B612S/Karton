@@ -470,6 +470,18 @@
 <message><source>invalid_guest_address_1</source><translation>Invalid guest address: %1</translation></message>
 <message><source>a_port_forward_for_port_1_already_exists</source><translation>A port forward for port %1 already exists.</translation></message>
 <message><source>failed_to_start_port_forward_on_port_1_2</source><translation>Failed to start the port forward on port %1: %2</translation></message>
+<message><source>another_ovf_import_is_already_running</source><translation>Another OVF import is already running.</translation></message>
+<message><source>failed_to_import_the_ova_1</source><translation>Failed to import the OVA: %1</translation></message>
+<message><source>the_file_is_not_an_ovf_or_ova_package</source><translation>The file is not an OVF or OVA package.</translation></message>
+<message><source>failed_to_parse_the_ovf_1</source><translation>Failed to parse the OVF: %1</translation></message>
+<message><source>the_ovf_contains_no_virtual_system</source><translation>The OVF contains no VirtualSystem.</translation></message>
+<message><source>the_ovf_references_an_unknown_file_1</source><translation>The OVF references an unknown file: %1</translation></message>
+<message><source>the_ovf_disk_1_does_not_exist</source><translation>The OVF disk does not exist: %1</translation></message>
+<message><source>the_ovf_disk_1_has_no_source_or_capacity</source><translation>The OVF disk %1 has neither a source file nor a capacity.</translation></message>
+<message><source>the_ovf_contains_too_many_disks</source><translation>The OVF contains more than 26 disks.</translation></message>
+<message><source>the_ovf_contains_no_disks</source><translation>The OVF contains no disks.</translation></message>
+<message><source>the_destination_disk_1_already_exists</source><translation>The destination disk already exists: %1</translation></message>
+<message><source>failed_to_create_the_folder_1</source><translation>Failed to create the folder: %1</translation></message>
 <message><source>failed_to_open_1_2</source><translation>Failed to open %1: %2</translation></message>
 <message><source>failed_to_parse_the_domain_xml_1</source><translation>Failed to parse the domain XML: %1</translation></message>
 <message><source>failed_to_define_the_domain_1</source><translation>Failed to define the domain: %1</translation></message>
@@ -711,6 +723,7 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>import_ovf_ova</source><translation>Import OVF/OVA</translation></message>
 <message><source>all_files</source><translation>All files (*)</translation></message>
 <message><source>import</source><translation>Import</translation></message>
 <message><source>import_vm</source><translation>Import virtual machine</translation></message>
@@ -846,5 +859,24 @@ This action cannot be undone.</translation></message>
 <message><source>remove</source><translation>Remove</translation></message>
 <message><source>reservations</source><translation>Reservations</translation></message>
 <message><source>reservations_apply_to_the_network_configuration</source><translation>Reservations are written to the network configuration.</translation></message>
+</context>
+<context>
+<name>OvfImportDialog</name>
+<message><source>all_files</source><translation>All files (*)</translation></message>
+<message><source>cancel</source><translation>Cancel</translation></message>
+<message><source>choose</source><translation>Choose…</translation></message>
+<message><source>choose_an_ovf_or_ova_file</source><translation>Choose an OVF or OVA file</translation></message>
+<message><source>choose_destination_folder</source><translation>Choose destination folder</translation></message>
+<message><source>destination</source><translation>Destination</translation></message>
+<message><source>import</source><translation>Import</translation></message>
+<message><source>import_ovf_ova</source><translation>Import OVF/OVA</translation></message>
+<message><source>importing_the_ovf_disks_are_converted_to_qcow2</source><translation>Importing. Disks are converted to qcow2…</translation></message>
+<message><source>name</source><translation>Name</translation></message>
+<message><source>name_from_the_ovf</source><translation>Name from the OVF</translation></message>
+<message><source>network</source><translation>Network</translation></message>
+<message><source>no_network</source><translation>No network</translation></message>
+<message><source>ovf_ova_packages</source><translation>OVF/OVA packages (*.ovf *.ova)</translation></message>
+<message><source>source</source><translation>Source</translation></message>
+<message><source>the_vm_is_created_stopped_and_can_be_started_from_the_list</source><translation>The VM is created stopped and can be started from the list.</translation></message>
 </context>
 </TS>

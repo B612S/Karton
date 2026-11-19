@@ -36,9 +36,9 @@ bool Karton::importDomainXml(const QString &path)
     }
 
     QDomDocument document;
-    QString parseError;
-    if (!document.setContent(xml, &parseError)) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_parse_the_domain_xml_1").arg(parseError));
+    const QDomDocument::ParseResult parseResult = document.setContent(xml);
+    if (!parseResult) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_parse_the_domain_xml_1").arg(parseResult.errorMessage));
         Q_EMIT domainImported(false, QString());
         return false;
     }

@@ -470,6 +470,18 @@
 <message><source>invalid_guest_address_1</source><translation>Неверный адрес гостя: %1</translation></message>
 <message><source>a_port_forward_for_port_1_already_exists</source><translation>Проброс для порта %1 уже существует.</translation></message>
 <message><source>failed_to_start_port_forward_on_port_1_2</source><translation>Не удалось запустить проброс порта %1: %2</translation></message>
+<message><source>another_ovf_import_is_already_running</source><translation>Другой импорт OVF уже выполняется.</translation></message>
+<message><source>failed_to_import_the_ova_1</source><translation>Не удалось импортировать OVA: %1</translation></message>
+<message><source>the_file_is_not_an_ovf_or_ova_package</source><translation>Файл не является пакетом OVF или OVA.</translation></message>
+<message><source>failed_to_parse_the_ovf_1</source><translation>Не удалось разобрать OVF: %1</translation></message>
+<message><source>the_ovf_contains_no_virtual_system</source><translation>В OVF нет VirtualSystem.</translation></message>
+<message><source>the_ovf_references_an_unknown_file_1</source><translation>OVF ссылается на неизвестный файл: %1</translation></message>
+<message><source>the_ovf_disk_1_does_not_exist</source><translation>Диск OVF не существует: %1</translation></message>
+<message><source>the_ovf_disk_1_has_no_source_or_capacity</source><translation>У диска OVF %1 нет ни файла-источника, ни ёмкости.</translation></message>
+<message><source>the_ovf_contains_too_many_disks</source><translation>В OVF больше 26 дисков.</translation></message>
+<message><source>the_ovf_contains_no_disks</source><translation>В OVF нет дисков.</translation></message>
+<message><source>the_destination_disk_1_already_exists</source><translation>Целевой диск уже существует: %1</translation></message>
+<message><source>failed_to_create_the_folder_1</source><translation>Не удалось создать папку: %1</translation></message>
 <message><source>failed_to_open_1_2</source><translation>Не удалось открыть %1: %2</translation></message>
 <message><source>failed_to_parse_the_domain_xml_1</source><translation>Не удалось разобрать XML домена: %1</translation></message>
 <message><source>failed_to_define_the_domain_1</source><translation>Не удалось определить домен: %1</translation></message>
@@ -711,6 +723,7 @@
 
 <context>
 <name>VMListPage</name>
+<message><source>import_ovf_ova</source><translation>Импорт OVF/OVA</translation></message>
 <message><source>all_files</source><translation>Все файлы (*)</translation></message>
 <message><source>import</source><translation>Импорт</translation></message>
 <message><source>import_vm</source><translation>Импорт виртуальной машины</translation></message>
@@ -846,5 +859,24 @@
 <message><source>remove</source><translation>Удалить</translation></message>
 <message><source>reservations</source><translation>Резервирования</translation></message>
 <message><source>reservations_apply_to_the_network_configuration</source><translation>Резервирования записываются в конфигурацию сети.</translation></message>
+</context>
+<context>
+<name>OvfImportDialog</name>
+<message><source>all_files</source><translation>Все файлы (*)</translation></message>
+<message><source>cancel</source><translation>Отмена</translation></message>
+<message><source>choose</source><translation>Выбрать…</translation></message>
+<message><source>choose_an_ovf_or_ova_file</source><translation>Выберите файл OVF или OVA</translation></message>
+<message><source>choose_destination_folder</source><translation>Выберите папку назначения</translation></message>
+<message><source>destination</source><translation>Назначение</translation></message>
+<message><source>import</source><translation>Импорт</translation></message>
+<message><source>import_ovf_ova</source><translation>Импорт OVF/OVA</translation></message>
+<message><source>importing_the_ovf_disks_are_converted_to_qcow2</source><translation>Импорт. Диски преобразуются в qcow2…</translation></message>
+<message><source>name</source><translation>Имя</translation></message>
+<message><source>name_from_the_ovf</source><translation>Имя из OVF</translation></message>
+<message><source>network</source><translation>Сеть</translation></message>
+<message><source>no_network</source><translation>Без сети</translation></message>
+<message><source>ovf_ova_packages</source><translation>Пакеты OVF/OVA (*.ovf *.ova)</translation></message>
+<message><source>source</source><translation>Источник</translation></message>
+<message><source>the_vm_is_created_stopped_and_can_be_started_from_the_list</source><translation>ВМ создаётся остановленной, запустить её можно из списка.</translation></message>
 </context>
 </TS>

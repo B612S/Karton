@@ -11,7 +11,7 @@ SPDX-FileCopyrightText: none
 - [x] Drag and drop an ISO/image onto the VM page to insert or attach it.
 - [x] Persistent error journal instead of short-lived passive notifications.
 - [x] Import/export of domain XML.
-- [ ] Import OVF/OVA packages.
+- [x] Import OVF/OVA packages.
 - [x] NAT networks: DHCP lease list/reservations and TCP port forwarding.
 - [x] Disk tools: `qemu-img` check, compact and convert from the Disks page.
 - [x] Snapshot UX: internal/external type, size, and a quick snapshot action.

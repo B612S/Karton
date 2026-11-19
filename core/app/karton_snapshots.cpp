@@ -95,9 +95,10 @@ QVariantList Karton::domainSnapshots(const Domain *domain) const
             const QDomNodeList diskNodes = disksElement.elementsByTagName(QStringLiteral("disk"));
             for (int d = 0; d < diskNodes.count(); ++d) {
                 const QDomElement disk = diskNodes.at(d).toElement();
-                if (disk.attribute(QStringLiteral("snapshot")) == QStringLiteral("external")) {
-                    external = true;
+                if (disk.attribute(QStringLiteral("snapshot")) != QStringLiteral("external")) {
+                    continue;
                 }
+                external = true;
                 const QString file = disk.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file"));
                 if (!file.isEmpty() && !countedFiles.contains(file)) {
                     countedFiles.insert(file);

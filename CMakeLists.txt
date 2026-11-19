@@ -154,6 +154,7 @@ target_sources(karton
     core/app/karton_disk.cpp
     core/app/karton_domain.cpp
     core/app/karton_import.cpp
+    core/app/karton_ovf.cpp
     core/app/karton_network.cpp
     core/app/karton_os.cpp
     core/app/karton_pci.cpp
@@ -205,6 +206,7 @@ ecm_target_qml_sources(karton
     qml/UsageGraph.qml
     qml/ErrorLogDialog.qml
     qml/NetworkDhcpDialog.qml
+    qml/OvfImportDialog.qml
     qml/AddHardwareDialog.qml
     qml/ApplicationSettingsDialog.qml
     qml/ScrollableSettingsView.qml
