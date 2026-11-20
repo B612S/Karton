@@ -53,9 +53,25 @@ QString Karton::domainXml(const Domain *domain) const
     if (!domain || !domain->domainPtr()) {
         return {};
     }
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    char *xml = cachedDomainXml(domain, true);
     if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+        return {};
+    }
+    const QString result = QString::fromUtf8(xml);
+    free(xml);
+    return result;
+}
+
+QString Karton::domainLiveXml(const Domain *domain) const
+{
+    if (!domain || !domain->domainPtr()) {
+        return {};
+    }
+    char *xml = cachedDomainXml(domain, false);
+    if (!xml) {
+        // A domain without a live definition (for example one that is still
+        // being defined) only has the inactive one.
+        xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
     }
     if (!xml) {
         return {};
@@ -63,6 +79,29 @@ QString Karton::domainXml(const Domain *domain) const
     const QString result = QString::fromUtf8(xml);
     free(xml);
     return result;
+}
+
+QString Karton::cachedLiveDomainXml(const Domain *domain) const
+{
+    if (!domain || !domain->domainPtr()) {
+        return {};
+    }
+    const QString uuid = Domain::uuidString(domain->domainPtr());
+    if (uuid.isEmpty()) {
+        return {};
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - m_xmlCacheTimes.value(uuid, 0) >= 5000) {
+        return {};
+    }
+    QByteArray data = m_liveXmlCache.value(uuid);
+    if (data.isEmpty()) {
+        data = m_inactiveXmlCache.value(uuid);
+    }
+    if (data.isEmpty()) {
+        return {};
+    }
+    return QString::fromUtf8(data);
 }
 
 bool Karton::attachXmlDevice(const Domain *domain, const QString &xml)
@@ -171,10 +210,7 @@ QVariantList Karton::domainInputDevices(const Domain *domain) const
     if (!domain || !domain->domainPtr()) {
         return result;
     }
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
-    if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
-    }
+    char *xml = cachedDomainXml(domain, true);
     if (!xml) {
         return result;
     }
@@ -350,12 +386,14 @@ bool Karton::setXmlDevice(const Domain *domain, const QString &tag, const QStrin
     const QDomElement replacement = deviceDocument.documentElement();
     devices.replaceChild(document.importNode(replacement, true), existing);
 
-    virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    virDomainPtr redefined =
+        virDomainDefineXMLFlags(virDomainGetConnect(domain->domainPtr()), document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_1_2").arg(tag).arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
     virDomainFree(redefined);
+    invalidateDomainXml(domain->config()->uuid());
     refreshDomainList();
     return true;
 }
@@ -402,7 +440,8 @@ bool Karton::replaceXmlDevice(const Domain *domain, int index, const QString &xm
     }
     devices.replaceChild(document.importNode(deviceDocument.documentElement(), true), target);
 
-    virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    virDomainPtr redefined =
+        virDomainDefineXMLFlags(virDomainGetConnect(domain->domainPtr()), document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_device_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
@@ -485,10 +524,7 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
     if (!domain || !domain->domainPtr()) {
         return result;
     }
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
-    if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
-    }
+    char *xml = cachedDomainXml(domain, true);
     if (!xml) {
         return result;
     }
@@ -699,7 +735,7 @@ bool Karton::saveDomainXml(const Domain *domain, const QString &xml)
 
     // Validate the complete document against libvirt's domain schema, not only
     // the root element. This is the same schema validation virt-manager uses.
-    virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, xml.toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    virDomainPtr redefined = virDomainDefineXMLFlags(virDomainGetConnect(domain->domainPtr()), xml.toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_save_xml_for_domain_1_2")
                                  .arg(domain->config()->name())

@@ -3,13 +3,15 @@
 
 #include "app/karton.h"
 #include "app/karton_private.h"
+#include "app/libvirtconnection.h"
+#include "app/ovfextract.h"
+#include "util/pooltask.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 
 #include <QCoreApplication>
 #include <QDir>
-#include <QDirIterator>
 #include <QDomAttr>
 #include <QDomDocument>
 #include <QDomElement>
@@ -19,14 +21,17 @@
 #include <QHash>
 #include <QList>
 #include <QPair>
-#include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QSysInfo>
+#include <QThreadPool>
 #include <QUrl>
 #include <QUuid>
+#include <atomic>
 #include <utility>
+
+#include "util/calltimer.h"
 
 namespace
 {
@@ -110,71 +115,14 @@ qint64 capacityBytes(const QDomElement &disk)
     return quantity;
 }
 
-bool extractOva(const QString &path, QString *ovfPath, QString *temporaryDirectory, QString *error)
+static void removeDirectoryInBackground(const QString &path)
 {
-    QProcess list;
-    list.start(QStringLiteral("tar"), {QStringLiteral("-tf"), path});
-    if (!list.waitForFinished(-1) || list.exitCode() != 0) {
-        *error = QString::fromUtf8(list.readAllStandardError()).trimmed();
-        if (error->isEmpty()) {
-            *error = QStringLiteral("tar -tf failed");
-        }
-        return false;
+    if (path.isEmpty()) {
+        return;
     }
-
-    const QStringList entries = QString::fromUtf8(list.readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (const QString &entry : entries) {
-        const QString simplified = QDir::cleanPath(entry);
-        if (entry.startsWith(QLatin1Char('/')) || simplified.startsWith(QStringLiteral("../")) || simplified == QStringLiteral("..")
-            || entry.contains(QLatin1Char('\\'))) {
-            *error = QStringLiteral("The OVA archive contains an unsafe path: %1").arg(entry);
-            return false;
-        }
-    }
-
-    // Reject links and device nodes: a symlink inside the archive could make
-    // a later entry escape the temporary directory.
-    QProcess types;
-    types.start(QStringLiteral("tar"), {QStringLiteral("-tvf"), path});
-    if (!types.waitForFinished(-1) || types.exitCode() != 0) {
-        *error = QStringLiteral("Could not inspect the OVA archive");
-        return false;
-    }
-    const QStringList typeLines = QString::fromUtf8(types.readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (const QString &line : typeLines) {
-        if (line.isEmpty()) {
-            continue;
-        }
-        const QChar type = line.at(0);
-        if (type != QLatin1Char('-') && type != QLatin1Char('d')) {
-            *error = QStringLiteral("The OVA archive contains a link or a special file");
-            return false;
-        }
-    }
-
-    const QString directory = QDir::tempPath() + QStringLiteral("/karton-ovf-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    if (!QDir().mkpath(directory)) {
-        *error = QStringLiteral("Could not create the temporary directory");
-        return false;
-    }
-
-    QProcess extract;
-    extract.start(QStringLiteral("tar"), {QStringLiteral("--no-same-owner"), QStringLiteral("-xf"), path, QStringLiteral("-C"), directory});
-    if (!extract.waitForFinished(-1) || extract.exitCode() != 0) {
-        *error = QString::fromUtf8(extract.readAllStandardError()).trimmed();
-        QDir(directory).removeRecursively();
-        return false;
-    }
-
-    QDirIterator iterator(directory, {QStringLiteral("*.ovf")}, QDir::Files, QDirIterator::Subdirectories);
-    if (!iterator.hasNext()) {
-        *error = QStringLiteral("The OVA archive does not contain an OVF descriptor");
-        QDir(directory).removeRecursively();
-        return false;
-    }
-    *ovfPath = iterator.next();
-    *temporaryDirectory = directory;
-    return true;
+    QThreadPool::globalInstance()->start(new PoolTask([path]() {
+        QDir(path).removeRecursively();
+    }));
 }
 
 QString resolvedHref(const QString &ovfDirectory, const QString &href)
@@ -315,78 +263,142 @@ QString buildOvfDomainXml(const QString &name, int cpus, int memoryMiB, const QS
 }
 } // namespace
 
-bool Karton::importOvf(const QString &path, const QString &requestedName, const QString &destinationDirectory, const QString &networkName)
+bool Karton::importOvf(const QString &path,
+                       const QString &requestedName,
+                       const QString &destinationDirectory,
+                       const QString &networkName,
+                       const QString &connectionUri)
 {
+    ScopedCallTimer timer("Karton::importOvf");
+    const QString destinationError = checkDirectoryWritable(destinationDirectory);
+    if (!destinationError.isEmpty()) {
+        Q_EMIT errorOccurred(destinationError);
+        return false;
+    }
     if (m_ovfActive) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "another_ovf_import_is_already_running"));
         return false;
     }
-    if (!m_conn) {
+    if (connectionIsRemote(connectionUri)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "ovf_import_to_a_remote_connection_is_not_supported"));
+        return false;
+    }
+    if (!connectionHandleForUri(connectionUri)) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "not_connected_to_libvirt"));
         return false;
     }
+    m_ovfTargetUri = connectionUri;
     const QFileInfo packageInfo(path);
     if (!packageInfo.exists() || !packageInfo.isFile()) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_open_1_2").arg(path, QStringLiteral("No such file")));
         return false;
     }
-
-    QString ovfPath;
-    QString temporaryDirectory;
-    QString extractionError;
     const QString suffix = packageInfo.suffix().toLower();
-    if (suffix == QStringLiteral("ova")) {
-        if (!extractOva(packageInfo.absoluteFilePath(), &ovfPath, &temporaryDirectory, &extractionError)) {
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_import_the_ova_1").arg(extractionError));
-            return false;
-        }
-    } else if (suffix == QStringLiteral("ovf")) {
-        ovfPath = packageInfo.absoluteFilePath();
-    } else {
+    if (suffix != QStringLiteral("ova") && suffix != QStringLiteral("ovf")) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_file_is_not_an_ovf_or_ova_package"));
         return false;
+    }
+
+    m_ovfActive = true;
+    m_ovfCancelRequested = false;
+    m_ovfCommandId = 0;
+    m_ovfRequestedName = requestedName;
+    m_ovfPendingDestinationDirectory = destinationDirectory;
+    m_ovfPendingNetwork = networkName;
+    m_ovfName = friendlyName(requestedName.trimmed().isEmpty() ? packageInfo.completeBaseName() : requestedName);
+    m_ovfCreatedFiles.clear();
+    m_ovfTemporaryDirectory.clear();
+    m_ovfImportProgress = -1;
+    m_ovfImportProcessedBytes = 0;
+    m_ovfImportTotalBytes = 0;
+    Q_EMIT ovfImportProgressChanged();
+    Q_EMIT ovfImportStarted(m_ovfName);
+
+    if (suffix == QStringLiteral("ovf")) {
+        setOvfImportPhase(QStringLiteral("converting"));
+        return startOvfImportFromDescriptor(packageInfo.absoluteFilePath(), QString());
+    }
+
+    setOvfImportPhase(QStringLiteral("extracting"));
+    const QString packagePath = packageInfo.absoluteFilePath();
+    QThreadPool::globalInstance()->start(new PoolTask([this, packagePath]() {
+        const OvfExtractionResult extraction = extractOvaArchive(packagePath, m_ovfCancelRequested, [this](qint64 processed, qint64 total) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, processed, total]() {
+                    if (!m_ovfActive) {
+                        return;
+                    }
+                    m_ovfImportProcessedBytes = processed;
+                    m_ovfImportTotalBytes = total;
+                    const int percent = total > 0 ? static_cast<int>(qBound<qint64>(qint64(0), processed * 100 / total, qint64(100))) : -1;
+                    if (percent != m_ovfImportProgress) {
+                        m_ovfImportProgress = percent;
+                        Q_EMIT ovfImportProgressChanged();
+                    }
+                },
+                Qt::QueuedConnection);
+        });
+        QMetaObject::invokeMethod(
+            this,
+            [this, extraction]() {
+                if (!m_ovfActive) {
+                    if (!extraction.temporaryDirectory.isEmpty()) {
+                        removeDirectoryInBackground(extraction.temporaryDirectory);
+                    }
+                    return;
+                }
+                if (!extraction.success) {
+                    finishOvfImport(false,
+                                    extraction.cancelled ? QCoreApplication::translate("Karton", "ovf_import_cancelled")
+                                                         : QCoreApplication::translate("Karton", "failed_to_import_the_ova_1").arg(extraction.error));
+                    return;
+                }
+                setOvfImportPhase(QStringLiteral("converting"));
+                startOvfImportFromDescriptor(extraction.ovfPath, extraction.temporaryDirectory);
+            },
+            Qt::QueuedConnection);
+    }));
+    return true;
+}
+
+bool Karton::startOvfImportFromDescriptor(const QString &ovfPath, const QString &temporaryDirectory)
+{
+    ScopedCallTimer timer("Karton::startOvfImportFromDescriptor");
+    m_ovfTemporaryDirectory = temporaryDirectory;
+    auto fail = [this](const QString &message) {
+        finishOvfImport(false, message);
+        return false;
+    };
+    const QString cancelledMessage = QCoreApplication::translate("Karton", "ovf_import_cancelled");
+    if (m_ovfCancelRequested.load()) {
+        return fail(cancelledMessage);
     }
     const QString ovfDirectory = QFileInfo(ovfPath).absolutePath();
 
     QFile ovfFile(ovfPath);
     if (!ovfFile.open(QIODevice::ReadOnly)) {
-        if (!temporaryDirectory.isEmpty()) {
-            QDir(temporaryDirectory).removeRecursively();
-        }
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_open_1_2").arg(ovfPath, ovfFile.errorString()));
-        return false;
+        return fail(QCoreApplication::translate("Karton", "failed_to_open_1_2").arg(ovfPath, ovfFile.errorString()));
     }
     QDomDocument document;
     const QDomDocument::ParseResult parseResult = document.setContent(ovfFile.readAll());
     if (!parseResult) {
-        if (!temporaryDirectory.isEmpty()) {
-            QDir(temporaryDirectory).removeRecursively();
-        }
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_parse_the_ovf_1").arg(parseResult.errorMessage));
-        return false;
+        return fail(QCoreApplication::translate("Karton", "failed_to_parse_the_ovf_1").arg(parseResult.errorMessage));
     }
 
     const QList<QDomElement> systems = elementsByLocalName(document, QStringLiteral("VirtualSystem"));
     if (systems.isEmpty()) {
-        if (!temporaryDirectory.isEmpty()) {
-            QDir(temporaryDirectory).removeRecursively();
-        }
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_ovf_contains_no_virtual_system"));
-        return false;
+        return fail(QCoreApplication::translate("Karton", "the_ovf_contains_no_virtual_system"));
     }
     const QDomElement system = systems.first();
 
-    QString name = requestedName.trimmed();
+    QString name = m_ovfRequestedName.trimmed();
     if (name.isEmpty()) {
         name = childText(system, QStringLiteral("Name"));
     }
     name = friendlyName(name);
     if (!KartonCommon::isValidDomainName(name)) {
-        if (!temporaryDirectory.isEmpty()) {
-            QDir(temporaryDirectory).removeRecursively();
-        }
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "invalid_virtual_machine_name_1").arg(name));
-        return false;
+        return fail(QCoreApplication::translate("Karton", "invalid_virtual_machine_name_1").arg(name));
     }
     // Avoid colliding with an existing domain; keep the import repeatable.
     QString uniqueName = name;
@@ -459,94 +471,68 @@ bool Karton::importOvf(const QString &path, const QString &requestedName, const 
         const QString fileRef = attributeByLocalName(disk, QStringLiteral("fileRef"));
         const QString href = hrefs.value(fileRef);
         if (!fileRef.isEmpty() && href.isEmpty()) {
-            if (!temporaryDirectory.isEmpty()) {
-                QDir(temporaryDirectory).removeRecursively();
-            }
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_ovf_references_an_unknown_file_1").arg(fileRef));
-            return false;
+            return fail(QCoreApplication::translate("Karton", "the_ovf_references_an_unknown_file_1").arg(fileRef));
         }
         if (!href.isEmpty()) {
             const QString sourcePath = resolvedHref(ovfDirectory, href);
             if (!QFileInfo::exists(sourcePath)) {
-                if (!temporaryDirectory.isEmpty()) {
-                    QDir(temporaryDirectory).removeRecursively();
-                }
-                Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_ovf_disk_1_does_not_exist").arg(sourcePath));
-                return false;
+                return fail(QCoreApplication::translate("Karton", "the_ovf_disk_1_does_not_exist").arg(sourcePath));
             }
             sources.append(sourcePath);
             createCapacities.append(QString());
         } else {
             const qint64 capacity = capacityBytes(disk);
             if (capacity <= 0) {
-                if (!temporaryDirectory.isEmpty()) {
-                    QDir(temporaryDirectory).removeRecursively();
-                }
-                Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_ovf_disk_1_has_no_source_or_capacity")
-                                         .arg(attributeByLocalName(disk, QStringLiteral("diskId"))));
-                return false;
+                return fail(QCoreApplication::translate("Karton", "the_ovf_disk_1_has_no_source_or_capacity")
+                                .arg(attributeByLocalName(disk, QStringLiteral("diskId"))));
             }
             sources.append(QString());
             createCapacities.append(QString::number(capacity));
         }
     }
     if (sources.size() > 26) {
-        if (!temporaryDirectory.isEmpty()) {
-            QDir(temporaryDirectory).removeRecursively();
-        }
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_ovf_contains_too_many_disks"));
-        return false;
+        return fail(QCoreApplication::translate("Karton", "the_ovf_contains_too_many_disks"));
     }
     if (sources.isEmpty()) {
-        if (!temporaryDirectory.isEmpty()) {
-            QDir(temporaryDirectory).removeRecursively();
-        }
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_ovf_contains_no_disks"));
-        return false;
+        return fail(QCoreApplication::translate("Karton", "the_ovf_contains_no_disks"));
     }
 
-    if (!networkName.isEmpty()) {
-        virNetworkPtr network = virNetworkLookupByName(m_conn, networkName.toUtf8().constData());
+    if (!m_ovfPendingNetwork.isEmpty()) {
+        virConnectPtr conn = connectionHandleForUri(m_ovfTargetUri);
+        if (!conn) {
+            return fail(QCoreApplication::translate("Karton", "not_connected_to_libvirt"));
+        }
+        virNetworkPtr network = virNetworkLookupByName(conn, m_ovfPendingNetwork.toUtf8().constData());
         if (!network) {
-            if (!temporaryDirectory.isEmpty()) {
-                QDir(temporaryDirectory).removeRecursively();
-            }
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(networkName));
-            return false;
+            return fail(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(m_ovfPendingNetwork));
         }
         virNetworkFree(network);
     }
 
-    QString destination = destinationDirectory.trimmed();
+    QString destination = m_ovfPendingDestinationDirectory.trimmed();
     if (destination.isEmpty()) {
         destination = imagesDirectory();
     }
     if (!QDir().mkpath(destination)) {
-        if (!temporaryDirectory.isEmpty()) {
-            QDir(temporaryDirectory).removeRecursively();
-        }
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_the_folder_1").arg(destination));
-        return false;
+        return fail(QCoreApplication::translate("Karton", "failed_to_create_the_folder_1").arg(destination));
     }
 
     QStringList destinations;
     for (int i = 0; i < sources.size(); ++i) {
         const QString target = QDir(destination).filePath(name + QStringLiteral("-disk") + QString::number(i + 1) + QStringLiteral(".qcow2"));
         if (QFileInfo::exists(target)) {
-            if (!temporaryDirectory.isEmpty()) {
-                QDir(temporaryDirectory).removeRecursively();
-            }
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_destination_disk_1_already_exists").arg(target));
-            return false;
+            return fail(QCoreApplication::translate("Karton", "the_destination_disk_1_already_exists").arg(target));
         }
         destinations.append(target);
     }
 
-    m_ovfActive = true;
+    if (m_ovfCancelRequested.load()) {
+        return fail(cancelledMessage);
+    }
+
     m_ovfName = name;
     m_ovfDestinationDirectory = destination;
-    m_ovfNetwork = networkName;
-    m_ovfTemporaryDirectory = temporaryDirectory;
+    m_ovfNetwork = m_ovfPendingNetwork;
     m_ovfDiskSources = sources;
     m_ovfDiskDestinations = destinations;
     m_ovfDiskCreateCapacities = createCapacities;
@@ -554,8 +540,8 @@ bool Karton::importOvf(const QString &path, const QString &requestedName, const 
     m_ovfCpus = cpus;
     m_ovfMemoryMiB = memoryMiB;
     m_ovfNextDisk = 0;
+    setOvfImportPhase(QStringLiteral("converting"));
 
-    Q_EMIT ovfImportStarted(name);
     convertNextOvfDisk();
     return true;
 }
@@ -569,6 +555,10 @@ void Karton::convertNextOvfDisk()
         finishOvfImport(true, QString());
         return;
     }
+    if (m_ovfCancelRequested.load()) {
+        finishOvfImport(false, QCoreApplication::translate("Karton", "ovf_import_cancelled"));
+        return;
+    }
 
     const int index = m_ovfNextDisk;
     const QString destination = m_ovfDiskDestinations.at(index);
@@ -579,10 +569,11 @@ void Karton::convertNextOvfDisk()
         arguments = {QStringLiteral("convert"), QStringLiteral("-O"), QStringLiteral("qcow2"), QStringLiteral("-U"), m_ovfDiskSources.at(index), destination};
     }
 
-    m_commandRunner->runCommand(QStringLiteral("qemu-img"), arguments, [this, destination](bool success, const QString &output) {
+    m_ovfCommandId = m_commandRunner->runCommand(QStringLiteral("qemu-img"), arguments, [this, destination](bool success, const QString &output) {
+        m_ovfCommandId = 0;
         if (!success) {
             QFile::remove(destination);
-            finishOvfImport(false, output.trimmed());
+            finishOvfImport(false, m_ovfCancelRequested.load() ? QCoreApplication::translate("Karton", "ovf_import_cancelled") : output.trimmed());
             return;
         }
         m_ovfCreatedFiles.append(destination);
@@ -597,9 +588,14 @@ void Karton::finishOvfImport(bool success, const QString &message)
     QString failure = message;
     if (success) {
         const QString xml = buildOvfDomainXml(name, m_ovfCpus, m_ovfMemoryMiB, m_ovfNetwork, m_ovfDiskDestinations);
-        virDomainPtr domain = virDomainDefineXMLFlags(m_conn, xml.toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
-        if (!domain) {
-            domain = virDomainDefineXML(m_conn, xml.toUtf8().constData());
+        virConnectPtr conn = connectionHandleForUri(m_ovfTargetUri);
+        if (!conn) {
+            success = false;
+            failure = QCoreApplication::translate("Karton", "not_connected_to_libvirt");
+        }
+        virDomainPtr domain = conn ? virDomainDefineXMLFlags(conn, xml.toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE) : nullptr;
+        if (!domain && conn) {
+            domain = virDomainDefineXML(conn, xml.toUtf8().constData());
         }
         if (!domain) {
             success = false;
@@ -617,12 +613,16 @@ void Karton::finishOvfImport(bool success, const QString &message)
             Q_EMIT errorOccurred(failure);
         }
     } else {
-        refreshDomainList();
+        if (LibvirtConnection *target = connectionForUri(m_ovfTargetUri)) {
+            target->refreshDomains();
+        } else {
+            refreshDomainList();
+        }
         Q_EMIT domainImported(true, name);
     }
 
     if (!m_ovfTemporaryDirectory.isEmpty()) {
-        QDir(m_ovfTemporaryDirectory).removeRecursively();
+        removeDirectoryInBackground(m_ovfTemporaryDirectory);
     }
     m_ovfTemporaryDirectory.clear();
     m_ovfCreatedFiles.clear();
@@ -631,8 +631,48 @@ void Karton::finishOvfImport(bool success, const QString &message)
     m_ovfDiskCreateCapacities.clear();
     m_ovfActive = false;
     m_ovfNextDisk = 0;
+    m_ovfCommandId = 0;
+    m_ovfCancelRequested = false;
+    m_ovfRequestedName.clear();
+    m_ovfPendingDestinationDirectory.clear();
+    m_ovfPendingNetwork.clear();
+    m_ovfImportProgress = -1;
+    m_ovfImportProcessedBytes = 0;
+    m_ovfImportTotalBytes = 0;
+    Q_EMIT ovfImportProgressChanged();
+    setOvfImportPhase(QString());
 
     Q_EMIT ovfImportFinished(success, name, failure);
+}
+
+void Karton::cancelOvfImport()
+{
+    if (!m_ovfActive) {
+        return;
+    }
+    if (m_ovfCancelRequested.exchange(true)) {
+        return;
+    }
+    setOvfImportPhase(QStringLiteral("cancelling"));
+    if (m_ovfCommandId != 0) {
+        // Stops the current qemu-img conversion; the callback finishes the
+        // import and removes the partial files.
+        m_commandRunner->cancelCommand(m_ovfCommandId);
+    }
+    // A running extraction notices the flag within ~50 ms and kills tar.
+}
+
+void Karton::setOvfImportPhase(const QString &phase)
+{
+    if (m_ovfImportPhase == phase) {
+        return;
+    }
+    m_ovfImportPhase = phase;
+    if (phase != QStringLiteral("extracting") && m_ovfImportProgress != -1) {
+        m_ovfImportProgress = -1;
+        Q_EMIT ovfImportProgressChanged();
+    }
+    Q_EMIT ovfImportPhaseChanged();
 }
 
 namespace
@@ -774,11 +814,21 @@ bool writeOvfDescriptor(const QString &packageDirectory, const QString &name, in
 
 bool Karton::exportOvf(const Domain *domain, const QString &requestedName, const QString &destinationDirectory, bool asOva)
 {
+    ScopedCallTimer timer("Karton::exportOvf");
+    const QString destinationError = checkDirectoryWritable(destinationDirectory);
+    if (!destinationError.isEmpty()) {
+        Q_EMIT errorOccurred(destinationError);
+        return false;
+    }
     if (m_ovfExportActive) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "another_ovf_export_is_already_running"));
         return false;
     }
     if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    if (connectionIsRemote(domainConnectionUri(domain))) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "ovf_export_from_a_remote_connection_is_not_supported"));
         return false;
     }
 
@@ -907,7 +957,7 @@ void Karton::convertNextOvfExportDisk()
                                             finishOvfExport(false, output.trimmed());
                                             return;
                                         }
-                                        QDir(m_ovfExportPackageDirectory).removeRecursively();
+                                        removeDirectoryInBackground(m_ovfExportPackageDirectory);
                                         finishOvfExport(true, QString());
                                     });
         return;
@@ -940,7 +990,7 @@ void Karton::finishOvfExport(bool success, const QString &message)
             QFile::remove(m_ovfExportTarget);
         }
         if (!m_ovfExportPackageDirectory.isEmpty()) {
-            QDir(m_ovfExportPackageDirectory).removeRecursively();
+            removeDirectoryInBackground(m_ovfExportPackageDirectory);
         }
         if (!message.isEmpty()) {
             Q_EMIT errorOccurred(message);

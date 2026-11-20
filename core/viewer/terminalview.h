@@ -58,6 +58,9 @@ protected:
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
 private:
+    void scheduleProcess();
+    void processPending();
+
     struct Cell {
         QChar ch = QLatin1Char(' ');
         QRgb fg = 0xffd0d0d0;
@@ -152,6 +155,8 @@ private:
     State m_state = State::Ground;
     QString m_sequence;
     QString m_reply;
+    QString m_pendingText;
+    bool m_processScheduled = false;
 
     QFont m_font;
     int m_fontSize = 12;

@@ -22,6 +22,7 @@ Kirigami.Page {
     property var cpuHistory: []
     property var ramHistory: []
     property var diskStats: []
+    property var networkInterfaces: []
     property string mediaTargetDev: ""
     property string consolePreviewSeen: ""
     readonly property real ramPercent: {
@@ -44,6 +45,7 @@ Kirigami.Page {
         ramHistory = [];
         consolePreviewSeen = "";
         refreshDiskStats();
+        refreshInterfaces();
         Qt.callLater(syncConsolePreview);
     }
     Connections {
@@ -63,6 +65,10 @@ Kirigami.Page {
     onIsRunningChanged: {
         if (!isRunning) {
             stats = ({});
+            // A stopped VM has no CPU or guest memory figures; keeping the
+            // history would leave the last graph frozen on screen.
+            cpuHistory = [];
+            ramHistory = [];
             lastPreviewFrame = null;
             if (root.domain) {
                 root.domain.clearConsolePreview();
@@ -73,6 +79,7 @@ Kirigami.Page {
         } else if (root.previewWindow && root.previewWindow.previewMode && !root.previewWindow.viewerRegistered) {
             root.previewWindow.suspendPreview();
         }
+        root.refreshInterfaces();
     }
 
     padding: 0
@@ -90,6 +97,19 @@ Kirigami.Page {
 
     function refreshDiskStats() {
         root.diskStats = root.domain ? Karton.domainDiskStats(root.domain) : [];
+    }
+
+    function refreshInterfaces() {
+        root.networkInterfaces = root.domain ? Karton.domainInterfaces(root.domain) : [];
+    }
+
+    function interfaceLabel(iface) {
+        const name = (iface.name || "").length > 0
+            ? iface.name
+            : ((iface.source || "").length > 0 ? iface.source : (iface.type || ""));
+        const mac = (iface.mac || "").length > 0 ? iface.mac : "—";
+        const ip = (iface.ip || "").length > 0 ? iface.ip : "—";
+        return name + " - " + mac + " - " + ip;
     }
 
     function appendSample(history, value) {
@@ -242,6 +262,17 @@ Kirigami.Page {
         onTriggered: root.refreshDiskStats()
     }
 
+    Timer {
+        id: interfaceTimer
+        interval: 5000
+        repeat: true
+        // A stopped VM has no IP addresses to discover; the addresses are
+        // refreshed on start/stop and when the page is shown again.
+        running: root.isRunning && root.visible
+        triggeredOnStart: true
+        onTriggered: root.refreshInterfaces()
+    }
+
     function ensurePreviewWindow() {
         // Text-only VMs have no framebuffer but do have a serial console;
         // the hidden viewer owns that stream and feeds the console preview.
@@ -292,6 +323,7 @@ Kirigami.Page {
     Component.onCompleted: {
         ensurePreviewWindow();
         refreshDiskStats();
+        refreshInterfaces();
         syncConsolePreview();
     }
     Component.onDestruction: {
@@ -338,9 +370,15 @@ Kirigami.Page {
         }
     }
 
+    // When the detail column is too narrow for the title and the VM buttons,
+    // move the whole button group into the toolbar's always-present More menu
+    // instead of letting Kirigami clip or split it.
+    readonly property bool compactToolbar: width < Kirigami.Units.gridUnit * 44
+
     actions: [
         Kirigami.Action {
             text: isRunning ? qsTr("shut_down") : qsTr("start")
+            displayHint: Kirigami.DisplayHint.KeepVisible
             icon.name: isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
             onTriggered: {
                 if (isRunning) {
@@ -353,102 +391,111 @@ Kirigami.Page {
         Kirigami.Action {
             text: qsTr("power_off")
             icon.name: "arrow-down-symbolic"
-            displayHint: Kirigami.DisplayHint.IconOnly
+            displayHint: Kirigami.DisplayHint.KeepVisible | Kirigami.DisplayHint.IconOnly
             visible: isRunning
             onTriggered: powerMenu.popup()
-        },
-        Kirigami.Action {
-            text: isPaused ? qsTr("resume") : qsTr("pause")
-            icon.name: isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
-            visible: isRunning
-            onTriggered: root.togglePause()
         },
         Kirigami.Action {
             text: qsTr("reboot")
             icon.name: "system-reboot-symbolic"
             visible: isRunning
+            displayHint: Kirigami.DisplayHint.KeepVisible
             onTriggered: Karton.rebootDomain(domain)
         },
         Kirigami.Action {
             text: qsTr("reset")
             icon.name: "arrow-down-symbolic"
-            displayHint: Kirigami.DisplayHint.IconOnly
+            displayHint: Kirigami.DisplayHint.KeepVisible | Kirigami.DisplayHint.IconOnly
             visible: isRunning
             onTriggered: rebootMenu.popup()
         },
         Kirigami.Action {
-            text: qsTr("more")
-            icon.name: "view-more-symbolic"
-
-            // Nested actions let the toolbar/overflow open the menu anchored
-            // to the More button. A manually popup()ed Menu opened at the
-            // mouse cursor and looked detached in a narrow window.
-            Kirigami.Action {
-                text: qsTr("hibernate")
-                icon.name: "document-save-symbolic"
-                visible: isRunning
-                onTriggered: {
-                    if (Karton.saveDomainState(domain)) {
-                        applicationWindow().showPassiveNotification(qsTr("hibernating_vm_1").arg(domain.config.name));
-                    }
+            text: isPaused ? qsTr("resume") : qsTr("pause")
+            icon.name: isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+            visible: isRunning
+            displayHint: root.compactToolbar ? Kirigami.DisplayHint.AlwaysHide : Kirigami.DisplayHint.NoPreference
+            onTriggered: root.togglePause()
+        },
+        // Secondary actions live only in the toolbar's overflow menu. Because
+        // at least one action is always hidden, Kirigami keeps its own "More"
+        // (overflow) button on the toolbar permanently, and the primary
+        // buttons join the same menu when the window becomes too narrow
+        // instead of being clipped or nested inside a second "More" level.
+        Kirigami.Action {
+            text: qsTr("hibernate")
+            icon.name: "document-save-symbolic"
+            visible: isRunning
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+            onTriggered: {
+                Karton.saveDomainStateAsync(domain);
+            }
+        },
+        Kirigami.Action {
+            text: qsTr("delete_hibernation")
+            icon.name: "edit-delete-symbolic"
+            visible: !isRunning && hasSavedState
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+            onTriggered: {
+                if (Karton.deleteSavedState(domain)) {
+                    applicationWindow().showPassiveNotification(qsTr("deleted_hibernation_for_vm_1").arg(domain.config.name));
                 }
             }
+        },
+        Kirigami.Action {
+            separator: true
+            visible: hasSavedState || isRunning
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+        },
+        Kirigami.Action {
+            text: qsTr("snapshots")
+            icon.name: "camera-photo-symbolic"
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+            onTriggered: snapshotsDialog.open()
+        },
+        Kirigami.Action {
+            text: qsTr("clone")
+            icon.name: "edit-copy-symbolic"
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+            enabled: !Karton.connectionIsRemote(Karton.domainConnectionUri(root.domain))
+            onTriggered: cloneDialog.open()
+        },
+        Kirigami.Action {
+            separator: true
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+        },
+        Kirigami.Action {
+            text: qsTr("export")
+            icon.name: "document-save-symbolic"
+            displayHint: Kirigami.DisplayHint.AlwaysHide
             Kirigami.Action {
-                text: qsTr("delete_hibernation")
-                icon.name: "edit-delete-symbolic"
-                visible: !isRunning && hasSavedState
-                onTriggered: {
-                    if (Karton.deleteSavedState(domain)) {
-                        applicationWindow().showPassiveNotification(qsTr("deleted_hibernation_for_vm_1").arg(domain.config.name));
-                    }
-                }
+                text: qsTr("domain_xml")
+                onTriggered: exportDomainDialog.open()
             }
             Kirigami.Action {
-                separator: true
-                visible: hasSavedState || isRunning
+                text: qsTr("ovf_ova")
+                enabled: !Karton.connectionIsRemote(Karton.domainConnectionUri(root.domain))
+                onTriggered: ovfExportDialog.open()
             }
-            Kirigami.Action {
-                text: qsTr("snapshots")
-                icon.name: "camera-photo-symbolic"
-                onTriggered: snapshotsDialog.open()
-            }
-            Kirigami.Action {
-                text: qsTr("clone")
-                icon.name: "edit-copy-symbolic"
-                onTriggered: cloneDialog.open()
-            }
-            Kirigami.Action {
-                separator: true
-            }
-            Kirigami.Action {
-                text: qsTr("export")
-                icon.name: "document-save-symbolic"
-                Kirigami.Action {
-                    text: qsTr("domain_xml")
-                    onTriggered: exportDomainDialog.open()
-                }
-                Kirigami.Action {
-                    text: qsTr("ovf_ova")
-                    onTriggered: ovfExportDialog.open()
-                }
-            }
-            Kirigami.Action {
-                text: qsTr("settings")
-                icon.name: "preferences-system-symbolic"
-                onTriggered: settingsDialog.open()
-            }
-            Kirigami.Action {
-                separator: true
-                visible: !isRunning
-            }
-            Kirigami.Action {
-                text: qsTr("delete")
-                icon.name: "delete-symbolic"
-                visible: !isRunning
-                onTriggered: {
-                    deleteConfirmationDialog.domain = domain;
-                    deleteConfirmationDialog.open();
-                }
+        },
+        Kirigami.Action {
+            text: qsTr("settings")
+            icon.name: "preferences-system-symbolic"
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+            onTriggered: settingsDialog.open()
+        },
+        Kirigami.Action {
+            separator: true
+            visible: !isRunning
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+        },
+        Kirigami.Action {
+            text: qsTr("delete")
+            icon.name: "delete-symbolic"
+            visible: !isRunning
+            displayHint: Kirigami.DisplayHint.AlwaysHide
+            onTriggered: {
+                deleteConfirmationDialog.domain = domain;
+                deleteConfirmationDialog.open();
             }
         }
     ]
@@ -463,6 +510,24 @@ Kirigami.Page {
             if (root.domain && root.domain.config.uuid === uuid) {
                 root.stats = Karton.domainStats(root.domain);
                 root.recordStats();
+            }
+        }
+        function onDomainDiskStatsUpdated(uuid) {
+            if (root.domain && root.domain.config.uuid === uuid) {
+                root.diskStats = Karton.domainDiskStats(root.domain);
+            }
+        }
+        function onDomainInterfacesUpdated(uuid) {
+            if (root.domain && root.domain.config.uuid === uuid) {
+                root.networkInterfaces = Karton.domainInterfaces(root.domain);
+            }
+        }
+        function onDomainStateSaved(success, name, message) {
+            if (!root.domain || root.domain.config.name !== name) {
+                return;
+            }
+            if (!success && message.length > 0) {
+                applicationWindow().showPassiveNotification(message, "long");
             }
         }
     }
@@ -722,6 +787,38 @@ Kirigami.Page {
                 Controls.Label {
                     visible: root.diskStats.length === 0
                     text: qsTr("no_disks")
+                    opacity: 0.7
+                }
+            }
+            Controls.Label {
+                text: qsTr("network")
+                font.pixelSize: 15
+                font.weight: Font.Bold
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Repeater {
+                    model: root.networkInterfaces
+                    delegate: Controls.Label {
+                        Layout.fillWidth: true
+                        text: root.interfaceLabel(modelData)
+                        font.pixelSize: 14
+                        opacity: 0.8
+                        elide: Text.ElideMiddle
+                    }
+                }
+                Controls.Label {
+                    visible: root.networkInterfaces.length === 0
+                    text: qsTr("no_network_interfaces")
                     opacity: 0.7
                 }
             }

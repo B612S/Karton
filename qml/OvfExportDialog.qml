@@ -18,7 +18,6 @@ KartonDialog {
     property Domain domain: null
     property bool exporting: false
     property string errorText: ""
-    property string pendingGrantError: ""
 
     title: qsTr("export_ovf_ova")
     preferredDialogWidth: Kirigami.Units.gridUnit * 36
@@ -42,23 +41,6 @@ KartonDialog {
         }
     }
 
-    function requestDestinationAccess() {
-        const destination = destinationField.text.trim();
-        if (destination.length === 0) {
-            return true;
-        }
-        const accessError = Karton.checkDiskDirectoryAccess(destination);
-        if (accessError.length === 0) {
-            return true;
-        }
-        root.pendingGrantError = accessError;
-        if (Karton.canGrantDiskDirectoryAccess(destination)) {
-            grantAccessDialog.openFor(destination);
-        } else {
-            root.errorText = accessError;
-        }
-        return false;
-    }
 
     onOpened: {
         nameField.text = domain ? domain.config.name : "";
@@ -191,32 +173,10 @@ KartonDialog {
             text: qsTr("export")
             icon.name: "document-export-symbolic"
             enabled: root.domain && nameField.text.trim().length > 0 && !root.exporting
-            onTriggered: {
-                if (root.requestDestinationAccess()) {
-                    root.startExport();
-                }
-            }
+            onTriggered: root.startExport()
         }
     ]
 
-    PermissionGrantDialog {
-        id: grantAccessDialog
-        onCancelled: root.errorText = root.pendingGrantError
-        onConfirmed: {
-            const error = Karton.grantDiskDirectoryAccess(targetPath);
-            if (error.length > 0) {
-                root.errorText = error;
-                return;
-            }
-            const check = Karton.checkDiskDirectoryAccess(targetPath);
-            if (check.length > 0) {
-                root.errorText = check;
-                return;
-            }
-            root.errorText = "";
-            root.startExport();
-        }
-    }
 
     FolderDialog {
         id: destinationDialog

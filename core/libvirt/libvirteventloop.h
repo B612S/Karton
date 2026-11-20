@@ -6,7 +6,10 @@
 #include <libvirt/libvirt.h>
 
 #include <QHash>
+#include <QMutex>
 #include <QObject>
+
+#include <memory>
 
 class QSocketNotifier;
 class QTimer;
@@ -14,6 +17,11 @@ class QTimer;
 // Qt-based implementation of the libvirt event loop. Registering it lets
 // libvirt drive its file-descriptor watches and timers directly through the Qt
 // event loop instead of polling virEventRunDefaultImpl() on a timer.
+//
+// Handles and timeouts may be added from any thread: libvirt registers them
+// from the thread that opens the connection. The notifier/timer is created in
+// that thread and its callback runs there, so a worker connection is driven by
+// the worker's event loop while the GUI connection stays on the GUI thread.
 class LibvirtEventLoop : public QObject
 {
     Q_OBJECT
@@ -33,6 +41,7 @@ private:
         virFreeCallback freeCallback = nullptr;
         QSocketNotifier *readNotifier = nullptr;
         QSocketNotifier *writeNotifier = nullptr;
+        bool removed = false;
     };
 
     struct Timeout {
@@ -40,6 +49,7 @@ private:
         void *opaque = nullptr;
         virFreeCallback freeCallback = nullptr;
         QTimer *timer = nullptr;
+        bool removed = false;
     };
 
     static LibvirtEventLoop *instance();
@@ -47,10 +57,12 @@ private:
     int addHandle(int fd, int events, virEventHandleCallback callback, void *opaque, virFreeCallback freeCallback);
     void updateHandle(int watch, int events);
     int removeHandle(int watch);
+    void invokeHandle(int watch, int events);
 
     int addTimeout(int timeout, virEventTimeoutCallback callback, void *opaque, virFreeCallback freeCallback);
     void updateTimeout(int timer, int timeout);
     int removeTimeout(int timer);
+    void invokeTimeout(int timer);
 
     static int addHandleCallback(int fd, int events, virEventHandleCallback callback, void *opaque, virFreeCallback freeCallback);
     static void updateHandleCallback(int watch, int events);
@@ -59,8 +71,9 @@ private:
     static void updateTimeoutCallback(int timer, int timeout);
     static int removeTimeoutCallback(int timer);
 
-    QHash<int, Handle *> m_handles;
-    QHash<int, Timeout *> m_timeouts;
+    mutable QMutex m_mutex;
+    QHash<int, std::shared_ptr<Handle>> m_handles;
+    QHash<int, std::shared_ptr<Timeout>> m_timeouts;
     int m_nextHandle = 1;
     int m_nextTimeout = 1;
 };

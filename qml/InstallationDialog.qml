@@ -18,6 +18,14 @@ KartonDialog {
     property bool creating: false
     property string pendingName: ""
     property var hostNetworks: []
+    property var connectionOptions: []
+    property string connectionUri: ""
+    property var storagePools: []
+    property bool remoteUseExistingPath: false
+    property bool localUseStoragePool: false
+    property string pendingVolumePool: ""
+    property string pendingVolumeName: ""
+    readonly property bool remoteTarget: Karton.connectionIsRemote(addDomainDialog.connectionUri)
     property int step: 0
     readonly property int lastStep: 3
     modal: true
@@ -50,32 +58,117 @@ KartonDialog {
         return valid;
     }
 
+    function refreshNetworks() {
+        hostNetworks = Karton.networks(addDomainDialog.connectionUri).filter(network => network.active);
+        networkTypeCombo.currentIndex = 0;
+        for (let i = 0; i < hostNetworks.length; ++i) {
+            if (hostNetworks[i].name === "default") {
+                networkTypeCombo.currentIndex = i;
+                break;
+            }
+        }
+    }
+
+    function refreshPools() {
+        storagePools = Karton.storagePools(addDomainDialog.connectionUri, true);
+        remoteUseExistingPath = storagePools.length === 0;
+        localUseStoragePool = localUseStoragePool && storagePools.length > 0;
+    }
+
+    function remoteDiskSummary() {
+        if (addDomainDialog.remoteTarget && (addDomainDialog.remoteUseExistingPath || addDomainDialog.storagePools.length === 0)) {
+            return remoteDiskPathField.text.trim();
+        }
+        if (!addDomainDialog.remoteTarget && !addDomainDialog.localUseStoragePool) {
+            return (diskFolderField.text.trim() !== "" ? diskFolderField.text.trim() : Karton.imagesDirectory()) + "/"
+                    + (diskFileNameField.text.trim() !== "" ? diskFileNameField.text.trim() : nameField.text.trim()) + "." + diskFormatCombo.currentText;
+        }
+        const index = storagePoolCombo.currentIndex;
+        if (index < 0 || index >= addDomainDialog.storagePools.length) {
+            return "";
+        }
+        const pool = addDomainDialog.storagePools[index];
+        const volume = diskFileNameField.text.trim() !== "" ? diskFileNameField.text.trim() : nameField.text.trim();
+        return (pool.path.length > 0 ? pool.path + "/" : "") + volume;
+    }
+
+    Connections {
+        target: Karton
+        function onStoragePoolsUpdated(uri) {
+            if (addDomainDialog.connectionUri.length === 0 || uri === addDomainDialog.connectionUri) {
+                refreshPools();
+            }
+        }
+    }
+
+    function refreshConnections() {
+        const infos = Karton.connectionInfos();
+        connectionOptions = infos.filter(info => info.status === 1);
+        if (connectionOptions.length === 0) {
+            connectionUri = "";
+        } else if (!connectionOptions.some(info => info.uri === addDomainDialog.connectionUri)) {
+            connectionUri = connectionOptions[0].uri;
+        }
+        refreshNetworks();
+        refreshPools();
+    }
+
     function createVm() {
         if (!validateSource()) {
             step = 0;
             return;
         }
-        const folderCheck = diskFolderField.text.trim() !== "" ? diskFolderField.text.trim() : Karton.imagesDirectory();
-        const folderError = Karton.checkDiskDirectoryAccess(folderCheck);
-        if (folderError.length > 0) {
-            diskLocationError = "";
-            step = 1;
-            grantAccessDialog.openFor(folderCheck);
-            return;
-        }
+        const remote = addDomainDialog.remoteTarget;
+        const poolMode = remote
+            ? !addDomainDialog.remoteUseExistingPath && addDomainDialog.storagePools.length > 0
+            : addDomainDialog.localUseStoragePool && addDomainDialog.storagePools.length > 0;
         diskLocationError = "";
 
         const name = nameField.text.trim();
-        let diskFileName = diskFileNameField.text.trim();
-        if (diskFileName === "") {
-            diskFileName = name;
+        let diskPath = "";
+        pendingVolumePool = "";
+        pendingVolumeName = "";
+        if (poolMode) {
+            const poolIndex = storagePoolCombo.currentIndex;
+            if (poolIndex < 0 || poolIndex >= addDomainDialog.storagePools.length) {
+                diskLocationError = qsTr("select_a_storage_pool");
+                step = 1;
+                return;
+            }
+            const pool = addDomainDialog.storagePools[poolIndex];
+            let volumeName = diskFileNameField.text.trim();
+            if (volumeName === "") {
+                volumeName = name;
+            }
+            const volumePath = Karton.createStorageVolume(pool.name, volumeName, storageSpinBox.value,
+                                                          diskFormatCombo.currentText, addDomainDialog.connectionUri);
+            if (volumePath.length === 0) {
+                creating = false;
+                step = 1;
+                return;
+            }
+            diskPath = volumePath;
+            pendingVolumePool = pool.name;
+            pendingVolumeName = volumeName;
+        } else if (remote) {
+            diskPath = remoteDiskPathField.text.trim();
+            if (diskPath.length === 0) {
+                diskLocationError = qsTr("enter_the_remote_disk_path");
+                step = 1;
+                return;
+            }
+        } else {
+            let diskFileName = diskFileNameField.text.trim();
+            if (diskFileName === "") {
+                diskFileName = name;
+            }
+            const diskExtension = "." + diskFormatCombo.currentText;
+            if (diskFileName.endsWith(diskExtension)) {
+                diskFileName = diskFileName.slice(0, -diskExtension.length);
+            }
+            const diskFolder = diskFolderField.text.trim() !== "" ? diskFolderField.text.trim() : Karton.imagesDirectory();
+            diskPath = diskFolder + "/" + diskFileName + diskExtension;
         }
-        const diskExtension = "." + diskFormatCombo.currentText;
-        if (diskFileName.endsWith(diskExtension)) {
-            diskFileName = diskFileName.slice(0, -diskExtension.length);
-        }
-        const diskFolder = diskFolderField.text.trim() !== "" ? diskFolderField.text.trim() : Karton.imagesDirectory();
-        const diskPath = diskFolder + "/" + diskFileName + diskExtension;
         let networkModel = "none";
         let networkName = "";
         const hostIndex = networkTypeCombo.currentIndex;
@@ -84,10 +177,12 @@ KartonDialog {
             networkName = hostNetworks[hostIndex].name;
         }
         const domainConfig = {
+            connectionUri: addDomainDialog.connectionUri,
             name: name,
             shortOsId: osTextField.text.trim(),
-            isoDiskPath: diskImageField.text,
+            isoDiskPath: addDomainDialog.remoteTarget ? remoteIsoField.text.trim() : diskImageField.text,
             diskPath: diskPath,
+            diskPrecreated: remote || poolMode,
             memoryGB: memorySpinBox.value,
             storageGB: storageSpinBox.value,
             diskFormat: diskFormatCombo.currentText,
@@ -104,6 +199,11 @@ KartonDialog {
         if (!Karton.createDomain(domainConfig)) {
             creating = false;
             pendingName = "";
+            if (pendingVolumePool.length > 0 && pendingVolumeName.length > 0) {
+                Karton.deleteStorageVolume(pendingVolumePool, pendingVolumeName, addDomainDialog.connectionUri);
+                pendingVolumePool = "";
+                pendingVolumeName = "";
+            }
         }
     }
 
@@ -112,14 +212,7 @@ KartonDialog {
         showError = false;
         validationMessage = "";
         diskLocationError = "";
-        hostNetworks = Karton.networks().filter(network => network.active);
-        networkTypeCombo.currentIndex = 0;
-        for (let i = 0; i < hostNetworks.length; ++i) {
-            if (hostNetworks[i].name === "default") {
-                networkTypeCombo.currentIndex = i;
-                break;
-            }
-        }
+        refreshConnections();
         diskFolderField.text = Karton.imagesDirectory();
         diskFileNameField.text = "";
         nameField.forceActiveFocus();
@@ -142,15 +235,6 @@ KartonDialog {
                 if (addDomainDialog.step === 0 && !addDomainDialog.validateSource()) {
                     return;
                 }
-                if (addDomainDialog.step === 1) {
-                    const folder = diskFolderField.text.trim() !== "" ? diskFolderField.text.trim() : Karton.imagesDirectory();
-                    const error = Karton.checkDiskDirectoryAccess(folder);
-                    if (error.length > 0) {
-                        grantAccessDialog.openFor(folder);
-                        return;
-                    }
-                    addDomainDialog.diskLocationError = "";
-                }
                 addDomainDialog.step = Math.min(addDomainDialog.lastStep, addDomainDialog.step + 1);
             }
         },
@@ -172,6 +256,12 @@ KartonDialog {
 
             addDomainDialog.creating = false;
             addDomainDialog.pendingName = "";
+            if (!success && addDomainDialog.pendingVolumePool.length > 0 && addDomainDialog.pendingVolumeName.length > 0) {
+                Karton.deleteStorageVolume(addDomainDialog.pendingVolumePool, addDomainDialog.pendingVolumeName,
+                                           addDomainDialog.connectionUri);
+            }
+            addDomainDialog.pendingVolumePool = "";
+            addDomainDialog.pendingVolumeName = "";
             if (success) {
                 addDomainDialog.close();
                 applicationWindow().showPassiveNotification(qsTr("created_vm_1").arg(name));
@@ -255,6 +345,33 @@ KartonDialog {
                         Layout.fillWidth: true
 
                         Controls.Label {
+                            text: qsTr("connection")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: connectionCombo
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            model: addDomainDialog.connectionOptions
+                            textRole: "name"
+                            currentIndex: {
+                                for (let i = 0; i < addDomainDialog.connectionOptions.length; ++i) {
+                                    if (addDomainDialog.connectionOptions[i].uri === addDomainDialog.connectionUri) {
+                                        return i;
+                                    }
+                                }
+                                return addDomainDialog.connectionOptions.length > 0 ? 0 : -1;
+                            }
+                            onActivated: index => {
+                                addDomainDialog.connectionUri = addDomainDialog.connectionOptions[index].uri;
+                                addDomainDialog.refreshNetworks();
+                                addDomainDialog.refreshPools();
+                            }
+                        }
+
+                        Controls.Label {
                             text: qsTr("vm_name")
                             font.pixelSize: 14
                             Layout.fillWidth: true
@@ -271,12 +388,21 @@ KartonDialog {
                         }
 
                         Controls.Label {
+                            visible: !addDomainDialog.remoteTarget
                             text: qsTr("installation_image")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
+                        Controls.Label {
+                            visible: addDomainDialog.remoteTarget
+                            text: qsTr("remote_installation_image")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
                         RowLayout {
+                            visible: !addDomainDialog.remoteTarget
                             Layout.preferredWidth: 260
                             Layout.maximumWidth: 260
                             Layout.alignment: Qt.AlignRight
@@ -292,6 +418,14 @@ KartonDialog {
                                 icon.name: "document-open-symbolic"
                                 onClicked: fileDialog.open()
                             }
+                        }
+                        Controls.TextField {
+                            id: remoteIsoField
+                            visible: addDomainDialog.remoteTarget
+                            Layout.preferredWidth: 260
+                            Layout.maximumWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            placeholderText: "/var/lib/libvirt/images/install.iso"
                         }
                         Controls.Label {
                             Layout.columnSpan: 2
@@ -422,13 +556,32 @@ KartonDialog {
                             Layout.alignment: Qt.AlignRight
                         }
 
+                        Controls.CheckBox {
+                            visible: !addDomainDialog.remoteTarget
+                            Layout.columnSpan: 2
+                            text: qsTr("use_a_storage_pool")
+                            checked: addDomainDialog.localUseStoragePool
+                            enabled: addDomainDialog.storagePools.length > 0
+                            onToggled: addDomainDialog.localUseStoragePool = checked
+                        }
                         Controls.Label {
+                            visible: !addDomainDialog.remoteTarget && addDomainDialog.storagePools.length === 0
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            opacity: 0.65
+                            font.pixelSize: 12
+                            text: qsTr("no_active_storage_pools")
+                        }
+                        Controls.Label {
+                            visible: !addDomainDialog.remoteTarget && !addDomainDialog.localUseStoragePool
                             text: qsTr("disk_folder")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
                         RowLayout {
+                            visible: !addDomainDialog.remoteTarget && !addDomainDialog.localUseStoragePool
                             Layout.preferredWidth: 260
                             Layout.maximumWidth: 260
                             Layout.alignment: Qt.AlignRight
@@ -447,13 +600,79 @@ KartonDialog {
                         }
 
                         Controls.Label {
-                            text: qsTr("disk_file_name")
+                            visible: addDomainDialog.storagePools.length > 0
+                                     && ((addDomainDialog.remoteTarget && !addDomainDialog.remoteUseExistingPath)
+                                         || (!addDomainDialog.remoteTarget && addDomainDialog.localUseStoragePool))
+                            text: qsTr("storage_pool")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.ComboBox {
+                            id: storagePoolCombo
+                            visible: addDomainDialog.storagePools.length > 0
+                                     && ((addDomainDialog.remoteTarget && !addDomainDialog.remoteUseExistingPath)
+                                         || (!addDomainDialog.remoteTarget && addDomainDialog.localUseStoragePool))
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            model: addDomainDialog.storagePools
+                            textRole: "name"
+                            Controls.ToolTip.visible: hovered && currentIndex >= 0
+                            Controls.ToolTip.text: currentIndex >= 0 ? addDomainDialog.storagePools[currentIndex].path : ""
+                        }
+                        Controls.Label {
+                            visible: storagePoolCombo.visible && storagePoolCombo.currentIndex >= 0
+                                     && storagePoolCombo.currentIndex < addDomainDialog.storagePools.length
+                                     && !addDomainDialog.storagePools[storagePoolCombo.currentIndex].active
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            opacity: 0.65
+                            font.pixelSize: 12
+                            text: qsTr("storage_pool_inactive_will_be_started")
+                        }
+                        Controls.CheckBox {
+                            visible: addDomainDialog.remoteTarget && addDomainDialog.storagePools.length > 0
+                            Layout.columnSpan: 2
+                            text: qsTr("use_an_existing_image")
+                            checked: addDomainDialog.remoteUseExistingPath
+                            onToggled: addDomainDialog.remoteUseExistingPath = checked
+                        }
+                        Controls.Label {
+                            visible: addDomainDialog.remoteTarget && (addDomainDialog.remoteUseExistingPath || addDomainDialog.storagePools.length === 0)
+                            text: qsTr("remote_disk_path")
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                        }
+                        Controls.TextField {
+                            id: remoteDiskPathField
+                            visible: addDomainDialog.remoteTarget && (addDomainDialog.remoteUseExistingPath || addDomainDialog.storagePools.length === 0)
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            placeholderText: "/var/lib/libvirt/images/vm.qcow2"
+                        }
+                        Controls.Label {
+                            visible: addDomainDialog.remoteTarget
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            opacity: 0.65
+                            font.pixelSize: 12
+                            text: (addDomainDialog.remoteUseExistingPath || addDomainDialog.storagePools.length === 0)
+                                  ? qsTr("remote_disk_path_note")
+                                  : qsTr("remote_pool_note")
+                        }
+                        Controls.Label {
+                            visible: !addDomainDialog.remoteTarget || (addDomainDialog.storagePools.length > 0 && !addDomainDialog.remoteUseExistingPath)
+                            text: (addDomainDialog.remoteTarget || addDomainDialog.localUseStoragePool) ? qsTr("volume_name") : qsTr("disk_file_name")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
                         Controls.TextField {
                             id: diskFileNameField
+                            visible: !addDomainDialog.remoteTarget || (addDomainDialog.storagePools.length > 0 && !addDomainDialog.remoteUseExistingPath)
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                             placeholderText: nameField.text.trim() !== "" ? nameField.text.trim() : qsTr("vm_name")
@@ -462,6 +681,7 @@ KartonDialog {
                             }
                         }
                         Controls.Label {
+                            visible: !addDomainDialog.remoteTarget && !addDomainDialog.localUseStoragePool
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
@@ -470,12 +690,22 @@ KartonDialog {
                             text: qsTr("leave_the_file_name_empty_to_use_the_automatic_name_the_1_extension_is_added_automatically").arg(diskFormatCombo.currentText)
                         }
                         Controls.Label {
+                            visible: !addDomainDialog.remoteTarget && !addDomainDialog.localUseStoragePool
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                             wrapMode: Text.WrapAnywhere
                             opacity: 0.65
                             font.pixelSize: 12
                             text: qsTr("disk_will_be_created_at_1").arg((diskFolderField.text.trim() !== "" ? diskFolderField.text.trim() : Karton.imagesDirectory()) + "/" + (diskFileNameField.text.trim() !== "" ? diskFileNameField.text.trim() : (nameField.text.trim() !== "" ? nameField.text.trim() : qsTr("vm_name"))) + "." + diskFormatCombo.currentText)
+                        }
+                        Controls.Label {
+                            visible: !addDomainDialog.remoteTarget && addDomainDialog.localUseStoragePool
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            opacity: 0.65
+                            font.pixelSize: 12
+                            text: qsTr("local_pool_note")
                         }
                     }
                 }
@@ -592,8 +822,18 @@ KartonDialog {
                         }
                         Controls.CheckBox {
                             id: enableAccel3dCheckBox
-                            checked: true
+                            checked: !addDomainDialog.remoteTarget
+                            enabled: !addDomainDialog.remoteTarget
                             Layout.alignment: Qt.AlignRight
+                        }
+                        Controls.Label {
+                            visible: addDomainDialog.remoteTarget
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            opacity: 0.65
+                            font.pixelSize: 12
+                            text: qsTr("hardware_acceleration_is_disabled_for_remote_connections")
                         }
                     }
                 }
@@ -626,6 +866,14 @@ KartonDialog {
                         rowSpacing: 12
                         Layout.fillWidth: true
 
+                        Controls.Label { text: qsTr("connection"); opacity: 0.7; Layout.fillWidth: true }
+                        Controls.Label {
+                            text: addDomainDialog.connectionUri
+                            Layout.preferredWidth: 260
+                            Layout.alignment: Qt.AlignRight
+                            horizontalAlignment: Text.AlignRight
+                            elide: Text.ElideMiddle
+                        }
                         Controls.Label { text: qsTr("name"); opacity: 0.7; Layout.fillWidth: true }
                         Controls.Label {
                             text: nameField.text
@@ -673,9 +921,10 @@ KartonDialog {
                         }
                         Controls.Label { text: qsTr("disk_path"); opacity: 0.7; Layout.fillWidth: true }
                         Controls.Label {
-                            text: (diskFolderField.text.trim() !== "" ? diskFolderField.text.trim() : Karton.imagesDirectory())
-                                + "/" + (diskFileNameField.text.trim() !== "" ? diskFileNameField.text.trim() : nameField.text.trim())
-                                + "." + diskFormatCombo.currentText
+                            text: {
+                                const summary = addDomainDialog.remoteDiskSummary();
+                                return summary.length > 0 ? summary : qsTr("not_set");
+                            }
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                             horizontalAlignment: Text.AlignRight
@@ -791,24 +1040,6 @@ KartonDialog {
         }
     }
 
-    PermissionGrantDialog {
-        id: grantAccessDialog
-        onCancelled: {
-            addDomainDialog.diskLocationError = Karton.checkDiskDirectoryAccess(targetPath);
-        }
-        onConfirmed: {
-            const error = Karton.grantDiskDirectoryAccess(targetPath);
-            if (error.length > 0) {
-                addDomainDialog.diskLocationError = error;
-                return;
-            }
-            const check = Karton.checkDiskDirectoryAccess(targetPath);
-            addDomainDialog.diskLocationError = check;
-            if (check.length === 0) {
-                addDomainDialog.step = Math.min(addDomainDialog.lastStep, addDomainDialog.step + 1);
-            }
-        }
-    }
 
     Dialogs.FolderDialog {
         id: diskFolderDialog

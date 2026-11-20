@@ -3,6 +3,7 @@
 
 #include "app/karton.h"
 #include "app/karton_private.h"
+#include "app/libvirtconnection.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
@@ -10,6 +11,7 @@
 #include <QAbstractSocket>
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QDomDocument>
@@ -45,6 +47,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
@@ -223,11 +226,18 @@ int ipv4PrefixFromNetmask(quint32 netmask)
 
 // Reservations keep the time they were added in karton.conf because libvirt
 // does not record it. The network name is used as a settings group.
-QString dhcpReservationKey(const QString &networkName, const QString &mac)
+QString dhcpReservationKey(const QString &connectionUri, const QString &networkName, const QString &mac)
 {
     QString networkKey = networkName;
     networkKey.replace(QLatin1Char('/'), QLatin1Char('_'));
-    return QStringLiteral("dhcpReservation/%1/%2").arg(networkKey, mac.trimmed().toLower());
+    const QString normalizedMac = mac.trimmed().toLower();
+    if (connectionUri.isEmpty()) {
+        // Primary connection keeps the historical key so existing
+        // reservations survive the upgrade.
+        return QStringLiteral("dhcpReservation/%1/%2").arg(networkKey, normalizedMac);
+    }
+    const QString scope = QString::fromLatin1(QCryptographicHash::hash(connectionUri.toUtf8(), QCryptographicHash::Sha1).toHex());
+    return QStringLiteral("dhcpReservation/%1/%2/%3").arg(scope, networkKey, normalizedMac);
 }
 
 } // namespace
@@ -461,15 +471,16 @@ bool applyNetworkConfig(QDomDocument &document, const NetworkConfigData &data, b
 }
 } // namespace
 
-QVariantList Karton::networks() const
+QVariantList collectNetworks(virConnectPtr conn)
 {
+    ScopedCallTimer timer("Karton::networks");
     QVariantList result;
-    if (!m_conn) {
+    if (!conn) {
         return result;
     }
 
     virNetworkPtr *networkPtrs = nullptr;
-    const int count = virConnectListAllNetworks(m_conn, &networkPtrs, VIR_CONNECT_LIST_NETWORKS_ACTIVE | VIR_CONNECT_LIST_NETWORKS_INACTIVE);
+    const int count = virConnectListAllNetworks(conn, &networkPtrs, VIR_CONNECT_LIST_NETWORKS_ACTIVE | VIR_CONNECT_LIST_NETWORKS_INACTIVE);
     if (count < 0) {
         return result;
     }
@@ -596,7 +607,7 @@ QVariantList Karton::networks() const
     return result;
 }
 
-QVariantMap Karton::defaultNetworkConfig() const
+QVariantMap Karton::defaultNetworkConfig()
 {
     QSet<int> usedSubnets;
     const QVariantList existingNetworks = networks();
@@ -670,9 +681,95 @@ QVariantList Karton::hostNetworkInterfaces() const
     return result;
 }
 
+virConnectPtr Karton::connectionHandleForUri(const QString &connectionUri) const
+{
+    if (connectionUri.isEmpty() || connectionUri == this->connectionUri()) {
+        return m_conn;
+    }
+    if (LibvirtConnection *connection = connectionForUri(connectionUri)) {
+        return connection->connection();
+    }
+    return nullptr;
+}
+
+virConnectPtr Karton::networkConnectionForUri(const QString &connectionUri) const
+{
+    return connectionHandleForUri(connectionUri);
+}
+
+virConnectPtr Karton::readerConnectionForUri(const QString &connectionUri) const
+{
+    if (connectionUri.isEmpty() || connectionUri == this->connectionUri()) {
+        return m_readerEnabled.load() ? m_readerConn.load() : nullptr;
+    }
+    if (LibvirtConnection *connection = connectionForUri(connectionUri)) {
+        return connection->readerConnection();
+    }
+    return nullptr;
+}
+
+QString Karton::domainConnectionUri(const Domain *domain) const
+{
+    if (!domain) {
+        return connectionUri();
+    }
+    return connectionUriForUuid(domain->config()->uuid());
+}
+
+bool Karton::connectionIsRemote(const QString &connectionUri) const
+{
+    // Development/testing switch: exercise the remote code paths on a local
+    // connection without a remote libvirt.
+    if (qEnvironmentVariableIsSet("KARTON_FORCE_REMOTE")) {
+        return true;
+    }
+    const QString uri = connectionUri.isEmpty() ? this->connectionUri() : connectionUri;
+    return !QUrl(uri).host().isEmpty();
+}
+
+QVariantList Karton::networks(const QString &connectionUri)
+{
+    ScopedCallTimer timer("Karton::networks");
+    const QString uri = connectionUri.isEmpty() ? this->connectionUri() : connectionUri;
+    if (!m_reader || !readerConnectionForUri(uri)) {
+        virConnectPtr conn = networkConnectionForUri(uri);
+        return conn ? collectNetworks(conn) : QVariantList{};
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!m_networksTimes.contains(uri) || m_networksTimes.value(uri) == 0 || now - m_networksTimes.value(uri) > 5000) {
+        requestNetworks(uri);
+    }
+    return m_networksCache.value(uri);
+}
+
+void Karton::requestNetworks(const QString &connectionUri)
+{
+    const QString uri = connectionUri.isEmpty() ? this->connectionUri() : connectionUri;
+    virConnectPtr readerConn = readerConnectionForUri(uri);
+    if (!m_reader || !readerConn || m_networksPending.contains(uri)) {
+        return;
+    }
+    m_networksPending.insert(uri);
+    postReaderJob([this, uri, readerConn]() {
+        const QVariantList result = collectNetworks(readerConn);
+        QMetaObject::invokeMethod(
+            this,
+            [this, uri, result]() {
+                m_networksPending.remove(uri);
+                m_networksCache.insert(uri, result);
+                m_networksTimes.insert(uri, QDateTime::currentMSecsSinceEpoch());
+                Q_EMIT networksUpdated();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
 bool Karton::createNetwork(const QVariantMap &config)
 {
-    if (!m_conn) {
+    const QString connectionUri = config.value(QStringLiteral("connectionUri")).toString();
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn) {
         return false;
     }
 
@@ -683,7 +780,7 @@ bool Karton::createNetwork(const QVariantMap &config)
         return false;
     }
 
-    virNetworkPtr existing = virNetworkLookupByName(m_conn, data.name.toUtf8().constData());
+    virNetworkPtr existing = virNetworkLookupByName(conn, data.name.toUtf8().constData());
     if (existing) {
         virNetworkFree(existing);
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_already_exists").arg(data.name));
@@ -696,7 +793,7 @@ bool Karton::createNetwork(const QVariantMap &config)
         return false;
     }
 
-    virNetworkPtr network = virNetworkDefineXML(m_conn, document.toString().toUtf8().constData());
+    virNetworkPtr network = virNetworkDefineXML(conn, document.toString().toUtf8().constData());
     if (!network) {
         Q_EMIT errorOccurred(
             QCoreApplication::translate("Karton", "failed_to_define_network_1_2").arg(data.name).arg(QString::fromUtf8(virGetLastErrorMessage())));
@@ -719,13 +816,17 @@ bool Karton::createNetwork(const QVariantMap &config)
     }
 
     virNetworkFree(network);
+    m_networksTimes[connectionUri] = 0;
     Q_EMIT networksChanged();
     return true;
 }
 
 bool Karton::updateNetwork(const QVariantMap &config)
 {
-    if (!m_conn) {
+    const QString connectionUri = config.value(QStringLiteral("connectionUri")).toString();
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn) {
         return false;
     }
 
@@ -736,7 +837,7 @@ bool Karton::updateNetwork(const QVariantMap &config)
         return false;
     }
 
-    virNetworkPtr oldNetwork = virNetworkLookupByName(m_conn, data.name.toUtf8().constData());
+    virNetworkPtr oldNetwork = virNetworkLookupByName(conn, data.name.toUtf8().constData());
     if (!oldNetwork) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(data.name));
         return false;
@@ -762,7 +863,7 @@ bool Karton::updateNetwork(const QVariantMap &config)
         return false;
     }
 
-    virNetworkPtr newNetwork = virNetworkDefineXML(m_conn, document.toString().toUtf8().constData());
+    virNetworkPtr newNetwork = virNetworkDefineXML(conn, document.toString().toUtf8().constData());
     virNetworkFree(oldNetwork);
     if (!newNetwork) {
         Q_EMIT errorOccurred(
@@ -791,17 +892,20 @@ bool Karton::updateNetwork(const QVariantMap &config)
     }
 
     virNetworkFree(newNetwork);
+    m_networksTimes[connectionUri] = 0;
     Q_EMIT networksChanged();
     return true;
 }
 
-bool Karton::startNetwork(const QString &name)
+bool Karton::startNetwork(const QString &name, const QString &connectionUri)
 {
-    if (!m_conn) {
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn) {
         return false;
     }
 
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_find_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
@@ -816,18 +920,21 @@ bool Karton::startNetwork(const QString &name)
     }
     virNetworkFree(network);
     if (success) {
+        m_networksTimes[connectionUri] = 0;
         Q_EMIT networksChanged();
     }
     return success;
 }
 
-bool Karton::stopNetwork(const QString &name)
+bool Karton::stopNetwork(const QString &name, const QString &connectionUri)
 {
-    if (!m_conn) {
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn) {
         return false;
     }
 
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_find_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
@@ -841,14 +948,17 @@ bool Karton::stopNetwork(const QString &name)
     }
     virNetworkFree(network);
     if (success) {
+        m_networksTimes[connectionUri] = 0;
         Q_EMIT networksChanged();
     }
     return success;
 }
 
-bool Karton::setNetworkAutostart(const QString &name, bool autostart)
+bool Karton::setNetworkAutostart(const QString &name, bool autostart, const QString &connectionUri)
 {
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_find_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
         Q_EMIT errorOccurred(errorMsg);
@@ -863,14 +973,17 @@ bool Karton::setNetworkAutostart(const QString &name, bool autostart)
     }
     virNetworkFree(network);
     if (success) {
+        m_networksTimes[connectionUri] = 0;
         Q_EMIT networksChanged();
     }
     return success;
 }
 
-bool Karton::createNatNetwork(const QString &requestedName)
+bool Karton::createNatNetwork(const QString &requestedName, const QString &connectionUri)
 {
-    if (!m_conn) {
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn) {
         return false;
     }
 
@@ -883,7 +996,7 @@ bool Karton::createNatNetwork(const QString &requestedName)
         return false;
     }
 
-    virNetworkPtr existing = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr existing = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (existing) {
         virNetworkFree(existing);
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_already_exists").arg(name));
@@ -894,7 +1007,7 @@ bool Karton::createNatNetwork(const QString &requestedName)
     // network or by a host interface.
     QSet<int> usedSubnets;
     virNetworkPtr *networkPtrs = nullptr;
-    const int count = virConnectListAllNetworks(m_conn, &networkPtrs, VIR_CONNECT_LIST_NETWORKS_ACTIVE | VIR_CONNECT_LIST_NETWORKS_INACTIVE);
+    const int count = virConnectListAllNetworks(conn, &networkPtrs, VIR_CONNECT_LIST_NETWORKS_ACTIVE | VIR_CONNECT_LIST_NETWORKS_INACTIVE);
     if (count > 0 && networkPtrs) {
         for (int i = 0; i < count; ++i) {
             char *xml = virNetworkGetXMLDesc(networkPtrs[i], 0);
@@ -949,7 +1062,7 @@ bool Karton::createNatNetwork(const QString &requestedName)
                             .arg(name)
                             .arg(subnet);
 
-    virNetworkPtr network = virNetworkDefineXML(m_conn, xml.toUtf8().constData());
+    virNetworkPtr network = virNetworkDefineXML(conn, xml.toUtf8().constData());
     if (!network) {
         const QString errorMsg =
             QCoreApplication::translate("Karton", "failed_to_define_network_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
@@ -967,55 +1080,112 @@ bool Karton::createNatNetwork(const QString &requestedName)
     }
 
     virNetworkFree(network);
+    m_networksTimes[connectionUri] = 0;
     Q_EMIT networksChanged();
     return true;
 }
 
-QVariantList Karton::domainInterfaces(const Domain *domain) const
+namespace
 {
-    QVariantList result;
-    if (!domain || !domain->domainPtr()) {
-        return result;
-    }
+struct GuestInterfaceData {
+    QString name;
+    QStringList addresses;
+};
 
-    QHash<QString, QStringList> addresses;
-    virDomainInterfacePtr *interfaceAddresses = nullptr;
-    int addressCount = 0;
-    if (domain->isActive()) {
-        addressCount = virDomainInterfaceAddresses(domain->domainPtr(), &interfaceAddresses, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_AGENT, 0);
-        if (addressCount <= 0) {
-            addressCount = virDomainInterfaceAddresses(domain->domainPtr(), &interfaceAddresses, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_LEASE, 0);
-        }
-        if (addressCount <= 0) {
-            addressCount = virDomainInterfaceAddresses(domain->domainPtr(), &interfaceAddresses, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_ARP, 0);
-        }
-    }
-    for (int i = 0; i < addressCount; ++i) {
-        const virDomainInterface *interface = interfaceAddresses[i];
-        QStringList ips;
-        for (unsigned int j = 0; j < interface->naddrs; ++j) {
-            const QString address = QString::fromUtf8(interface->addrs[j].addr);
-            if (!address.isEmpty()) {
-                ips.append(address);
-            }
-        }
-        if (!interface->hwaddr || ips.isEmpty()) {
+// Loopback, IPv4 link-local (APIPA) and IPv6 link-local addresses are real
+// addresses of the guest but cannot be reached from the host, so they only
+// add noise to the VM page and to the port forwarding address list.
+QStringList usableInterfaceAddresses(const QStringList &addresses)
+{
+    QStringList usable;
+    for (const QString &address : addresses) {
+        if (address == QLatin1String("127.0.0.1") || address == QLatin1String("::1") || address.startsWith(QLatin1String("169.254."))
+            || address.startsWith(QLatin1String("fe80:"), Qt::CaseInsensitive)) {
             continue;
         }
-        addresses.insert(QString::fromUtf8(interface->hwaddr).toLower(), ips);
+        usable.append(address);
     }
-    for (int i = 0; i < addressCount; ++i) {
-        virDomainInterfaceFree(interfaceAddresses[i]);
-    }
-    free(interfaceAddresses);
+    // Show IPv4 first, which is what a user normally wants.
+    std::stable_sort(usable.begin(), usable.end(), [](const QString &left, const QString &right) {
+        return !left.contains(QLatin1Char(':')) && right.contains(QLatin1Char(':'));
+    });
+    return usable;
+}
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+bool interfaceAddressMissing(const QHash<QString, GuestInterfaceData> &interfaces, const QSet<QString> &macs)
+{
+    for (const QString &mac : macs) {
+        if (usableInterfaceAddresses(interfaces.value(mac).addresses).isEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void collectInterfaceAddresses(virDomainPtr domain,
+                               unsigned int source,
+                               bool readName,
+                               const QSet<QString> &wantedMacs,
+                               QHash<QString, GuestInterfaceData> *interfaces)
+{
+    virDomainInterfacePtr *addresses = nullptr;
+    const int count = virDomainInterfaceAddresses(domain, &addresses, source, 0);
+    if (count <= 0) {
+        // A missing lease/ARP entry/agent reply is an expected state, not an
+        // error worth leaving behind for the next unrelated libvirt call.
+        free(addresses);
+        virResetLastError();
+        return;
+    }
+
+    for (int i = 0; i < count; ++i) {
+        const virDomainInterface *interface = addresses[i];
+        const QString mac = interface->hwaddr ? QString::fromUtf8(interface->hwaddr).toLower() : QString();
+        if (mac.isEmpty() || !wantedMacs.contains(mac)) {
+            virDomainInterfaceFree(addresses[i]);
+            continue;
+        }
+
+        GuestInterfaceData &data = (*interfaces)[mac];
+        // The lease and ARP sources report the host-side interface name
+        // (vnet0), so only the guest agent is allowed to name the interface.
+        if (readName && data.name.isEmpty() && interface->name && *interface->name) {
+            data.name = QString::fromUtf8(interface->name);
+        }
+        for (unsigned int j = 0; j < interface->naddrs; ++j) {
+            const QString address = QString::fromUtf8(interface->addrs[j].addr).trimmed();
+            if (!address.isEmpty() && !data.addresses.contains(address)) {
+                data.addresses.append(address);
+            }
+        }
+        virDomainInterfaceFree(addresses[i]);
+    }
+    free(addresses);
+}
+} // namespace
+
+QVariantList collectInterfaces(virDomainPtr domainPtr)
+{
+    ScopedCallTimer timer("Karton::domainInterfaces");
+    QVariantList result;
+    if (!domainPtr) {
+        return result;
+    }
+
+    char *xml = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
     if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
+        xml = virDomainGetXMLDesc(domainPtr, 0);
     }
     if (!xml) {
         return result;
     }
+
+    struct ParsedInterface {
+        QString mac;
+        QVariantMap info;
+    };
+    QList<ParsedInterface> parsedInterfaces;
+    QSet<QString> macs;
 
     QDomDocument document;
     if (document.setContent(QString::fromUtf8(xml))) {
@@ -1042,12 +1212,43 @@ QVariantList Karton::domainInterfaces(const Domain *domain) const
             interfaceInfo.insert(QStringLiteral("mac"), macElement.attribute(QStringLiteral("address")));
             interfaceInfo.insert(QStringLiteral("source"), source);
             interfaceInfo.insert(QStringLiteral("model"), modelElement.attribute(QStringLiteral("type")));
-            interfaceInfo.insert(QStringLiteral("ip"), addresses.value(macElement.attribute(QStringLiteral("address")).toLower()).join(QStringLiteral(", ")));
-            result.append(interfaceInfo);
+
+            const QString mac = macElement.attribute(QStringLiteral("address")).toLower();
+            if (!mac.isEmpty()) {
+                macs.insert(mac);
+            }
+            parsedInterfaces.append({mac, interfaceInfo});
         }
     }
 
     free(xml);
+
+    QHash<QString, GuestInterfaceData> guestInterfaces;
+    if (virDomainIsActive(domainPtr) == 1 && !macs.isEmpty()) {
+        // The agent is the only source that knows the guest-side interface
+        // name, so query it first. Its reply is not proof that an address is
+        // known yet: the Windows agent reports every adapter (including the
+        // NIC right after boot, before DHCP has completed and while it only
+        // has an APIPA/link-local address). Always fill the gaps from the
+        // DHCP lease and then from the host ARP table instead of stopping at
+        // the first source that returned any interface at all.
+        collectInterfaceAddresses(domainPtr, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_AGENT, true, macs, &guestInterfaces);
+        if (interfaceAddressMissing(guestInterfaces, macs)) {
+            collectInterfaceAddresses(domainPtr, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_LEASE, false, macs, &guestInterfaces);
+        }
+        if (interfaceAddressMissing(guestInterfaces, macs)) {
+            collectInterfaceAddresses(domainPtr, VIR_DOMAIN_INTERFACE_ADDRESSES_SRC_ARP, false, macs, &guestInterfaces);
+        }
+    }
+
+    for (const ParsedInterface &parsed : parsedInterfaces) {
+        const GuestInterfaceData data = guestInterfaces.value(parsed.mac);
+        QVariantMap interfaceInfo = parsed.info;
+        interfaceInfo.insert(QStringLiteral("name"), data.name);
+        interfaceInfo.insert(QStringLiteral("ip"), usableInterfaceAddresses(data.addresses).join(QStringLiteral(", ")));
+        result.append(interfaceInfo);
+    }
+
     return result;
 }
 
@@ -1082,12 +1283,14 @@ static QString interfaceXmlForMac(virDomainPtr domain, const QString &mac, unsig
     return deviceXml;
 }
 
-bool Karton::deleteNetwork(const QString &name)
+bool Karton::deleteNetwork(const QString &name, const QString &connectionUri)
 {
-    if (!m_conn || name.isEmpty()) {
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn || name.isEmpty()) {
         return false;
     }
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(name));
         return false;
@@ -1102,6 +1305,7 @@ bool Karton::deleteNetwork(const QString &name)
     }
     virNetworkFree(network);
     if (ok) {
+        m_networksTimes[connectionUri] = 0;
         Q_EMIT networksChanged();
     }
     return ok;
@@ -1202,7 +1406,7 @@ bool Karton::detachNetwork(const Domain *domain, const QString &mac)
 
 bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, const QString &newMac, const QString &model)
 {
-    if (!domain || !domain->domainPtr() || mac.isEmpty() || newMac.isEmpty() || !m_conn) {
+    if (!domain || !domain->domainPtr() || mac.isEmpty() || newMac.isEmpty()) {
         return false;
     }
 
@@ -1238,7 +1442,7 @@ bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, cons
         }
         modelElement.setAttribute(QStringLiteral("type"), model);
 
-        virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
+        virDomainPtr redefined = virDomainDefineXML(virDomainGetConnect(domain->domainPtr()), document.toString().toUtf8().constData());
         if (!redefined) {
             Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_interface_for_domain_1_2")
                                      .arg(domain->config()->name())
@@ -1254,13 +1458,16 @@ bool Karton::editNetworkInterface(const Domain *domain, const QString &mac, cons
     return false;
 }
 
-QVariantList Karton::networkLeases(const QString &name) const
+QVariantList Karton::networkLeases(const QString &name, const QString &connectionUri) const
 {
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    ScopedCallTimer timer("Karton::networkLeases");
     QVariantList result;
-    if (!m_conn || name.isEmpty()) {
+    if (!conn || name.isEmpty()) {
         return result;
     }
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         return result;
     }
@@ -1284,13 +1491,16 @@ QVariantList Karton::networkLeases(const QString &name) const
     return result;
 }
 
-QVariantList Karton::networkDhcpHosts(const QString &name) const
+QVariantList Karton::networkDhcpHosts(const QString &name, const QString &connectionUri) const
 {
+    const QString scopeUri = (connectionUri.isEmpty() || connectionUri == this->connectionUri()) ? QString() : connectionUri;
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
     QVariantList result;
-    if (!m_conn || name.isEmpty()) {
+    if (!conn || name.isEmpty()) {
         return result;
     }
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         return result;
     }
@@ -1308,7 +1518,7 @@ QVariantList Karton::networkDhcpHosts(const QString &name) const
                 info.insert(QStringLiteral("mac"), mac);
                 info.insert(QStringLiteral("ip"), host.attribute(QStringLiteral("ip")));
                 info.insert(QStringLiteral("hostname"), host.attribute(QStringLiteral("name")));
-                info.insert(QStringLiteral("addedAt"), settings.value(dhcpReservationKey(name, mac) + QStringLiteral("/addedAt")).toString());
+                info.insert(QStringLiteral("addedAt"), settings.value(dhcpReservationKey(scopeUri, name, mac) + QStringLiteral("/addedAt")).toString());
                 result.append(info);
             }
         }
@@ -1318,10 +1528,12 @@ QVariantList Karton::networkDhcpHosts(const QString &name) const
     return result;
 }
 
-QVariantList Karton::networkDhcpCandidates(const QString &name) const
+QVariantList Karton::networkDhcpCandidates(const QString &name, const QString &connectionUri) const
 {
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
     QVariantList result;
-    if (!m_conn || name.isEmpty()) {
+    if (!conn || name.isEmpty()) {
         return result;
     }
 
@@ -1383,9 +1595,12 @@ QVariantList Karton::networkDhcpCandidates(const QString &name) const
     return result;
 }
 
-bool Karton::addNetworkDhcpHost(const QString &name, const QString &mac, const QString &ip)
+bool Karton::addNetworkDhcpHost(const QString &name, const QString &mac, const QString &ip, const QString &connectionUri)
 {
-    if (!m_conn) {
+    const QString scopeUri = (connectionUri.isEmpty() || connectionUri == this->connectionUri()) ? QString() : connectionUri;
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn) {
         return false;
     }
     static const QRegularExpression macPattern(QStringLiteral("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
@@ -1400,7 +1615,7 @@ bool Karton::addNetworkDhcpHost(const QString &name, const QString &mac, const Q
         return false;
     }
 
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(name));
         return false;
@@ -1585,19 +1800,24 @@ bool Karton::addNetworkDhcpHost(const QString &name, const QString &mac, const Q
     virNetworkFree(network);
     if (result == 0) {
         QSettings settings(kartonConfigPath(), QSettings::IniFormat);
-        settings.setValue(dhcpReservationKey(name, normalizedMac) + QStringLiteral("/addedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+        settings.setValue(dhcpReservationKey(scopeUri, name, normalizedMac) + QStringLiteral("/addedAt"),
+                          QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         settings.sync();
+        m_networksTimes[connectionUri] = 0;
         Q_EMIT networksChanged();
     }
     return result == 0;
 }
 
-bool Karton::removeNetworkDhcpHost(const QString &name, const QString &mac)
+bool Karton::removeNetworkDhcpHost(const QString &name, const QString &mac, const QString &connectionUri)
 {
-    if (!m_conn) {
+    const QString scopeUri = (connectionUri.isEmpty() || connectionUri == this->connectionUri()) ? QString() : connectionUri;
+    virConnectPtr conn = networkConnectionForUri(connectionUri);
+
+    if (!conn) {
         return false;
     }
-    virNetworkPtr network = virNetworkLookupByName(m_conn, name.toUtf8().constData());
+    virNetworkPtr network = virNetworkLookupByName(conn, name.toUtf8().constData());
     if (!network) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(name));
         return false;
@@ -1637,9 +1857,62 @@ bool Karton::removeNetworkDhcpHost(const QString &name, const QString &mac)
     virNetworkFree(network);
     if (result == 0) {
         QSettings settings(kartonConfigPath(), QSettings::IniFormat);
-        settings.remove(dhcpReservationKey(name, mac));
+        settings.remove(dhcpReservationKey(scopeUri, name, mac));
         settings.sync();
+        m_networksTimes[connectionUri] = 0;
         Q_EMIT networksChanged();
     }
     return result == 0;
+}
+
+QVariantList Karton::domainInterfaces(const Domain *domain)
+{
+    ScopedCallTimer timer("Karton::domainInterfaces");
+    if (!domain || !domain->domainPtr()) {
+        return {};
+    }
+    const QString cacheKey = Domain::uuidString(domain->domainPtr());
+    if (cacheKey.isEmpty()) {
+        return {};
+    }
+    if (!readerConnectionForUuid(cacheKey)) {
+        return collectInterfaces(domain->domainPtr());
+    }
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const auto it = m_interfaceCache.constFind(cacheKey);
+    if (it == m_interfaceCache.cend() || now - m_interfaceTimes.value(cacheKey, 0) > 2000) {
+        requestDomainInterfaces(cacheKey);
+    }
+    return it == m_interfaceCache.cend() ? QVariantList{} : *it;
+}
+
+void Karton::requestDomainInterfaces(const QString &uuid)
+{
+    virConnectPtr readerConn = readerConnectionForUuid(uuid);
+    if (!m_reader || !readerConn || m_interfacePending.contains(uuid)) {
+        return;
+    }
+    m_interfacePending.insert(uuid);
+    postReaderJob([this, uuid, readerConn]() {
+        QVariantList result;
+        if (virConnectPtr conn = readerConn) {
+            virDomainPtr dom = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
+            if (dom) {
+                result = collectInterfaces(dom);
+                virDomainFree(dom);
+            }
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, uuid, result]() {
+                m_interfacePending.remove(uuid);
+                if (domainByUuid(uuid)) {
+                    m_interfaceCache.insert(uuid, result);
+                    m_interfaceTimes.insert(uuid, QDateTime::currentMSecsSinceEpoch());
+                    Q_EMIT domainInterfacesUpdated(uuid);
+                }
+            },
+            Qt::QueuedConnection);
+    });
 }

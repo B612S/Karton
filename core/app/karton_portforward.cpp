@@ -155,8 +155,9 @@ void Karton::stopPortForwardsForDomain(const Domain *domain)
 
 void Karton::startPortForwardsForActiveDomains()
 {
-    for (const Domain *domain : std::as_const(m_domains)) {
-        if (domain->isActive()) {
+    const QVector<Domain *> allDomains = domains();
+    for (const Domain *domain : allDomains) {
+        if (domain && domain->isActive()) {
             startPortForwardsForDomain(domain);
         }
     }

@@ -7,10 +7,12 @@
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/audio/raw.h>
 
+#include <QMetaObject>
 #include <QMutexLocker>
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 
 #include "karton_debug.h"
@@ -24,15 +26,40 @@ struct PipeWireAudioSink::Private {
     pw_stream_events events = {};
     QByteArray queue;
     QMutex queueMutex;
+    QMutex streamMutex;
     int sampleRate = 0;
     int channels = 0;
     std::atomic<bool> running = false;
     std::atomic<bool> stopping = false;
+    std::atomic<float> gainLeft = 1.0f;
+    std::atomic<float> gainRight = 1.0f;
     bool loopStarted = false;
 };
 
 namespace
 {
+// SPICE sends interleaved native-endian S16. Scaling here keeps the queue
+// itself untouched, so a guest volume change applies to audio that is already
+// buffered instead of only to the next playback-start.
+void scaleSamples(uchar *destination, const char *source, qsizetype bytes, int channels, float leftGain, float rightGain)
+{
+    const qsizetype samples = bytes / static_cast<qsizetype>(sizeof(qint16));
+    const auto *input = reinterpret_cast<const qint16 *>(source);
+    auto *output = reinterpret_cast<qint16 *>(destination);
+    for (qsizetype i = 0; i < samples; ++i) {
+        const float gain = (channels > 1 && (i % channels) == 1) ? rightGain : leftGain;
+        if (gain >= 0.999f) {
+            output[i] = input[i];
+            continue;
+        }
+        const int value = static_cast<int>(std::lround(static_cast<float>(input[i]) * gain));
+        output[i] = static_cast<qint16>(std::clamp(value, -32768, 32767));
+    }
+    if (bytes & 1) {
+        destination[bytes - 1] = static_cast<uchar>(source[bytes - 1]);
+    }
+}
+
 void onProcess(void *userData)
 {
     auto *sink = static_cast<PipeWireAudioSink::Private *>(userData);
@@ -63,7 +90,12 @@ void onProcess(void *userData)
         QMutexLocker locker(&sink->queueMutex);
         copied = std::min<qsizetype>(sink->queue.size(), static_cast<qsizetype>(data.maxsize));
         if (copied > 0) {
-            std::memcpy(destination, sink->queue.constData(), static_cast<size_t>(copied));
+            scaleSamples(destination,
+                         sink->queue.constData(),
+                         copied,
+                         sink->channels,
+                         sink->gainLeft.load(std::memory_order_relaxed),
+                         sink->gainRight.load(std::memory_order_relaxed));
             sink->queue.remove(0, copied);
         }
     }
@@ -86,22 +118,50 @@ void onStateChanged(void *userData, pw_stream_state oldState, pw_stream_state st
         qCDebug(KARTON_DEBUG) << "PipeWire audio stream state:" << pw_stream_state_as_string(state);
     }
 }
-} // namespace
 
-PipeWireAudioSink::PipeWireAudioSink(QObject *parent)
-    : QObject(parent)
-    , d(std::make_unique<Private>())
+void stopOnWorker(PipeWireAudioSink::Private *d)
 {
+    if (!d) {
+        return;
+    }
+    d->stopping = true;
+    d->running = false;
+    if (d->loop && d->loopStarted) {
+        pw_thread_loop_stop(d->loop);
+        d->loopStarted = false;
+    }
+
+    pw_stream *stream = nullptr;
+    {
+        QMutexLocker locker(&d->streamMutex);
+        stream = d->stream;
+        d->stream = nullptr;
+    }
+    if (stream) {
+        pw_stream_destroy(stream);
+    }
+    if (d->core) {
+        pw_core_disconnect(d->core);
+        d->core = nullptr;
+    }
+    if (d->context) {
+        pw_context_destroy(d->context);
+        d->context = nullptr;
+    }
+    if (d->loop) {
+        pw_thread_loop_destroy(d->loop);
+        d->loop = nullptr;
+    }
+    QMutexLocker locker(&d->queueMutex);
+    d->queue.clear();
 }
 
-PipeWireAudioSink::~PipeWireAudioSink()
+bool startOnWorker(PipeWireAudioSink::Private *d, int sampleRate, int channels)
 {
-    stop();
-}
-
-bool PipeWireAudioSink::start(int sampleRate, int channels)
-{
-    stop();
+    if (!d) {
+        return false;
+    }
+    stopOnWorker(d);
     if (sampleRate <= 0 || channels <= 0) {
         return false;
     }
@@ -116,21 +176,25 @@ bool PipeWireAudioSink::start(int sampleRate, int channels)
     }
     d->context = pw_context_new(pw_thread_loop_get_loop(d->loop), nullptr, 0);
     if (!d->context) {
-        stop();
+        stopOnWorker(d);
         return false;
     }
     d->core = pw_context_connect(d->context, nullptr, 0);
     if (!d->core) {
-        stop();
+        stopOnWorker(d);
         return false;
     }
 
     pw_properties *properties =
         pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Movie", PW_KEY_NODE_NAME, "karton-audio", nullptr);
-    d->stream = pw_stream_new(d->core, "karton-audio", properties);
-    if (!d->stream) {
-        stop();
+    pw_stream *stream = pw_stream_new(d->core, "karton-audio", properties);
+    if (!stream) {
+        stopOnWorker(d);
         return false;
+    }
+    {
+        QMutexLocker locker(&d->streamMutex);
+        d->stream = stream;
     }
 
     spa_audio_info_raw audioInfo = {};
@@ -151,15 +215,15 @@ bool PipeWireAudioSink::start(int sampleRate, int channels)
     d->events.version = PW_VERSION_STREAM_EVENTS;
     d->events.state_changed = onStateChanged;
     d->events.process = onProcess;
-    pw_stream_add_listener(d->stream, &d->streamListener, &d->events, d.get());
+    pw_stream_add_listener(stream, &d->streamListener, &d->events, d);
 
     if (pw_thread_loop_start(d->loop) != 0) {
-        stop();
+        stopOnWorker(d);
         return false;
     }
     d->loopStarted = true;
     pw_thread_loop_lock(d->loop);
-    const int result = pw_stream_connect(d->stream,
+    const int result = pw_stream_connect(stream,
                                          PW_DIRECTION_OUTPUT,
                                          PW_ID_ANY,
                                          static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS),
@@ -167,12 +231,61 @@ bool PipeWireAudioSink::start(int sampleRate, int channels)
                                          1);
     pw_thread_loop_unlock(d->loop);
     if (result < 0) {
-        stop();
+        stopOnWorker(d);
         return false;
     }
 
     d->running = true;
     qCInfo(KARTON_DEBUG) << "PipeWire audio started:" << sampleRate << "Hz," << channels << "channels";
+    return true;
+}
+} // namespace
+
+PipeWireAudioSink::PipeWireAudioSink(QObject *parent)
+    : QObject(parent)
+    , d(std::make_unique<Private>())
+{
+    m_workerThread = new QThread(this);
+    m_worker = new QObject;
+    m_worker->moveToThread(m_workerThread);
+    m_workerThread->start();
+}
+
+PipeWireAudioSink::~PipeWireAudioSink()
+{
+    if (m_workerThread && m_worker) {
+        QMetaObject::invokeMethod(
+            m_worker,
+            [this]() {
+                stopOnWorker(d.get());
+            },
+            Qt::BlockingQueuedConnection);
+    }
+    if (m_workerThread) {
+        m_workerThread->quit();
+        m_workerThread->wait();
+    }
+    delete m_worker;
+    m_worker = nullptr;
+}
+
+bool PipeWireAudioSink::start(int sampleRate, int channels)
+{
+    if (!d || !m_workerThread || !m_workerThread->isRunning()) {
+        return false;
+    }
+    d->running = false;
+    d->stopping = false;
+    {
+        QMutexLocker locker(&d->queueMutex);
+        d->queue.clear();
+    }
+    QMetaObject::invokeMethod(
+        m_worker,
+        [this, sampleRate, channels]() {
+            startOnWorker(d.get(), sampleRate, channels);
+        },
+        Qt::QueuedConnection);
     return true;
 }
 
@@ -185,6 +298,7 @@ void PipeWireAudioSink::write(const char *data, qint64 size)
         QMutexLocker locker(&d->queueMutex);
         d->queue.append(data, static_cast<int>(size));
     }
+    QMutexLocker locker(&d->streamMutex);
     if (d->stream) {
         pw_stream_trigger_process(d->stream);
     }
@@ -192,36 +306,29 @@ void PipeWireAudioSink::write(const char *data, qint64 size)
 
 void PipeWireAudioSink::stop()
 {
-    if (!d) {
+    if (!d || !m_workerThread || !m_worker) {
         return;
     }
-    d->stopping = true;
     d->running = false;
-    if (d->loop && d->loopStarted) {
-        pw_thread_loop_stop(d->loop);
-        d->loopStarted = false;
-    }
-    if (d->stream) {
-        pw_stream_destroy(d->stream);
-        d->stream = nullptr;
-    }
-    if (d->core) {
-        pw_core_disconnect(d->core);
-        d->core = nullptr;
-    }
-    if (d->context) {
-        pw_context_destroy(d->context);
-        d->context = nullptr;
-    }
-    if (d->loop) {
-        pw_thread_loop_destroy(d->loop);
-        d->loop = nullptr;
-    }
-    QMutexLocker locker(&d->queueMutex);
-    d->queue.clear();
+    d->stopping = true;
+    QMetaObject::invokeMethod(
+        m_worker,
+        [this]() {
+            stopOnWorker(d.get());
+        },
+        Qt::QueuedConnection);
 }
 
 bool PipeWireAudioSink::isRunning() const
 {
     return d && d->running;
+}
+
+void PipeWireAudioSink::setVolume(float left, float right)
+{
+    if (!d) {
+        return;
+    }
+    d->gainLeft.store(std::clamp(left, 0.0f, 1.0f), std::memory_order_relaxed);
+    d->gainRight.store(std::clamp(right, 0.0f, 1.0f), std::memory_order_relaxed);
 }

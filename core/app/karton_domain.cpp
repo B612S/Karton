@@ -3,6 +3,7 @@
 
 #include "app/karton.h"
 #include "app/karton_private.h"
+#include "app/libvirtconnection.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
@@ -45,6 +46,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
@@ -73,10 +75,7 @@ QVariantMap Karton::domainHardwareInfo(const Domain *domain) const
         return info;
     }
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
-    if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
-    }
+    char *xml = cachedDomainXml(domain, true);
     if (!xml) {
         return info;
     }
@@ -192,7 +191,8 @@ bool Karton::setSharedMemoryBacking(const Domain *domain, bool enabled)
         }
     }
 
-    virDomainPtr redefined = virDomainDefineXMLFlags(m_conn, document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    virDomainPtr redefined =
+        virDomainDefineXMLFlags(virDomainGetConnect(domain->domainPtr()), document.toString().toUtf8().constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!redefined) {
         Q_EMIT errorOccurred(
             QCoreApplication::translate("Karton", "failed_to_update_shared_memory_backing_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
@@ -292,10 +292,12 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
             model = document.createElement(QStringLiteral("model"));
             video.appendChild(model);
         }
-        const QString videoModelType = settings.value(QStringLiteral("videoModel")).toString();
+        const bool remoteDomain = connectionIsRemote(domainConnectionUri(domain));
+        const QString videoModelType = remoteDomain ? QStringLiteral("qxl") : settings.value(QStringLiteral("videoModel")).toString();
         // 3D acceleration is a VirtIO-only feature; QXL and VGA have no
         // accel3d attribute and libvirt rejects it for them.
-        const bool enableAccel3d = settings.value(QStringLiteral("accel3d")).toBool() && videoModelType == QStringLiteral("virtio");
+        const bool enableAccel3d = !connectionIsRemote(domainConnectionUri(domain)) && settings.value(QStringLiteral("accel3d")).toBool()
+            && videoModelType == QStringLiteral("virtio");
         model.setAttribute(QStringLiteral("type"), videoModelType);
         if (videoModelType == QStringLiteral("virtio")) {
             if (enableAccel3d) {
@@ -447,7 +449,7 @@ bool Karton::editDomainHardware(const Domain *domain, const QVariantMap &setting
         }
     }
 
-    virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
+    virDomainPtr redefined = virDomainDefineXML(virDomainGetConnect(domain->domainPtr()), document.toString().toUtf8().constData());
     if (!redefined) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_configuration_for_domain_1_2")
                                  .arg(domain->config()->name())
@@ -466,9 +468,19 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName, con
     if (!domain || !domain->domainPtr()) {
         return false;
     }
+    if (connectionIsRemote(domainConnectionUri(domain))) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "cloning_remote_vms_is_not_supported"));
+        return false;
+    }
 
     const QString sourceName = domain->config()->name();
     const QString newName = requestedName.trimmed();
+    const QString cloneDestination = destinationDirectory.trimmed().isEmpty() ? imagesDirectory() : QDir::cleanPath(destinationDirectory.trimmed());
+    const QString destinationError = checkDirectoryWritable(cloneDestination);
+    if (!destinationError.isEmpty()) {
+        Q_EMIT errorOccurred(destinationError);
+        return false;
+    }
     if (!isValidDomainName(newName)) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_vm_name_may_only_contain_letters_digits_dots_underscores_and_dashes"));
         return false;
@@ -610,8 +622,9 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName, con
     const auto createdFiles = std::make_shared<QStringList>();
     const auto diskList = std::make_shared<QVector<DiskCopy>>(diskCopies);
 
-    auto defineClone = [this, cloneXml, createdFiles, sourceName, newName]() {
-        virDomainPtr clone = virDomainDefineXML(m_conn, cloneXml.toUtf8().constData());
+    virConnectPtr sourceConn = virDomainGetConnect(domain->domainPtr());
+    auto defineClone = [this, cloneXml, createdFiles, sourceName, newName, sourceConn]() {
+        virDomainPtr clone = virDomainDefineXML(sourceConn, cloneXml.toUtf8().constData());
         if (!clone) {
             qCWarning(KARTON_DEBUG) << "Define clone failed:" << virGetLastErrorMessage();
             for (const QString &path : std::as_const(*createdFiles)) {
@@ -629,8 +642,9 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName, con
         Q_EMIT domainCloned(true, sourceName, newName);
     };
 
+    const QString cloneConnectionUri = domainConnectionUri(domain);
     auto nextDisk = std::make_shared<std::function<void(int)>>();
-    *nextDisk = [this, diskList, createdFiles, nextDisk, defineClone, sourceName, newName](int index) {
+    *nextDisk = [this, diskList, createdFiles, nextDisk, defineClone, sourceName, newName, cloneConnectionUri](int index) {
         if (index >= diskList->size()) {
             defineClone();
             return;
@@ -639,13 +653,23 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName, con
         const DiskCopy &disk = diskList->at(index);
         m_commandRunner->runCommand(QStringLiteral("qemu-img"),
                                     {QStringLiteral("convert"), QStringLiteral("-U"), QStringLiteral("-O"), disk.format, disk.source, disk.destination},
-                                    [this, disk, createdFiles, nextDisk, sourceName, newName, index](bool success, const QString &output) {
+                                    [this, disk, createdFiles, nextDisk, sourceName, newName, index, cloneConnectionUri](bool success, const QString &output) {
                                         if (!success) {
                                             for (const QString &path : std::as_const(*createdFiles)) {
                                                 QFile::remove(path);
                                             }
                                             QFile::remove(disk.destination);
                                             Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_copy_disk_1_2").arg(disk.source).arg(output));
+                                            Q_EMIT domainCloned(false, sourceName, newName);
+                                            return;
+                                        }
+                                        const QString aclError = ensureDiskAccess(disk.destination, cloneConnectionUri);
+                                        if (!aclError.isEmpty()) {
+                                            for (const QString &path : std::as_const(*createdFiles)) {
+                                                QFile::remove(path);
+                                            }
+                                            QFile::remove(disk.destination);
+                                            Q_EMIT errorOccurred(aclError);
                                             Q_EMIT domainCloned(false, sourceName, newName);
                                             return;
                                         }
@@ -666,6 +690,7 @@ bool Karton::cloneDomain(const Domain *domain, const QString &requestedName, con
 
 bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 {
+    ScopedCallTimer timer("Karton::deleteDomain");
     if (!domain) {
         return false;
     }
@@ -679,10 +704,20 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
     QString undefineError;
     if (virDomainUndefineFlags(domainPtr, undefineFlags) < 0) {
         undefineError = QString::fromUtf8(virGetLastErrorMessage());
-        // Older libvirt versions may not understand all metadata flags. Retry
-        // with the essential NVRAM flag, then with the legacy call.
-        if (virDomainUndefineFlags(domainPtr, VIR_DOMAIN_UNDEFINE_NVRAM) < 0) {
+        // The NVRAM/varstore path may be shared with another connection or be
+        // owned by libvirt-qemu (for example a session copy of a system VM).
+        // Removing the file then fails even though the definition itself can
+        // be removed. Keep the file rather than refusing to delete the VM.
+        unsigned int keepNvramFlags = VIR_DOMAIN_UNDEFINE_KEEP_NVRAM | VIR_DOMAIN_UNDEFINE_SNAPSHOTS_METADATA | VIR_DOMAIN_UNDEFINE_CHECKPOINTS_METADATA;
+        if (domain->hasSavedState()) {
+            keepNvramFlags |= VIR_DOMAIN_UNDEFINE_MANAGED_SAVE;
+        }
+        if (virDomainUndefineFlags(domainPtr, keepNvramFlags) == 0) {
+            qCWarning(KARTON_DEBUG) << "Undefined domain but kept its NVRAM/varstore file:" << domain->config()->name();
+        } else if (virDomainUndefineFlags(domainPtr, VIR_DOMAIN_UNDEFINE_NVRAM) < 0) {
             undefineError = QString::fromUtf8(virGetLastErrorMessage());
+            // Older libvirt versions may not understand all metadata flags.
+            // Retry with the essential NVRAM flag, then the legacy call.
             if (virDomainUndefine(domainPtr) < 0) {
                 undefineError = QString::fromUtf8(virGetLastErrorMessage());
                 const QString errorMsg =
@@ -697,31 +732,97 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
     qCInfo(KARTON_DEBUG) << "Successfully undefined domain:" << domain->config()->name();
 
     bool success = true;
+    const bool remoteDomain = connectionIsRemote(domainConnectionUri(domain));
 
     if (deleteDisk) {
-        QStringList diskPaths = domain->config()->virtualDiskPaths();
+        QStringList diskPaths;
+        // Read the sources from the domain XML itself: the cached DomainConfig
+        // may not know about disks attached after the last full refresh. The
+        // inactive XML is still available before the undefine.
+        char *xml = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
+        if (!xml) {
+            xml = virDomainGetXMLDesc(domainPtr, 0);
+        }
+        if (xml) {
+            QDomDocument document;
+            if (document.setContent(QString::fromUtf8(xml))) {
+                const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+                for (int i = 0; i < disks.count(); ++i) {
+                    const QDomElement disk = disks.at(i).toElement();
+                    if (disk.attribute(QStringLiteral("device")) != QStringLiteral("disk")) {
+                        continue;
+                    }
+                    const QString source = disk.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file"));
+                    if (!source.isEmpty()) {
+                        diskPaths.append(source);
+                    }
+                }
+            }
+            free(xml);
+        }
+        if (diskPaths.isEmpty()) {
+            diskPaths = domain->config()->virtualDiskPaths();
+        }
         if (diskPaths.isEmpty() && !domain->config()->virtualDiskPath().isEmpty()) {
             diskPaths.append(domain->config()->virtualDiskPath());
         }
         diskPaths.removeDuplicates();
 
+        virConnectPtr conn = connectionHandleForUri(domainConnectionUri(domain));
         for (const QString &diskPath : std::as_const(diskPaths)) {
-            if (diskPath.isEmpty() || !QFile::exists(diskPath)) {
+            if (diskPath.isEmpty()) {
                 continue;
             }
-            if (!QFile::remove(diskPath)) {
-                const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_disk_file_1").arg(diskPath);
-                qCWarning(KARTON_DEBUG) << errorMsg;
-                Q_EMIT errorOccurred(errorMsg);
-                success = false;
-            } else {
-                qCInfo(KARTON_DEBUG) << "Successfully deleted disk image:" << diskPath;
+            // Pool volumes (local and remote) must be deleted through libvirt:
+            // the pool directory can be owned by libvirt-qemu and not writable
+            // by the Karton user.
+            bool volumeFound = false;
+            bool volumeDeleted = false;
+            if (conn) {
+                virStorageVolPtr volume = virStorageVolLookupByPath(conn, diskPath.toUtf8().constData());
+                if (volume) {
+                    volumeFound = true;
+                    if (virStorageVolDelete(volume, 0) != 0) {
+                        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_storage_volume_1_2")
+                                                     .arg(diskPath, QString::fromUtf8(virGetLastErrorMessage()));
+                        qCWarning(KARTON_DEBUG) << errorMsg;
+                        Q_EMIT errorOccurred(errorMsg);
+                        success = false;
+                    } else {
+                        volumeDeleted = true;
+                        qCInfo(KARTON_DEBUG) << "Deleted storage volume:" << diskPath;
+                    }
+                    virStorageVolFree(volume);
+                }
             }
+            if (volumeDeleted) {
+                continue;
+            }
+            if (volumeFound) {
+                // The libvirt volume delete failed; do not fall through to a
+                // plain file remove on a path Karton may not own.
+                continue;
+            }
+            if (!remoteDomain) {
+                if (!QFile::exists(diskPath)) {
+                    continue;
+                }
+                if (!QFile::remove(diskPath)) {
+                    const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_disk_file_1").arg(diskPath);
+                    qCWarning(KARTON_DEBUG) << errorMsg;
+                    Q_EMIT errorOccurred(errorMsg);
+                    success = false;
+                } else {
+                    qCInfo(KARTON_DEBUG) << "Successfully deleted disk image:" << diskPath;
+                }
+            }
+            // Remote paths outside a storage pool are left alone: Karton
+            // cannot remove arbitrary files on another host.
         }
     }
 
     const QString previewPath = domain->config()->screenshotPreviewPath();
-    if (!previewPath.isEmpty() && QFile::exists(previewPath) && !QFile::remove(previewPath)) {
+    if (!remoteDomain && !previewPath.isEmpty() && QFile::exists(previewPath) && !QFile::remove(previewPath)) {
         const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_preview_image_1").arg(previewPath);
         qCWarning(KARTON_DEBUG) << errorMsg;
         Q_EMIT errorOccurred(errorMsg);
@@ -729,7 +830,10 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
     }
 
     auto *removableDomain = const_cast<Domain *>(domain);
-    if (m_domains.removeOne(removableDomain)) {
+    if (LibvirtConnection *connection = connectionForDomain(removableDomain)) {
+        connection->removeDomain(removableDomain);
+        removableDomain->deleteLater();
+    } else if (m_domains.removeOne(removableDomain)) {
         saveDomainOrder(m_domains, m_activeUri.isEmpty() ? connectionUri() : m_activeUri);
         Q_EMIT domainRemoved(removableDomain);
         removableDomain->deleteLater();
@@ -740,10 +844,13 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
 
 bool Karton::createDomain(const QVariantMap &config)
 {
-    if (!m_conn) {
+    const QString targetUri = config.value(QStringLiteral("connectionUri")).toString();
+    virConnectPtr conn = connectionHandleForUri(targetUri);
+    if (!conn) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "not_connected_to_libvirt"));
         return false;
     }
+    const bool remoteTarget = connectionIsRemote(targetUri);
 
     const QString name = config.value(QStringLiteral("name")).toString().trimmed();
     const int memoryGB = config.value(QStringLiteral("memoryGB")).toInt();
@@ -774,8 +881,8 @@ bool Karton::createDomain(const QVariantMap &config)
         return false;
     }
     const QString networkName = config.value(QStringLiteral("networkName")).toString().trimmed();
-    if (!networkName.isEmpty() && m_conn) {
-        virNetworkPtr network = virNetworkLookupByName(m_conn, networkName.toUtf8().constData());
+    if (!networkName.isEmpty() && conn) {
+        virNetworkPtr network = virNetworkLookupByName(conn, networkName.toUtf8().constData());
         if (!network) {
             Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "network_not_found_1").arg(networkName));
             return false;
@@ -801,28 +908,36 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.maxDiskStorage = storageGB;
     configData.xmlConfigPath = getXmlConfigPath(name);
     configData.isoDiskPath = config.value(QStringLiteral("isoDiskPath")).toString();
+    const bool diskPrecreated = config.value(QStringLiteral("diskPrecreated"), false).toBool();
     QString diskPath = config.value(QStringLiteral("diskPath")).toString().trimmed();
     if (diskPath.isEmpty()) {
+        if (remoteTarget) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "remote_disk_path_required"));
+            return false;
+        }
         diskPath = getVirtualDiskPath(name, diskFormat);
     } else {
         diskPath = QDir::cleanPath(diskPath);
-        if (QFileInfo(diskPath).isRelative()) {
+        if (!remoteTarget && QFileInfo(diskPath).isRelative()) {
             diskPath = QDir::current().absoluteFilePath(diskPath);
         }
     }
-    const QFileInfo diskInfo(diskPath);
-    if (!QDir().mkpath(diskInfo.absolutePath())) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_image_directory_1").arg(diskInfo.absolutePath()));
-        return false;
-    }
-    if (QFile::exists(diskPath)) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_disk_path_already_exists_1").arg(diskPath));
-        return false;
-    }
-    const QString accessError = checkDiskDirectoryAccess(diskInfo.absolutePath());
-    if (!accessError.isEmpty()) {
-        Q_EMIT errorOccurred(accessError);
-        return false;
+    if (!diskPrecreated) {
+        if (remoteTarget) {
+            // A disk must be created on the remote host through its storage
+            // pools; a local qemu-img run would write to the wrong machine.
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "remote_disk_creation_is_not_supported"));
+            return false;
+        }
+        const QFileInfo diskInfo(diskPath);
+        if (!QDir().mkpath(diskInfo.absolutePath())) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_image_directory_1").arg(diskInfo.absolutePath()));
+            return false;
+        }
+        if (QFile::exists(diskPath)) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_disk_path_already_exists_1").arg(diskPath));
+            return false;
+        }
     }
     configData.virtualDiskPath = diskPath;
     configData.virtualDiskPaths = {configData.virtualDiskPath};
@@ -831,11 +946,42 @@ bool Karton::createDomain(const QVariantMap &config)
     configData.networkModel = networkModel;
     configData.networkName = networkName;
     configData.secureBoot = config.value(QStringLiteral("secureBoot"), false).toBool();
-    configData.enableAccel3d = config.value(QStringLiteral("enableAccel3d"), true).toBool();
+    // A remote host may have no /dev/dri (nested VM, server without GPU);
+    // forcing SPICE GL/3D there makes libvirt fail to start the domain.
+    configData.enableAccel3d = !remoteTarget && config.value(QStringLiteral("enableAccel3d"), true).toBool();
+
+    if (diskPrecreated) {
+        const QString aclError = ensureDiskAccess(diskPath, targetUri);
+        if (!aclError.isEmpty()) {
+            Q_EMIT errorOccurred(aclError);
+            return false;
+        }
+        if (!configData.isoDiskPath.isEmpty()) {
+            const QString isoError = ensureDiskAccess(configData.isoDiskPath, targetUri, true);
+            if (!isoError.isEmpty()) {
+                Q_EMIT errorOccurred(isoError);
+                return false;
+            }
+        }
+        DomainConfig domainConfig(configData);
+        DomainXmlBuilder builder;
+        if (!builder.setupDomain(conn, &domainConfig, remoteTarget)) {
+            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_domain_1").arg(name));
+            Q_EMIT domainCreated(false, name);
+            return false;
+        }
+        if (LibvirtConnection *target = connectionForUri(targetUri)) {
+            target->refreshDomains();
+        } else {
+            refreshDomainList();
+        }
+        Q_EMIT domainCreated(true, name);
+        return true;
+    }
 
     m_commandRunner->runCommand(QStringLiteral("qemu-img"),
                                 {QStringLiteral("create"), QStringLiteral("-f"), diskFormat, diskPath, QStringLiteral("%1G").arg(storageGB)},
-                                [this, name, diskPath, configData](bool success, const QString &output) {
+                                [this, name, diskPath, configData, targetUri, remoteTarget](bool success, const QString &output) {
                                     if (!success) {
                                         QFile::remove(diskPath);
                                         const QString errorMsg =
@@ -846,9 +992,37 @@ bool Karton::createDomain(const QVariantMap &config)
                                         return;
                                     }
 
+                                    const QString aclError = ensureDiskAccess(diskPath, targetUri);
+                                    if (!aclError.isEmpty()) {
+                                        QFile::remove(diskPath);
+                                        qCWarning(KARTON_DEBUG) << aclError;
+                                        Q_EMIT errorOccurred(aclError);
+                                        Q_EMIT domainCreated(false, name);
+                                        return;
+                                    }
+                                    if (!configData.isoDiskPath.isEmpty()) {
+                                        const QString isoError = ensureDiskAccess(configData.isoDiskPath, targetUri, true);
+                                        if (!isoError.isEmpty()) {
+                                            QFile::remove(diskPath);
+                                            qCWarning(KARTON_DEBUG) << isoError;
+                                            Q_EMIT errorOccurred(isoError);
+                                            Q_EMIT domainCreated(false, name);
+                                            return;
+                                        }
+                                    }
+
+                                    virConnectPtr targetConn = connectionHandleForUri(targetUri);
+                                    if (!targetConn) {
+                                        QFile::remove(diskPath);
+                                        const QString errorMsg = QCoreApplication::translate("Karton", "not_connected_to_libvirt");
+                                        Q_EMIT errorOccurred(errorMsg);
+                                        Q_EMIT domainCreated(false, name);
+                                        return;
+                                    }
+
                                     DomainConfig domainConfig(configData);
                                     DomainXmlBuilder builder;
-                                    if (!builder.setupDomain(m_conn, &domainConfig)) {
+                                    if (!builder.setupDomain(targetConn, &domainConfig, remoteTarget)) {
                                         QFile::remove(diskPath);
                                         const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_create_domain_1").arg(name);
                                         qCWarning(KARTON_DEBUG) << errorMsg;
@@ -858,7 +1032,11 @@ bool Karton::createDomain(const QVariantMap &config)
                                     }
 
                                     qCInfo(KARTON_DEBUG) << "Successfully created domain:" << name;
-                                    refreshDomainList();
+                                    if (LibvirtConnection *target = connectionForUri(targetUri)) {
+                                        target->refreshDomains();
+                                    } else {
+                                        refreshDomainList();
+                                    }
                                     Q_EMIT domainCreated(true, name);
                                 });
 
@@ -944,7 +1122,7 @@ bool Karton::editDomain(const Domain *domain, const QVariantMap &config)
         }
 
         virDomainPtr domainPtr = target->domainPtr();
-        virDomainPtr redefined = virDomainDefineXML(m_conn, xmlString.toUtf8().constData());
+        virDomainPtr redefined = virDomainDefineXML(virDomainGetConnect(domainPtr), xmlString.toUtf8().constData());
         if (!redefined) {
             const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_update_configuration_for_domain_1_2")
                                          .arg(oldName)

@@ -110,6 +110,10 @@ public:
     void setState(const QString &state);
     void setRamUsage(int ramUsage);
     void setAutostart(bool autostart);
+    // Kept in sync by every refresh, so the details page never shows a CPU or
+    // memory figure from before the last edit.
+    void setCpus(int cpus);
+    void setMaxRam(int maxRam);
     static QString uuidString(virDomainPtr domainPtr);
     void savePreviewFrame(QImage frame);
     void clearPreviewFrame();

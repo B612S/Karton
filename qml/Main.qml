@@ -58,11 +58,28 @@ Kirigami.ApplicationWindow {
         return window;
     }
 
-    readonly property real wideScreenThreshold: Kirigami.Units.gridUnit * 40
-    readonly property bool isWidescreen: (root.width >= wideScreenThreshold) && root.wideScreen // prevent being widescreen at first launch
-
-    pageStack.columnView.columnResizeMode: isWidescreen ? Kirigami.ColumnView.FixedColumns : Kirigami.ColumnView.SingleColumn
+    // Karton always uses the two-column desktop layout: the VM list is the
+    // fixed left column and the details page the right one. Keeping the mode
+    // fixed prevents the list from disappearing when a VM is opened.
+    pageStack.columnView.columnResizeMode: Kirigami.ColumnView.FixedColumns
     pageStack.columnView.columnWidth: Kirigami.Units.gridUnit * 16
+
+    // Keep the VM list column visible when a details page is pushed or the
+    // window is resized. Kirigami's ColumnView may scroll horizontally to the
+    // last column; that left the list off-screen (the reported "panel
+    // disappeared" regression). Re-assert the fixed mode and reset the
+    // horizontal scroll on every navigation/resize.
+    Connections {
+        target: pageStack
+        function onCurrentItemChanged() {
+            pageStack.columnView.columnResizeMode = Kirigami.ColumnView.FixedColumns;
+            pageStack.columnView.contentX = 0;
+        }
+        function onDepthChanged() {
+            pageStack.columnView.columnResizeMode = Kirigami.ColumnView.FixedColumns;
+            pageStack.columnView.contentX = 0;
+        }
+    }
 
     title: qsTr("karton_virtual_machine_manager")
 
@@ -70,6 +87,12 @@ Kirigami.ApplicationWindow {
 
     ErrorLogDialog {
         id: errorLogDialog
+    }
+
+    BusyOperationDialog {
+        id: busyOperationDialog
+        windowActive: root.active
+        domain: pageStack.lastItem && pageStack.lastItem.domain !== undefined ? pageStack.lastItem.domain : null
     }
 
     Connections {
@@ -91,9 +114,26 @@ Kirigami.ApplicationWindow {
             height = Math.max(minimumWindowHeight, Math.min(saved.height, Screen.height * 0.95));
         }
         sizeRestored = true;
+        // Compile the viewer component once the window is up instead of
+        // blocking the first "open VM" click.
+        Qt.callLater(function() {
+            if (!viewerWindowComponent) {
+                viewerWindowComponent = Qt.createComponent("VMViewerWindow.qml", Component.PreferSynchronous);
+                if (viewerWindowComponent && viewerWindowComponent.status === Component.Error) {
+                    // Do not cache a failed preload: createViewerWindow() will
+                    // retry and report the real error when the user opens a VM.
+                    viewerWindowComponent = null;
+                }
+            }
+        });
     }
 
-    onWidthChanged: if (sizeRestored) mainSizeTimer.restart()
+    onWidthChanged: {
+        if (sizeRestored) {
+            mainSizeTimer.restart();
+        }
+        pageStack.columnView.contentX = 0;
+    }
     onHeightChanged: if (sizeRestored) mainSizeTimer.restart()
     onClosing: (close) => {
         // Destroying the platform window from inside the close event deadlocks

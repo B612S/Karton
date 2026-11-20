@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 B612S <sem.alimov@inbox.ru>
 
+#include <QElapsedTimer>
 #include <QtTest>
 
 #include "util/commandrunner.h"
@@ -18,6 +19,9 @@ private Q_SLOTS:
     void asyncReportsStderrOnFailure();
     void blockingDoesNotReturnStdoutOnFailure();
     void asyncEmptyOutput();
+    void asyncTimesOut();
+    void blockingTimesOut();
+    void cancelStopsCommand();
 };
 
 void CommandRunnerTest::asyncSuccess()
@@ -145,6 +149,72 @@ void CommandRunnerTest::asyncEmptyOutput()
     QTRY_VERIFY_WITH_TIMEOUT(called, 5000);
     QVERIFY(success);
     QVERIFY(output.isEmpty());
+}
+
+void CommandRunnerTest::asyncTimesOut()
+{
+    CommandRunner runner;
+    int calls = 0;
+    bool success = true;
+    QString output;
+    QElapsedTimer elapsed;
+    elapsed.start();
+
+    runner.runCommand(
+        QStringLiteral("/bin/sh"),
+        {QStringLiteral("-c"), QStringLiteral("sleep 10")},
+        [&](bool ok, const QString &text) {
+            ++calls;
+            success = ok;
+            output = text;
+        },
+        300);
+
+    QTRY_COMPARE_WITH_TIMEOUT(calls, 1, 5000);
+    QVERIFY(!success);
+    QVERIFY(!output.isEmpty());
+    QVERIFY(elapsed.elapsed() < 5000);
+
+    // The killed process still reports `finished`; it must not invoke the
+    // callback a second time.
+    QTest::qWait(800);
+    QCOMPARE(calls, 1);
+}
+
+void CommandRunnerTest::blockingTimesOut()
+{
+    CommandRunner runner;
+    QElapsedTimer elapsed;
+    elapsed.start();
+
+    QVERIFY(!runner.runCommandAndWait(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), QStringLiteral("sleep 10")}, nullptr, 300));
+    QVERIFY(elapsed.elapsed() < 5000);
+}
+
+void CommandRunnerTest::cancelStopsCommand()
+{
+    CommandRunner runner;
+    bool called = false;
+    bool success = true;
+    QString output;
+    QElapsedTimer elapsed;
+    elapsed.start();
+
+    const CommandRunner::CommandId id =
+        runner.runCommand(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), QStringLiteral("sleep 10")}, [&](bool ok, const QString &text) {
+            called = true;
+            success = ok;
+            output = text;
+        });
+    QVERIFY(id != 0);
+
+    QTest::qWait(200);
+    runner.cancelCommand(id);
+
+    QTRY_VERIFY_WITH_TIMEOUT(called, 5000);
+    QVERIFY(!success);
+    QVERIFY(!output.isEmpty());
+    QVERIFY(elapsed.elapsed() < 5000);
 }
 
 QTEST_GUILESS_MAIN(CommandRunnerTest)

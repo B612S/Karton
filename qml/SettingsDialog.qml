@@ -22,6 +22,8 @@ KartonDialog {
     header: Item {}
 
     property Domain domain: null
+    readonly property bool remoteDomain: root.domain ? Karton.connectionIsRemote(Karton.domainConnectionUri(root.domain)) : false
+    property var diskStoragePools: []
     property var parentWindow: null
     property bool saving: false
     property string pendingName: ""
@@ -31,6 +33,8 @@ KartonDialog {
     // the dialog (or reverting an edit) does not enable it.
     property string savedSettings: ""
     property bool formReady: false
+    property bool loading: false
+    property bool waitingForXml: false
     readonly property bool hasChanges: formReady && savedSettings.length > 0
         && JSON.stringify(currentSettings()) !== savedSettings
     property var hardware: ({})
@@ -111,6 +115,7 @@ KartonDialog {
         }
         // Suppress dirty tracking while the controls are being repopulated.
         formReady = false;
+        loading = true;
         const currentDomain = Karton.domainByUuid(domain.config.uuid);
         if (currentDomain && currentDomain !== domain) {
             domain = currentDomain;
@@ -121,9 +126,6 @@ KartonDialog {
         portForwards = Karton.domainPortForwards(domain);
         usbDevices = Karton.domainUsbDevices(domain);
         pciDevices = Karton.domainPciDevices(domain);
-        networks = Karton.networks();
-        pciHostDevices = Karton.pciDevices();
-        usbHostDevices = Karton.usbDevices();
         performance = Karton.domainStats(domain);
         xmlDevices = Karton.domainXmlDevices(domain);
         inputDevices = Karton.domainInputDevices(domain);
@@ -196,6 +198,9 @@ KartonDialog {
         clipboardFilesCombo.currentIndex = Karton.clipboardFilesMode();
         markSettingsSaved();
         formReady = true;
+        // Host-wide lists are not needed to paint the first page; load them
+        // after the dialog is visible instead of blocking on open.
+        Qt.callLater(root.refreshHostLists);
     }
 
     function currentSettings() {
@@ -243,6 +248,25 @@ KartonDialog {
             clipboardFiles: clipboardFilesCombo.currentIndex,
             memoryBacking: memoryBackingCheck.checked
         };
+    }
+
+    function startSettingsLoad() {
+        if (!root.waitingForXml) {
+            return;
+        }
+        root.waitingForXml = false;
+        xmlWaitTimer.stop();
+        if (!root.opened) {
+            return;
+        }
+        Qt.callLater(root.refresh);
+    }
+
+    function refreshHostLists() {
+        networks = Karton.networks(root.domain ? Karton.domainConnectionUri(root.domain) : "");
+        pciHostDevices = Karton.pciDevices();
+        usbHostDevices = Karton.usbDevices();
+        loading = false;
     }
 
     function nearestVideoMemory(memoryMiB) {
@@ -409,7 +433,7 @@ KartonDialog {
                 }
             }
             if (iface.type === "network" && iface.source) {
-                const leases = Karton.networkLeases(iface.source);
+                const leases = Karton.networkLeases(iface.source, root.domain ? Karton.domainConnectionUri(root.domain) : "");
                 for (let j = 0; j < leases.length; ++j) {
                     const ip = leases[j].ip;
                     if (ip && result.indexOf(ip) < 0) {
@@ -458,10 +482,17 @@ KartonDialog {
         memorySpinBox.value = domain.config.maxRam;
         cpuSpinBox.value = domain.config.cpus;
         xmlEditSwitch.checked = false;
-        refresh();
+        loading = true;
+        waitingForXml = true;
+        // Fetch the live/inactive XML on the reader thread first; the getters
+        // below then parse the cache instead of calling libvirt on the GUI.
+        Karton.prefetchDomainXml(domain);
+        xmlWaitTimer.restart();
     }
 
     onClosed: {
+        waitingForXml = false;
+        xmlWaitTimer.stop();
         formReady = false;
         categoryList.currentIndex = 0;
         categoryList.positionViewAtBeginning();
@@ -575,10 +606,24 @@ KartonDialog {
 
     Connections {
         target: Karton
+        function onDomainXmlCached(uuid) {
+            if (root.waitingForXml && root.domain && root.domain.config.uuid === uuid) {
+                root.startSettingsLoad();
+            }
+        }
         function onDomainStatsUpdated(uuid) {
             if (root.domain && root.domain.config.uuid === uuid) {
                 root.performance = Karton.domainStats(root.domain);
             }
+        }
+        function onNetworksUpdated() {
+            root.networks = Karton.networks(root.domain ? Karton.domainConnectionUri(root.domain) : "");
+        }
+        function onPciDevicesUpdated() {
+            root.pciHostDevices = Karton.pciDevices();
+        }
+        function onUsbDevicesUpdated() {
+            root.usbHostDevices = Karton.usbDevices();
         }
         function onDomainEdited(success, name) {
             if (name !== root.pendingName) {
@@ -636,6 +681,13 @@ KartonDialog {
             Layout.alignment: Qt.AlignVCenter
         }
         Item { Layout.fillWidth: true }
+        Controls.BusyIndicator {
+            running: root.loading
+            visible: running
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            Layout.alignment: Qt.AlignVCenter
+        }
         Controls.ToolButton {
             icon.name: "dialog-close"
             display: Controls.AbstractButton.IconOnly
@@ -1147,6 +1199,11 @@ KartonDialog {
                                     icon.name: "media-optical-symbolic"
                                     onClicked: {
                                         root.mediaTargetDev = modelData.target;
+                                        if (root.remoteDomain) {
+                                            editDiskDialog.prepare(modelData.target);
+                                            editDiskDialog.open();
+                                            return;
+                                        }
                                         mediaFileDialog.open();
                                     }
                                 }
@@ -1182,20 +1239,20 @@ KartonDialog {
                                     Controls.MenuItem {
                                         text: qsTr("check_disk_image")
                                         icon.name: "document-preview-symbolic"
-                                        enabled: diskToolsMenu.sourcePath.length > 0
+                                        enabled: !root.remoteDomain && diskToolsMenu.sourcePath.length > 0
                                         onTriggered: Karton.checkDiskImage(root.domain, diskToolsMenu.sourcePath)
                                     }
                                     Controls.MenuItem {
                                         text: qsTr("compact_disk_image")
                                         icon.name: "archive-insert-symbolic"
-                                        enabled: !diskToolsMenu.isCdrom && root.domain && !root.domain.isActive
+                                        enabled: !root.remoteDomain && !diskToolsMenu.isCdrom && root.domain && !root.domain.isActive
                                             && (modelData.format === "qcow2" || diskToolsMenu.sourcePath.toLowerCase().endsWith(".qcow2"))
                                         onTriggered: Karton.compactDiskImage(root.domain, diskToolsMenu.sourcePath)
                                     }
                                     Controls.MenuItem {
                                         text: qsTr("convert_disk_image")
                                         icon.name: "document-export-symbolic"
-                                        enabled: !diskToolsMenu.isCdrom && root.domain && !root.domain.isActive
+                                        enabled: !root.remoteDomain && !diskToolsMenu.isCdrom && root.domain && !root.domain.isActive
                                             && diskToolsMenu.sourcePath.length > 0
                                         onTriggered: {
                                             convertDiskDialog.sourcePath = diskToolsMenu.sourcePath;
@@ -1213,7 +1270,7 @@ KartonDialog {
                                     Controls.MenuItem {
                                         text: qsTr("open_disk_folder")
                                         icon.name: "folder-open-symbolic"
-                                        enabled: diskToolsMenu.sourcePath.length > 0
+                                        enabled: !root.remoteDomain && diskToolsMenu.sourcePath.length > 0
                                         onTriggered: Karton.openDiskFolder(diskToolsMenu.sourcePath)
                                     }
                                 }
@@ -1494,7 +1551,8 @@ KartonDialog {
                         }
                         Controls.CheckBox {
                             id: accel3dCheck
-                            enabled: videoCombo.currentIndex >= 0 && videoModels[videoCombo.currentIndex] === "virtio"
+                            enabled: !root.remoteDomain && videoCombo.currentIndex >= 0
+                                     && videoModels[videoCombo.currentIndex] === "virtio"
                             Layout.alignment: Qt.AlignRight
                         }
                     }
@@ -2585,6 +2643,7 @@ KartonDialog {
 
         function prepare(dev) {
             targetDev = dev;
+            root.diskStoragePools = Karton.storagePools(Karton.domainConnectionUri(root.domain), true);
             const advanced = Karton.domainDiskAdvanced(root.domain, targetDev);
             isCdrom = advanced.device === "cdrom";
             sourcePath = advanced.source || "";
@@ -2629,24 +2688,38 @@ KartonDialog {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                 }
-                RowLayout {
+                Controls.TextField {
+                    id: diskEditPathField
                     Layout.preferredWidth: 260
                     Layout.maximumWidth: 260
                     Layout.alignment: Qt.AlignRight
+                    text: editDiskDialog.sourcePath
+                    readOnly: !editDiskDialog.sourceEditable
+                    placeholderText: qsTr("none")
+                    onTextEdited: editDiskDialog.sourcePath = text
+                }
+                RowLayout {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignRight
                     spacing: 8
-                    Controls.TextField {
-                        id: diskEditPathField
-                        Layout.fillWidth: true
-                        text: editDiskDialog.sourcePath
-                        readOnly: !editDiskDialog.sourceEditable
-                        placeholderText: qsTr("none")
-                        onTextEdited: editDiskDialog.sourcePath = text
-                    }
                     Controls.Button {
+                        visible: !root.remoteDomain
                         text: qsTr("change")
                         icon.name: "folder-open-symbolic"
                         enabled: editDiskDialog.sourceEditable
                         onClicked: diskSourceFileDialog.open()
+                    }
+                    Controls.Button {
+                        visible: root.diskStoragePools.length > 0
+                        text: qsTr("from_pool")
+                        icon.name: "drive-harddisk-symbolic"
+                        enabled: editDiskDialog.sourceEditable
+                        onClicked: {
+                            storageVolumePicker.connectionUri = Karton.domainConnectionUri(root.domain);
+                            storageVolumePicker.forIso = editDiskDialog.isCdrom;
+                            storageVolumePicker.open();
+                        }
                     }
                 }
                 Controls.Label {
@@ -2762,22 +2835,7 @@ KartonDialog {
                 text: qsTr("save")
                 icon.name: "dialog-ok-symbolic"
                 enabled: editDiskDialog.savedState.length > 0 && editDiskDialog.currentState() !== editDiskDialog.savedState
-                onTriggered: {
-                    const path = editDiskDialog.sourcePath.trim();
-                    if (path.length > 0 && path !== editDiskDialog.originalSource) {
-                        const slash = path.lastIndexOf("/");
-                        if (slash > 0) {
-                            const directory = path.substring(0, slash);
-                            const error = Karton.checkDiskDirectoryAccess(directory);
-                            if (error.length > 0) {
-                                editDiskDialog.diskEditError = "";
-                                diskPathGrantDialog.openFor(directory);
-                                return;
-                            }
-                        }
-                    }
-                    editDiskDialog.applySettings();
-                }
+                onTriggered: editDiskDialog.applySettings()
             }
         ]
     }
@@ -2871,22 +2929,24 @@ KartonDialog {
         }
     }
 
-    PermissionGrantDialog {
-        id: diskPathGrantDialog
-        onCancelled: {
-            editDiskDialog.diskEditError = Karton.checkDiskDirectoryAccess(targetPath);
-        }
-        onConfirmed: {
-            const error = Karton.grantDiskDirectoryAccess(targetPath);
-            if (error.length > 0) {
-                editDiskDialog.diskEditError = error;
+
+    Connections {
+        target: Karton
+        function onStoragePoolsUpdated(uri) {
+            if (!root.domain) {
                 return;
             }
-            const check = Karton.checkDiskDirectoryAccess(targetPath);
-            editDiskDialog.diskEditError = check;
-            if (check.length === 0) {
-                editDiskDialog.applySettings();
+            const domainUri = Karton.domainConnectionUri(root.domain);
+            if (domainUri.length === 0 || uri === domainUri) {
+                root.diskStoragePools = Karton.storagePools(domainUri, true);
             }
+        }
+    }
+
+    StorageVolumePickerDialog {
+        id: storageVolumePicker
+        onVolumePicked: function(path) {
+            editDiskDialog.sourcePath = path;
         }
     }
 
@@ -2909,6 +2969,13 @@ KartonDialog {
                 root.loadXml(Karton.domainXml(root.domain));
             }
         }
+    }
+
+    Timer {
+        id: xmlWaitTimer
+        interval: 800
+        repeat: false
+        onTriggered: root.startSettingsLoad()
     }
 
     Timer {

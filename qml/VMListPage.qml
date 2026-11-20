@@ -18,12 +18,12 @@ Kirigami.ScrollablePage {
     leftPadding: 0
     rightPadding: 0
 
-    // Fixed above the list so it stays reachable while scrolling. It is hidden
-    // when there is nothing to filter, but stays visible when a filter matches
-    // nothing so the user can clear it.
+    // Fixed above the list so it stays reachable while scrolling.
     header: Item {
         implicitHeight: searchRow.implicitHeight + Kirigami.Units.smallSpacing * 2
-        visible: Karton.connected && (view.count > 0 || VMModel.hasFilter)
+        // Keep the filter reachable when nothing matches, so the user can
+        // clear it instead of being stuck on an empty page.
+        visible: view.count > 0 || VMModel.hasFilter
 
         RowLayout {
             id: searchRow
@@ -46,8 +46,6 @@ Kirigami.ScrollablePage {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 6
                 model: [qsTr("all"), qsTr("running"), qsTr("stopped")]
                 onActivated: index => VMModel.filterMode = index
-                // Keep the style's normal item delegates, but do not let the
-                // popup grow wider than the control.
                 popup.width: stateFilter.width
                 Controls.ToolTip.visible: hovered
                 Controls.ToolTip.text: qsTr("filter_by_state")
@@ -92,6 +90,93 @@ Kirigami.ScrollablePage {
         openViewer(domain);
     }
 
+    // The wide layout always keeps a page in the right column, so the list
+    // keeps its own column while Karton connects and loads the VMs instead of
+    // filling the window and jumping into a two-column layout afterwards.
+    // The desktop layout always keeps the list column; the details page lives
+    // in the right column, so opening a VM never replaces the list.
+    readonly property bool splitView: true
+
+    function pushEmptyDetailsPage() {
+        const stack = applicationWindow().pageStack;
+        if (!splitView || !stack || stack.depth !== 1) {
+            return;
+        }
+        const component = Qt.createComponent("EmptyDetailsPage.qml");
+        if (component.status !== Component.Ready) {
+            console.error("Failed to create empty details page:", component.errorString());
+            return;
+        }
+        const page = component.createObject(null);
+        if (page) {
+            stack.push(page);
+        }
+    }
+
+    function resetDetailColumn() {
+        const stack = applicationWindow().pageStack;
+        if (!stack) {
+            return;
+        }
+        while (stack.depth > 1) {
+            stack.pop();
+        }
+        pushEmptyDetailsPage();
+    }
+
+    function ensureDetailColumn() {
+        const stack = applicationWindow().pageStack;
+        if (splitView && stack && stack.depth === 1) {
+            pushEmptyDetailsPage();
+        }
+    }
+
+    Component.onCompleted: root.ensureDetailColumn()
+
+    // Open the first VM once after the initial connection load, so the wide
+    // layout starts with useful details on the right. It is not repeated after
+    // the user navigates back to the list.
+    property bool initialAutoOpenDone: false
+
+    function autoOpenInitialDomain() {
+        if (initialAutoOpenDone || !splitView) {
+            return;
+        }
+        const stack = applicationWindow().pageStack;
+        if (stack.lastItem && stack.lastItem.domain !== undefined && stack.lastItem.domain) {
+            initialAutoOpenDone = true;
+            return;
+        }
+        const row = VMModel.firstDomainRow();
+        if (row < 0) {
+            return;
+        }
+        const domain = VMModel.domainAtRow(row);
+        if (!domain) {
+            return;
+        }
+        initialAutoOpenDone = true;
+        view.currentIndex = row;
+        root.openDomain(domain);
+    }
+
+    Connections {
+        target: VMModel
+        function onModelReset() {
+            Qt.callLater(root.autoOpenInitialDomain);
+        }
+        function onFilterChanged() {
+            root.cancelDragHold();
+            if (root.isDragging) {
+                root.endDrag();
+            }
+            // Suppress the detail-page auto-open caused by rebuilding the
+            // list; a real selection after the filter settles still opens it.
+            root.autoOpenSuspended = true;
+            filterSettleTimer.restart();
+        }
+    }
+
     function openDomain(domain) {
         if (domain) {
             selectedDomain = domain;
@@ -102,10 +187,6 @@ Kirigami.ScrollablePage {
         // replace() there would replace the VM list itself.
         if (stack.lastItem && stack.lastItem.domain === domain) {
             return;
-        }
-
-        while (stack.depth > 1) {
-            stack.pop();
         }
 
         const component = Qt.createComponent("VMPage.qml");
@@ -124,6 +205,15 @@ Kirigami.ScrollablePage {
         if (!page) {
             console.error("Failed to create VM page");
             return;
+        }
+        // The wide layout keeps the empty details page in the right column;
+        // replacing it avoids a pop/push flash and keeps the list column in place.
+        if (stack.depth > 1 && stack.lastItem && stack.lastItem.isEmptyDetailsPage === true) {
+            stack.replace(page);
+            return;
+        }
+        while (stack.depth > 1) {
+            stack.pop();
         }
         stack.push(page);
     }
@@ -230,10 +320,16 @@ Kirigami.ScrollablePage {
         dragGlobalY = sceneY;
         updateDragScrollDirection(sceneY);
         const target = viewIndexAtSceneY(sceneY);
-        if (target < 0 || target === draggedIndex) {
+        // Connection headers are not draggable targets.
+        if (target < 0 || target === draggedIndex || !VMModel.domainAtRow(target)) {
             return;
         }
-        VMModel.moveItem(draggedIndex, target);
+        // Rows from different connection groups must not be reordered. When
+        // the move is rejected, keep dragging the original row instead of
+        // adopting a row from the other group.
+        if (!VMModel.moveItem(draggedIndex, target)) {
+            return;
+        }
         // The move may end the drag synchronously if the grab is dropped.
         if (!isDragging) {
             return;
@@ -286,20 +382,6 @@ Kirigami.ScrollablePage {
 
     Component.onDestruction: cancelDragHold()
 
-    Connections {
-        target: VMModel
-        function onFilterChanged() {
-            root.cancelDragHold();
-            if (root.isDragging) {
-                root.endDrag();
-            }
-            // Suppress the detail-page auto-open caused by rebuilding the
-            // list; a real selection after the filter settles still opens it.
-            root.autoOpenSuspended = true;
-            filterSettleTimer.restart();
-        }
-    }
-
     Timer {
         id: filterSettleTimer
         interval: 120
@@ -322,6 +404,15 @@ Kirigami.ScrollablePage {
             if (root.selectedDomain === removedDomain) {
                 root.selectedDomain = null;
             }
+            const stack = applicationWindow().pageStack;
+            if (stack.lastItem && stack.lastItem.domain === removedDomain) {
+                stack.pop();
+                root.ensureDetailColumn();
+            }
+        }
+        function onClosePopupsRequested() {
+            connectionMenu.close();
+            vmMenu.close();
         }
     }
 
@@ -329,6 +420,9 @@ Kirigami.ScrollablePage {
         Kirigami.Action {
             icon.name: "list-add-symbolic"
             text: qsTr("create")
+            // Keep the primary action on the toolbar at every width instead of
+            // hiding it in the overflow menu.
+            displayHint: Kirigami.DisplayHint.KeepVisible
             onTriggered: source => {
                 addDomainDialog.open();
             }
@@ -338,7 +432,7 @@ Kirigami.ScrollablePage {
             text: qsTr("import")
             Kirigami.Action {
                 text: qsTr("domain_xml")
-                onTriggered: importDomainDialog.open()
+                onTriggered: importDomainDialog.openDialog()
             }
             Kirigami.Action {
                 text: qsTr("ovf_ova")
@@ -360,16 +454,183 @@ Kirigami.ScrollablePage {
         id: applicationSettingsDialog
     }
 
+    ConnectionSettingsDialog {
+        id: connectionSettingsDialog
+    }
+
     OvfImportDialog {
         id: ovfImportDialog
     }
 
-    FileDialog {
+    ImportDomainDialog {
         id: importDomainDialog
-        title: qsTr("import_vm")
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("libvirt_domain_xml"), qsTr("all_files")]
-        onAccepted: Karton.importDomainXml(root.localPath(selectedFile))
+    }
+
+    Controls.Menu {
+        id: connectionMenu
+        property string connectionUri: ""
+        property bool connectionConnected: false
+        closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
+
+        Controls.MenuItem {
+            text: qsTr("reconnect")
+            icon.name: "view-refresh-symbolic"
+            onTriggered: Karton.reconnectConnection(connectionMenu.connectionUri)
+        }
+        Controls.MenuItem {
+            text: qsTr("disconnect")
+            icon.name: "network-disconnect-symbolic"
+            visible: connectionMenu.connectionConnected
+            onTriggered: Karton.disconnectConnection(connectionMenu.connectionUri)
+        }
+        Controls.MenuSeparator {}
+        Controls.MenuItem {
+            text: qsTr("settings")
+            icon.name: "preferences-system-symbolic"
+            onTriggered: connectionSettingsDialog.openFor(connectionMenu.connectionUri)
+        }
+    }
+
+    Controls.Menu {
+        id: vmMenu
+        property Domain domain: null
+        readonly property bool running: domain ? domain.isActive : false
+        readonly property bool paused: domain ? domain.isPaused : false
+        closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
+
+        Controls.MenuItem {
+            text: qsTr("open_viewer")
+            icon.name: "computer-symbolic"
+            onTriggered: root.openViewerForDomain(vmMenu.domain)
+        }
+        Controls.MenuSeparator {}
+        Controls.MenuItem {
+            text: vmMenu.running ? qsTr("shut_down") : qsTr("start")
+            icon.name: vmMenu.running ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
+            onTriggered: {
+                if (vmMenu.running) {
+                    Karton.stopDomain(vmMenu.domain);
+                } else {
+                    Karton.startDomain(vmMenu.domain);
+                }
+            }
+        }
+        Controls.MenuItem {
+            text: qsTr("power_off")
+            icon.name: "process-stop-symbolic"
+            visible: vmMenu.running
+            onTriggered: Karton.forceStopDomain(vmMenu.domain)
+        }
+        Controls.MenuItem {
+            text: vmMenu.paused ? qsTr("resume") : qsTr("pause")
+            icon.name: vmMenu.paused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+            visible: vmMenu.running
+            onTriggered: {
+                if (vmMenu.paused) {
+                    Karton.resumeDomain(vmMenu.domain);
+                } else {
+                    Karton.pauseDomain(vmMenu.domain);
+                }
+            }
+        }
+        Controls.MenuItem {
+            text: qsTr("reboot")
+            icon.name: "system-reboot-symbolic"
+            visible: vmMenu.running
+            onTriggered: Karton.rebootDomain(vmMenu.domain)
+        }
+        Controls.MenuItem {
+            text: qsTr("reset")
+            icon.name: "system-reboot-symbolic"
+            visible: vmMenu.running
+            onTriggered: Karton.resetDomain(vmMenu.domain)
+        }
+        Controls.MenuSeparator {}
+        Controls.MenuItem {
+            text: qsTr("snapshots")
+            icon.name: "camera-photo-symbolic"
+            onTriggered: contextSnapshotsDialog.open()
+        }
+        Controls.MenuItem {
+            text: qsTr("clone")
+            icon.name: "edit-copy-symbolic"
+            enabled: !Karton.connectionIsRemote(Karton.domainConnectionUri(vmMenu.domain))
+            onTriggered: contextCloneDialog.open()
+        }
+        Controls.MenuSeparator {}
+        Controls.MenuItem {
+            text: qsTr("settings")
+            icon.name: "preferences-system-symbolic"
+            onTriggered: contextSettingsDialog.open()
+        }
+        Controls.MenuItem {
+            text: qsTr("delete")
+            icon.name: "delete-symbolic"
+            visible: !vmMenu.running
+            onTriggered: {
+                contextDeleteDialog.domain = vmMenu.domain;
+                contextDeleteDialog.open();
+            }
+        }
+    }
+
+    SettingsDialog {
+        id: contextSettingsDialog
+        domain: vmMenu.domain
+        parentWindow: applicationWindow()
+    }
+
+    SnapshotsDialog {
+        id: contextSnapshotsDialog
+        domain: vmMenu.domain
+    }
+
+    CloneDialog {
+        id: contextCloneDialog
+        domain: vmMenu.domain
+    }
+
+    KartonDialog {
+        id: contextDeleteDialog
+        property Domain domain: null
+        title: qsTr("delete_virtual_machine")
+        preferredDialogWidth: Kirigami.Units.gridUnit * 26
+        modal: true
+
+        onOpened: deleteDiskCheck.checked = false
+
+        ColumnLayout {
+            width: contextDeleteDialog.availableWidth
+            spacing: Kirigami.Units.largeSpacing
+
+            Controls.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: contextDeleteDialog.domain ? qsTr("delete_vm_1").arg(contextDeleteDialog.domain.config.name) : ""
+            }
+            Controls.CheckBox {
+                id: deleteDiskCheck
+                text: qsTr("delete_disk")
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: qsTr("cancel")
+                icon.name: "dialog-cancel-symbolic"
+                onTriggered: contextDeleteDialog.close()
+            },
+            Kirigami.Action {
+                text: qsTr("delete")
+                icon.name: "delete-symbolic"
+                onTriggered: {
+                    if (contextDeleteDialog.domain) {
+                        Karton.deleteDomain(contextDeleteDialog.domain, deleteDiskCheck.checked);
+                    }
+                    contextDeleteDialog.close();
+                }
+            }
+        ]
     }
 
     ListView {
@@ -377,20 +638,8 @@ Kirigami.ScrollablePage {
         model: VMModel
 
         currentIndex: 0
-
-        // Selection is updated explicitly while reordering, so the view must
-        // not scroll itself to the row that is being moved.
         highlightFollowsCurrentItem: false
         interactive: !root.isDragging
-
-        // When the VM list is empty, make the placeholder welcome text the full page.
-        onCountChanged: {
-            if (count === 0 && !VMModel.hasFilter) {
-                while (applicationWindow().pageStack.depth > 1) {
-                    applicationWindow().pageStack.pop();
-                }
-            }
-        }
 
         // Scrolling while a drag is active (wheel, trackpad, or auto-scroll)
         // changes the row under the pointer without a mouse move.
@@ -401,26 +650,17 @@ Kirigami.ScrollablePage {
         }
 
         delegate: Controls.ItemDelegate {
-            width: ListView.view.width
-            highlighted: ListView.isCurrentItem || root.draggedIndex === index
+            id: rowDelegate
 
-            leftPadding: Kirigami.Units.gridUnit
+            width: ListView.view.width
+            readonly property bool isHeader: rowType === VMModel.ConnectionRow
+            highlighted: !isHeader && (ListView.isCurrentItem || root.draggedIndex === index)
+            leftPadding: isHeader ? Kirigami.Units.smallSpacing : Kirigami.Units.gridUnit
             rightPadding: leftPadding
-            topPadding: Kirigami.Units.largeSpacing
+            topPadding: isHeader ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
             bottomPadding: topPadding
 
-            readonly property bool isBeingDragged: root.draggedIndex === index
-
-            ListView.onIsCurrentItemChanged: {
-                if (ListView.isCurrentItem && !root.isDragging && !root.autoOpenSuspended) {
-                    root.selectedDomain = domain;
-                    if (applicationWindow().isWidescreen) {
-                        // Defer the push until the delegate has been placed in
-                        // the scene, otherwise the page cannot be shown yet.
-                        Qt.callLater(() => root.openDomain(domain));
-                    }
-                }
-            }
+            readonly property bool isBeingDragged: !isHeader && root.draggedIndex === index
 
             // A drag cannot survive the delegate being unloaded: stop it
             // instead of leaving the list non-interactive behind.
@@ -430,33 +670,100 @@ Kirigami.ScrollablePage {
                 }
             }
 
-            contentItem: RowLayout {
-                id: delegateLayout
-                spacing: Kirigami.Units.largeSpacing
+            contentItem: Item {
+                width: rowDelegate.availableWidth
+                implicitHeight: rowDelegate.isHeader ? connectionLayout.implicitHeight : vmLayout.implicitHeight
 
-                Kirigami.Icon {
-                    source: {
-                        const icon = domain ? Karton.domainOsIcon(domain) : "karton-os-generic";
-                        return Karton.holidayMode && icon === "karton-os-linux" ? "karton-os-linux-newyear" : icon;
-                    }
-                    Layout.fillHeight: true
-                    Layout.maximumHeight: Kirigami.Units.iconSizes.huge
-                    Layout.preferredWidth: height
-                }
-                ColumnLayout {
-                    Kirigami.Heading {
-                        Layout.fillWidth: true
-                        font.weight: Font.DemiBold
-                        level: 3
-                        text: domain.config.name
-                        elide: Text.ElideRight
+                RowLayout {
+                    id: connectionLayout
+                    anchors.fill: parent
+                    visible: rowDelegate.isHeader
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Icon {
+                        source: collapsed ? "arrow-right-symbolic" : "arrow-down-symbolic"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        Layout.alignment: Qt.AlignVCenter
                     }
                     Controls.Label {
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: Karton.domainOsName(domain).length > 0
-                            ? domain.config.state + " | " + Karton.domainOsName(domain)
-                            : domain.config.state
+                        Layout.alignment: Qt.AlignVCenter
+                        text: connectionUri
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                    }
+                    Controls.BusyIndicator {
+                        running: connectionStatus === 0 || connectionStatus === 2
+                        visible: running
+                        Layout.preferredWidth: 16
+                        Layout.preferredHeight: 16
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    Kirigami.Icon {
+                        // Only the error state needs a glyph; a connected group
+                        // just shows its VM count.
+                        visible: connectionStatus === 3
+                        source: "data-error-symbolic"
+                        Layout.preferredWidth: 16
+                        Layout.preferredHeight: 16
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    // A connected header only needs the VM count; the
+                    // connecting/reconnecting/error text is shown as-is.
+                    Controls.Label {
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.rightMargin: Kirigami.Units.smallSpacing * 2
+                        visible: connectionStatus !== 1
+                        text: connectionStatusText
+                        opacity: 0.75
+                        font.pixelSize: 11
+                    }
+                    Controls.Label {
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.rightMargin: Kirigami.Units.smallSpacing * 2
+                        visible: connectionStatus === 1
+                        text: qsTr("vm_count").arg(connectionDomainCount)
+                        opacity: 0.75
+                        font.pixelSize: 11
+                    }
+                }
+
+                RowLayout {
+                    id: vmLayout
+                    anchors.fill: parent
+                    visible: !rowDelegate.isHeader
+                    spacing: Kirigami.Units.largeSpacing
+
+                    Kirigami.Icon {
+                        source: {
+                            const icon = domain ? Karton.domainOsIcon(domain) : "karton-os-generic";
+                            return Karton.holidayMode && icon === "karton-os-linux" ? "karton-os-linux-newyear" : icon;
+                        }
+                        Layout.fillHeight: true
+                        Layout.maximumHeight: Kirigami.Units.iconSizes.huge
+                        Layout.preferredWidth: height
+                    }
+                    ColumnLayout {
+                        Kirigami.Heading {
+                            Layout.fillWidth: true
+                            font.weight: Font.DemiBold
+                            level: 3
+                            text: domain ? domain.config.name : ""
+                            elide: Text.ElideRight
+                        }
+                        Controls.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: {
+                                if (!domain) {
+                                    return "";
+                                }
+                                return Karton.domainOsName(domain).length > 0
+                                    ? domain.config.state + " | " + Karton.domainOsName(domain)
+                                    : domain.config.state;
+                            }
+                        }
                     }
                 }
             }
@@ -466,7 +773,7 @@ Kirigami.ScrollablePage {
             // so the delegate itself never gets detached from the pointer.
             MouseArea {
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 // Once reordering starts, no other item (the list's flickable)
                 // may take the grab away: the drag must survive the pointer
                 // leaving the row, the list or the window.
@@ -476,7 +783,16 @@ Kirigami.ScrollablePage {
                 property real pressY: 0
                 property real lastSceneY: -1
 
-                onClicked: {
+                onClicked: (mouse) => {
+                    // Right-click already opened the context menu; it must not
+                    // also toggle a connection group or open a VM.
+                    if (mouse.button !== Qt.LeftButton) {
+                        return;
+                    }
+                    if (rowDelegate.isHeader) {
+                        VMModel.toggleConnection(connectionUri);
+                        return;
+                    }
                     if (root.dragOccurred) {
                         return;
                     }
@@ -484,24 +800,39 @@ Kirigami.ScrollablePage {
                     root.openDomain(domain);
                 }
 
-                onDoubleClicked: {
-                    if (root.dragOccurred) {
+                onDoubleClicked: (mouse) => {
+                    if (rowDelegate.isHeader || root.dragOccurred) {
                         return;
                     }
                     root.openViewerForDomain(domain);
                 }
 
                 onPressed: (mouse) => {
+                    if (mouse.button === Qt.RightButton) {
+                        if (rowDelegate.isHeader) {
+                            connectionMenu.connectionUri = connectionUri;
+                            connectionMenu.connectionConnected = connectionStatus === 1;
+                            connectionMenu.popup();
+                        } else if (domain) {
+                            vmMenu.domain = domain;
+                            vmMenu.popup();
+                        }
+                        return;
+                    }
                     root.dragOccurred = false;
+                    if (rowDelegate.isHeader) {
+                        return;
+                    }
                     pressX = mouse.x;
                     pressY = mouse.y;
                     lastSceneY = mapToItem(null, mouse.x, mouse.y).y;
-                    if (mouse.button === Qt.LeftButton) {
-                        root.holdForDrag(index, lastSceneY);
-                    }
+                    root.holdForDrag(index, lastSceneY);
                 }
 
                 onPositionChanged: (mouse) => {
+                    if (rowDelegate.isHeader) {
+                        return;
+                    }
                     lastSceneY = mapToItem(null, mouse.x, mouse.y).y;
                     if (!root.isDragging) {
                         if (Math.abs(mouse.x - pressX) > 5 || Math.abs(mouse.y - pressY) > 5) {
@@ -526,21 +857,6 @@ Kirigami.ScrollablePage {
                     }
                 }
             }
-        }
-
-        Kirigami.PlaceholderMessage {
-            anchors.centerIn: parent
-            width: parent.width - (Kirigami.Units.largeSpacing * 4)
-
-            visible: view.count === 0
-
-            text: VMModel.hasFilter
-                ? qsTr("no_matching_vms")
-                : (Karton.connected ? qsTr("welcome_to_karton") : qsTr("cannot_connect_to_libvirt"))
-            explanation: VMModel.hasFilter
-                ? qsTr("try_a_different_search_or_filter")
-                : (Karton.connected ? qsTr("connected_to_1_create_a_new_virtual_machine_to_proceed").arg(Karton.connectionUri) : qsTr("check_that_libvirt_is_running_and_that_the_1_connection_is_available").arg(Karton.connectionUri))
-            icon.name: VMModel.hasFilter ? "edit-none-symbolic" : (Karton.connected ? "computer-symbolic" : "error-symbolic")
         }
     }
 }

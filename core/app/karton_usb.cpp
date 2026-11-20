@@ -45,6 +45,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
@@ -143,15 +144,16 @@ usbHostdevXmlForDevice(virDomainPtr domain, const QString &vendor, const QString
     return deviceXml;
 }
 
-QVariantList Karton::usbDevices() const
+QVariantList collectUsbDevices(virConnectPtr conn)
 {
+    ScopedCallTimer timer("Karton::usbDevices");
     QVariantList result;
-    if (!m_conn) {
+    if (!conn) {
         return result;
     }
 
     virNodeDevicePtr *nodeDevices = nullptr;
-    const int count = virConnectListAllNodeDevices(m_conn, &nodeDevices, VIR_CONNECT_LIST_NODE_DEVICES_CAP_USB_DEV);
+    const int count = virConnectListAllNodeDevices(conn, &nodeDevices, VIR_CONNECT_LIST_NODE_DEVICES_CAP_USB_DEV);
     if (count < 0) {
         return result;
     }
@@ -209,6 +211,42 @@ QVariantList Karton::usbDevices() const
     return result;
 }
 
+QVariantList Karton::usbDevices()
+{
+    ScopedCallTimer timer("Karton::usbDevices");
+    if (!m_readerEnabled.load()) {
+        return collectUsbDevices(m_conn);
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_usbDevicesTime == 0 || now - m_usbDevicesTime > 5000) {
+        requestUsbDevices();
+    }
+    return m_usbDevicesCache;
+}
+
+void Karton::requestUsbDevices()
+{
+    if (!m_readerEnabled.load() || m_usbDevicesPending) {
+        return;
+    }
+    m_usbDevicesPending = true;
+    postReaderTask([this]() {
+        QVariantList result;
+        if (virConnectPtr conn = m_readerConn.load()) {
+            result = collectUsbDevices(conn);
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, result]() {
+                m_usbDevicesPending = false;
+                m_usbDevicesCache = result;
+                m_usbDevicesTime = QDateTime::currentMSecsSinceEpoch();
+                Q_EMIT usbDevicesUpdated();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
 QVariantList Karton::domainUsbDevices(const Domain *domain) const
 {
     QVariantList result;
@@ -216,10 +254,7 @@ QVariantList Karton::domainUsbDevices(const Domain *domain) const
         return result;
     }
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
-    if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
-    }
+    char *xml = cachedDomainXml(domain, true);
     if (!xml) {
         return result;
     }
@@ -255,6 +290,10 @@ QVariantList Karton::domainUsbDevices(const Domain *domain) const
 bool Karton::attachUsbDevice(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device)
 {
     if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    if (connectionIsRemote(domainConnectionUri(domain))) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "usb_passthrough_to_a_remote_vm_is_not_supported"));
         return false;
     }
     if (vendor.isEmpty() || product.isEmpty() || bus.isEmpty() || device.isEmpty()) {
@@ -339,6 +378,10 @@ bool Karton::detachUsbDevice(const Domain *domain, const QString &vendor, const 
 bool Karton::attachUsbDevicePersistent(const Domain *domain, const QString &vendor, const QString &product, const QString &bus, const QString &device)
 {
     if (!domain || !domain->domainPtr() || vendor.isEmpty() || product.isEmpty() || bus.isEmpty() || device.isEmpty()) {
+        return false;
+    }
+    if (connectionIsRemote(domainConnectionUri(domain))) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "usb_passthrough_to_a_remote_vm_is_not_supported"));
         return false;
     }
     if (hasUsbHostdev(domain, vendor, product, bus, device)) {

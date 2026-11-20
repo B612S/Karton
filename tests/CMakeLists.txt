@@ -12,6 +12,7 @@ add_library(karton_testcore STATIC
     ${CMAKE_SOURCE_DIR}/core/domain/domainxmlreader.cpp
     ${CMAKE_SOURCE_DIR}/core/os/osiconmapper.cpp
     ${CMAKE_SOURCE_DIR}/core/os/osinfoconfig.cpp
+    ${CMAKE_SOURCE_DIR}/core/app/ovfextract.cpp
     ${CMAKE_SOURCE_DIR}/core/util/commandrunner.cpp
 )
 set_target_properties(karton_testcore PROPERTIES AUTOMOC ON)
@@ -50,6 +51,7 @@ set(KARTON_TESTS
     tst_domainconfig
     tst_osiconmapper
     tst_commandrunner
+    tst_ovfextract
 )
 
 foreach(test_name IN LISTS KARTON_TESTS)

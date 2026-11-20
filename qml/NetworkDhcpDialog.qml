@@ -18,6 +18,9 @@ KartonDialog {
     id: root
 
     property string networkName: ""
+    // Network names repeat across libvirt connections, so every request is
+    // scoped to the connection whose Libvirt Networks page opened this dialog.
+    property string connectionUri: ""
 
     // IPv4 configuration of the network, used to constrain the host part.
     property string networkCidr: ""
@@ -222,12 +225,12 @@ KartonDialog {
     }
 
     function refreshLeases() {
-        leases = Karton.networkLeases(networkName);
+        leases = Karton.networkLeases(networkName, root.connectionUri);
     }
 
     function refreshReservations() {
-        hosts = Karton.networkDhcpHosts(networkName);
-        candidates = Karton.networkDhcpCandidates(networkName);
+        hosts = Karton.networkDhcpHosts(networkName, root.connectionUri);
+        candidates = Karton.networkDhcpCandidates(networkName, root.connectionUri);
         rebuildVmOptions();
         selectedMacs = [];
     }
@@ -267,7 +270,7 @@ KartonDialog {
         root.selectedMacs = [];
         root.errorText = "";
         for (const mac of macs) {
-            Karton.removeNetworkDhcpHost(root.networkName, mac);
+            Karton.removeNetworkDhcpHost(root.networkName, mac, root.connectionUri);
         }
         root.refreshReservations();
         removeReservationDialog.close();
@@ -279,7 +282,7 @@ KartonDialog {
             return;
         }
         errorText = "";
-        if (!Karton.addNetworkDhcpHost(networkName, target.mac, composedIp())) {
+        if (!Karton.addNetworkDhcpHost(networkName, target.mac, composedIp(), root.connectionUri)) {
             return;
         }
         ipField.text = "";
@@ -289,7 +292,7 @@ KartonDialog {
         networkName = name;
         errorText = "";
         ipField.text = "";
-        const info = Karton.networks().find(network => network.name === name);
+        const info = Karton.networks(root.connectionUri).find(network => network.name === name);
         applyNetworkInfo(info ? info.ipv4 : "", info ? info.ipv4Gateway : "");
         refreshLeases();
         refreshReservations();

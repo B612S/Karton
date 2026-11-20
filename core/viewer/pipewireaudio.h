@@ -6,6 +6,7 @@
 #include <QByteArray>
 #include <QMutex>
 #include <QObject>
+#include <QThread>
 
 #include <memory>
 
@@ -23,6 +24,11 @@ public:
     bool start(int sampleRate, int channels);
     void write(const char *data, qint64 size);
     void stop();
+    // Per-channel gain applied while draining the queue. The SPICE client is
+    // responsible for the guest mixer volume and mute: QEMU's spice audio
+    // backend only forwards them (spice_server_playback_set_volume()), it does
+    // not scale the samples it sends.
+    void setVolume(float left, float right);
 
     bool isRunning() const;
 
@@ -30,4 +36,6 @@ public:
 
 private:
     std::unique_ptr<Private> d;
+    QThread *m_workerThread = nullptr;
+    QObject *m_worker = nullptr;
 };

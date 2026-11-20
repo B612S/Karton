@@ -224,9 +224,14 @@ void ClipboardManager::clipboardSelectionCallback(SpiceMainChannel *channel, gui
     manager->m_settingClipboard = false;
 }
 
+void ClipboardManager::setActive(bool active)
+{
+    m_active = active;
+}
+
 void ClipboardManager::hostClipboardChanged()
 {
-    if (!m_channel || m_settingClipboard) {
+    if (!m_channel || m_settingClipboard || !m_active) {
         return;
     }
     if (m_textMode != 1 && m_textMode != 3) {

@@ -13,6 +13,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QTimer>
 #include <QWheelEvent>
 
 namespace
@@ -291,7 +292,32 @@ void TerminalView::feed(const QString &text)
     if (text.isEmpty()) {
         return;
     }
-    for (const QChar character : text) {
+    m_pendingText += text;
+    scheduleProcess();
+}
+
+void TerminalView::scheduleProcess()
+{
+    if (m_processScheduled) {
+        return;
+    }
+    m_processScheduled = true;
+    // Process a bounded chunk per event-loop turn so a burst of console output
+    // cannot block painting or input for a whole tick.
+    QTimer::singleShot(0, this, &TerminalView::processPending);
+}
+
+void TerminalView::processPending()
+{
+    m_processScheduled = false;
+    if (m_pendingText.isEmpty()) {
+        return;
+    }
+
+    constexpr int chunkSize = 8192;
+    const QString chunk = m_pendingText.left(chunkSize);
+    m_pendingText.remove(0, chunkSize);
+    for (const QChar character : chunk) {
         processCharacter(character);
     }
     if (!m_reply.isEmpty()) {
@@ -300,10 +326,15 @@ void TerminalView::feed(const QString &text)
         sendText(response);
     }
     update();
+
+    if (!m_pendingText.isEmpty()) {
+        scheduleProcess();
+    }
 }
 
 void TerminalView::clear()
 {
+    m_pendingText.clear();
     resetTerminal();
     update();
 }

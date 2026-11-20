@@ -27,6 +27,7 @@
 
 class QSGSimpleTextureNode;
 class ClipboardManager;
+class Karton;
 
 #include "domain/domain.h"
 #include "viewer/pipewireaudio.h"
@@ -145,6 +146,7 @@ public:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    void focusInEvent(QFocusEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
 
     Q_INVOKABLE void saveFrameToDomain();
@@ -196,6 +198,10 @@ private:
     bool openSerialConsole();
     void closeSerialConsole();
     void scheduleConsoleClose();
+    // The first SPICE setup waits for the reader's XML prefetch instead of
+    // reading the live XML on the GUI thread.
+    void beginDomainXmlWait(Karton *karton, const QString &uuid);
+    void cancelDomainXmlWait();
     void schedulePreviewRetry();
     void scheduleViewerRetry();
     bool inputsReady() const;
@@ -215,6 +221,12 @@ private:
     static void playback_start_callback(SpicePlaybackChannel *channel, gint format, gint channels, gint rate, gpointer user_data);
     static void playback_data_callback(SpicePlaybackChannel *channel, gpointer data, gint size, gpointer user_data);
     static void playback_stop_callback(SpicePlaybackChannel *channel, gpointer user_data);
+    static void playback_volume_callback(SpicePlaybackChannel *channel, GParamSpec *pspec, gpointer user_data);
+    static void playback_mute_callback(SpicePlaybackChannel *channel, GParamSpec *pspec, gpointer user_data);
+    // The guest mixer volume/mute arrives as channel properties; apply them to
+    // Karton's own playback instead of playing the stream at a fixed gain.
+    void updateAudioVolume(SpicePlaybackChannel *channel);
+    void applyAudioVolume();
     static void record_start_callback(SpiceRecordChannel *channel, gint format, gint channels, gint rate, gpointer user_data);
     static void record_stop_callback(SpiceRecordChannel *channel, gpointer user_data);
     void startRecording();
@@ -237,6 +249,12 @@ private:
     bool m_endpointValid = false;
     int m_viewerReconnectAttempts = 0;
     RenderMode m_renderMode = RenderMode::GlScanout;
+    // Pending reader prefetch of the live XML. The timer falls back to a
+    // synchronous read when the reader cannot deliver it.
+    bool m_xmlPrefetchPending = false;
+    bool m_xmlSkipPrefetch = false;
+    QTimer m_xmlWaitTimer;
+    QMetaObject::Connection m_xmlWaitConnection;
 
     std::unique_ptr<SpiceDisplayRenderer> m_renderer;
     // A detached renderer is kept alive until releaseResources() runs on the
@@ -271,6 +289,11 @@ private:
     bool m_hasVirtualPointerPosition = false;
 
     PipeWireAudioSink *m_audioPipeWire = nullptr;
+    // Guest mixer state from SPICE_PLAYBACK_CAP_VOLUME messages, in the
+    // protocol's 0..65535 per-channel range.
+    quint16 m_audioVolumeLeft = 65535;
+    quint16 m_audioVolumeRight = 65535;
+    bool m_audioMuted = false;
     SpiceRecordChannel *m_recordChannel = nullptr;
     QAudioSource *m_audioSource = nullptr;
     QIODevice *m_recordDevice = nullptr;

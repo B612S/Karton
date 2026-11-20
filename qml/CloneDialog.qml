@@ -18,7 +18,6 @@ KartonDialog {
     property string errorText: ""
     property bool cloning: false
     property string destinationDirectory: ""
-    property string pendingGrantError: ""
 
     function defaultName() {
         const base = (domain ? domain.config.name : "vm").replace(/[^A-Za-z0-9._-]/g, "-");
@@ -33,22 +32,6 @@ KartonDialog {
         }
     }
 
-    function requestDestinationAccess() {
-        if (root.destinationDirectory.trim().length === 0) {
-            return true;
-        }
-        const accessError = Karton.checkDiskDirectoryAccess(root.destinationDirectory);
-        if (accessError.length === 0) {
-            return true;
-        }
-        root.pendingGrantError = accessError;
-        if (Karton.canGrantDiskDirectoryAccess(root.destinationDirectory)) {
-            grantAccessDialog.openFor(root.destinationDirectory);
-        } else {
-            root.errorText = accessError;
-        }
-        return false;
-    }
 
     onOpened: {
         errorText = "";
@@ -183,32 +166,10 @@ KartonDialog {
             text: qsTr("clone")
             icon.name: "edit-copy-symbolic"
             enabled: !root.cloning && nameField.text.trim().length > 0 && root.domain !== null
-            onTriggered: {
-                if (root.requestDestinationAccess()) {
-                    root.startClone();
-                }
-            }
+            onTriggered: root.startClone()
         }
     ]
 
-    PermissionGrantDialog {
-        id: grantAccessDialog
-        onCancelled: root.errorText = root.pendingGrantError
-        onConfirmed: {
-            const error = Karton.grantDiskDirectoryAccess(targetPath);
-            if (error.length > 0) {
-                root.errorText = error;
-                return;
-            }
-            const check = Karton.checkDiskDirectoryAccess(targetPath);
-            if (check.length > 0) {
-                root.errorText = check;
-                return;
-            }
-            root.errorText = "";
-            root.startClone();
-        }
-    }
 
     FolderDialog {
         id: destinationFolderDialog

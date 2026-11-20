@@ -103,16 +103,16 @@ static void raiseMainWindow(int attempts = 10)
 static bool notifyRunningInstance(const QString &socketName)
 {
     QLocalSocket socket;
-    for (int attempt = 0; attempt < 10; ++attempt) {
+    for (int attempt = 0; attempt < 6; ++attempt) {
         socket.connectToServer(socketName);
-        if (socket.waitForConnected(100)) {
+        if (socket.waitForConnected(80)) {
             socket.write("raise");
             socket.flush();
             socket.waitForBytesWritten(200);
             socket.disconnectFromServer();
             return true;
         }
-        QThread::msleep(50);
+        QThread::msleep(20);
     }
     return false;
 }
@@ -192,7 +192,9 @@ int main(int argc, char *argv[])
         instanceLock->setStaleLockTime(0);
         if (!instanceLock->tryLock(100)) {
             qCInfo(KARTON_DEBUG) << "Another Karton instance is already running.";
-            notifyRunningInstance(socketName);
+            if (!notifyRunningInstance(socketName)) {
+                fprintf(stderr, "Karton is already running but did not answer the single-instance socket.\n");
+            }
             return 0;
         }
 
@@ -217,6 +219,9 @@ int main(int argc, char *argv[])
     qCInfo(KARTON_DEBUG) << "Hello! Starting Karton...";
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&instanceLock]() {
+        if (auto *karton = Karton::self()) {
+            karton->releaseGlobalShortcuts();
+        }
         if (instanceLock) {
             instanceLock->unlock();
         }
@@ -233,6 +238,17 @@ int main(int argc, char *argv[])
 
     if (engine.rootObjects().isEmpty()) {
         return -1;
+    }
+
+    if (!checkQml) {
+        // Connect only after the main window has painted its first frame. A
+        // slow or unresponsive libvirt must never keep the window hidden or
+        // leave it without a "connecting" state.
+        if (auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) {
+            QObject::connect(window, &QQuickWindow::frameSwapped, Karton::self(), &Karton::start, Qt::SingleShotConnection);
+        }
+        // Software or headless runs may never report a frame swap.
+        QTimer::singleShot(2000, Karton::self(), &Karton::start);
     }
 
     QObject::connect(Karton::self(), &Karton::languageChanged, &app, [&engine, &loadLanguage]() {

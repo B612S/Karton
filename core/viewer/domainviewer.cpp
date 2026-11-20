@@ -28,6 +28,7 @@
 #include <QString>
 #include <QTimer>
 
+#include "app/karton.h"
 #include "domain/domain.h"
 #include "glib.h"
 #include "karton_debug.h"
@@ -82,6 +83,21 @@ DomainViewer::DomainViewer(QQuickItem *parent)
         }
         setupSpiceSession();
     });
+
+    // The reader normally delivers the live XML within a few milliseconds. If
+    // it cannot (reader disabled, libvirt busy), fall back once to a
+    // synchronous read instead of keeping the preview blank.
+    m_xmlWaitTimer.setSingleShot(true);
+    m_xmlWaitTimer.setInterval(1500);
+    connect(&m_xmlWaitTimer, &QTimer::timeout, this, [this]() {
+        if (!m_xmlPrefetchPending) {
+            return;
+        }
+        m_xmlPrefetchPending = false;
+        disconnect(m_xmlWaitConnection);
+        m_xmlSkipPrefetch = true;
+        setupSpiceSession();
+    });
 }
 
 DomainViewer::~DomainViewer()
@@ -116,6 +132,8 @@ void DomainViewer::setDomain(Domain *domain)
     m_domain = domain;
     m_endpointValid = false;
     m_viewerReconnectAttempts = 0;
+    m_xmlSkipPrefetch = false;
+    cancelDomainXmlWait();
     Q_EMIT domainChanged();
 
     if (isComponentComplete() && m_domain) {
@@ -134,6 +152,8 @@ void DomainViewer::setPreviewOnly(bool previewOnly)
     }
     m_previewOnly = previewOnly;
     m_endpointValid = false;
+    m_xmlSkipPrefetch = false;
+    cancelDomainXmlWait();
     Q_EMIT previewOnlyChanged();
     if (isComponentComplete() && m_domain) {
         setupSpiceSession();
@@ -166,22 +186,29 @@ bool DomainViewer::setupSpiceSession()
 
     if (!m_endpointValid) {
         // The live XML contains the actual SPICE port for autoport domains and the
-        // socket path for socket-listening domains.
-        char *xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), 0);
-        if (!xmlDesc) {
-            xmlDesc = virDomainGetXMLDesc(m_domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+        // socket path for socket-listening domains. It normally comes from the
+        // reader's prefetch cache, so opening a viewer does not block the GUI
+        // thread while libvirt is busy.
+        Karton *karton = Karton::self();
+        QString xml = karton->cachedLiveDomainXml(m_domain);
+        if (xml.isEmpty() && !m_xmlSkipPrefetch && karton->readerActive()) {
+            const QString uuid = m_domain->config()->uuid();
+            if (!uuid.isEmpty()) {
+                beginDomainXmlWait(karton, uuid);
+                return true;
+            }
         }
-        if (!xmlDesc) {
+        if (xml.isEmpty()) {
+            xml = karton->domainLiveXml(m_domain);
+        }
+        if (xml.isEmpty()) {
             qCWarning(KARTON_DEBUG) << "Failed to read domain XML:" << virGetLastErrorMessage();
             setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_read_the_virtual_machine_configuration"));
             return false;
         }
 
-        const QByteArray xml(xmlDesc);
-        free(xmlDesc);
-
         QDomDocument document;
-        if (!document.setContent(QString::fromUtf8(xml))) {
+        if (!document.setContent(xml)) {
             qCWarning(KARTON_DEBUG) << "Failed to parse domain XML";
             setErrorMessage(QCoreApplication::translate("DomainViewer", "failed_to_parse_the_virtual_machine_configuration"));
             return false;
@@ -191,6 +218,15 @@ bool DomainViewer::setupSpiceSession()
         bool glEnabled = false;
         m_spiceTlsPort = 0;
         m_spicePassword.clear();
+
+        Karton *endpointKarton = Karton::self();
+        const QString domainUri = endpointKarton ? endpointKarton->domainConnectionUri(m_domain) : QString();
+        const bool remoteDomain = endpointKarton && endpointKarton->connectionIsRemote(domainUri);
+        QString remoteHost;
+        if (remoteDomain) {
+            const QUrl connectionUrl(domainUri);
+            remoteHost = connectionUrl.host();
+        }
 
         const QDomNodeList graphicsNodes = document.elementsByTagName(QStringLiteral("graphics"));
         for (int i = 0; i < graphicsNodes.count(); ++i) {
@@ -209,6 +245,12 @@ bool DomainViewer::setupSpiceSession()
             }
 
             if (listenType == QStringLiteral("socket")) {
+                if (remoteDomain) {
+                    // A unix socket lives on the remote host; using the local
+                    // path can connect to an unrelated local VM (or nothing).
+                    setErrorMessage(QCoreApplication::translate("DomainViewer", "remote_spice_display_is_not_reachable"));
+                    return false;
+                }
                 QString socketPath = listen.attribute(QStringLiteral("socket"));
                 if (socketPath.isEmpty()) {
                     socketPath = graphics.attribute(QStringLiteral("socket"));
@@ -221,7 +263,14 @@ bool DomainViewer::setupSpiceSession()
                 if (host.isEmpty()) {
                     host = graphics.attribute(QStringLiteral("listen"));
                 }
-                if (host.isEmpty() || host == QStringLiteral("0.0.0.0") || host == QStringLiteral("::")) {
+                if (remoteDomain) {
+                    if (remoteHost.isEmpty()) {
+                        setErrorMessage(QCoreApplication::translate("DomainViewer", "remote_spice_display_is_not_reachable"));
+                        return false;
+                    }
+                    host = remoteHost;
+                } else if (host.isEmpty() || host == QStringLiteral("0.0.0.0") || host == QStringLiteral("::") || host == QStringLiteral("127.0.0.1")
+                           || host == QStringLiteral("localhost")) {
                     host = QStringLiteral("127.0.0.1");
                 }
                 const QString port = graphics.attribute(QStringLiteral("port"));
@@ -274,6 +323,9 @@ bool DomainViewer::setupSpiceSession()
             m_renderMode = RenderMode::PrimarySurface;
         }
         m_endpointValid = true;
+        // The next endpoint refresh (preview mode switch, TLS change) may use
+        // the asynchronous prefetch again.
+        m_xmlSkipPrefetch = false;
     }
 
     if (!connectToSpice()) {
@@ -352,6 +404,7 @@ void DomainViewer::disconnectFromSpice()
     m_previewWatchdog.stop();
     m_previewPump.stop();
     m_viewerRetryTimer.stop();
+    cancelDomainXmlWait();
     closeSerialConsole();
     stopAudio();
 
@@ -373,6 +426,7 @@ void DomainViewer::disconnectFromSpice()
 
     stopRecording();
     if (m_clipboard) {
+        m_clipboard->setActive(false);
         m_clipboard->detach();
     }
     m_main_channel = nullptr;
@@ -603,6 +657,8 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         g_signal_connect(channel, "playback-start", G_CALLBACK(playback_start_callback), item);
         g_signal_connect(channel, "playback-data", G_CALLBACK(playback_data_callback), item);
         g_signal_connect(channel, "playback-stop", G_CALLBACK(playback_stop_callback), item);
+        g_signal_connect(channel, "notify::volume", G_CALLBACK(playback_volume_callback), item);
+        g_signal_connect(channel, "notify::mute", G_CALLBACK(playback_mute_callback), item);
     } else if (SPICE_IS_RECORD_CHANNEL(channel)) {
         qCInfo(KARTON_DEBUG) << "SPICE: Audio record connected";
         spice_channel_connect(channel);
@@ -792,6 +848,29 @@ void DomainViewer::scheduleViewerRetry()
         return;
     }
     m_viewerRetryTimer.start();
+}
+
+void DomainViewer::beginDomainXmlWait(Karton *karton, const QString &uuid)
+{
+    m_xmlPrefetchPending = true;
+    disconnect(m_xmlWaitConnection);
+    m_xmlWaitConnection = connect(karton, &Karton::domainXmlCached, this, [this, uuid](const QString &cachedUuid) {
+        if (!m_xmlPrefetchPending || cachedUuid != uuid) {
+            return;
+        }
+        m_xmlPrefetchPending = false;
+        m_xmlWaitTimer.stop();
+        setupSpiceSession();
+    });
+    m_xmlWaitTimer.start();
+    karton->prefetchDomainXml(m_domain);
+}
+
+void DomainViewer::cancelDomainXmlWait()
+{
+    m_xmlPrefetchPending = false;
+    m_xmlWaitTimer.stop();
+    disconnect(m_xmlWaitConnection);
 }
 
 bool DomainViewer::inputsReady() const
@@ -1193,17 +1272,19 @@ void DomainViewer::saveFrameToDomain()
 
 void DomainViewer::playback_start_callback(SpicePlaybackChannel *channel, gint format, gint channels, gint rate, gpointer user_data)
 {
-    Q_UNUSED(channel);
-
     DomainViewer *item = static_cast<DomainViewer *>(user_data);
     qCInfo(KARTON_DEBUG) << "Audio playback starting - Format:" << format << "Channels:" << channels << "Rate:" << rate;
 
     item->stopAudio();
+    // A resumed stream may not repeat the last volume message, and the server
+    // sends the initial volume before playback-start.
+    item->updateAudioVolume(channel);
     if (!item->m_audioPlaybackEnabled) {
         return;
     }
 
     item->m_audioPipeWire = new PipeWireAudioSink(item);
+    item->applyAudioVolume();
     if (!item->m_audioPipeWire->start(rate, channels)) {
         qCWarning(KARTON_DEBUG) << "Failed to start PipeWire audio output";
         item->stopAudio();
@@ -1230,6 +1311,56 @@ void DomainViewer::playback_stop_callback(SpicePlaybackChannel *channel, gpointe
     DomainViewer *item = static_cast<DomainViewer *>(user_data);
     qCInfo(KARTON_DEBUG) << "Audio playback stopping";
     item->stopAudio();
+}
+
+void DomainViewer::playback_volume_callback(SpicePlaybackChannel *channel, GParamSpec *pspec, gpointer user_data)
+{
+    Q_UNUSED(pspec);
+
+    static_cast<DomainViewer *>(user_data)->updateAudioVolume(channel);
+}
+
+void DomainViewer::playback_mute_callback(SpicePlaybackChannel *channel, GParamSpec *pspec, gpointer user_data)
+{
+    Q_UNUSED(pspec);
+
+    static_cast<DomainViewer *>(user_data)->updateAudioVolume(channel);
+}
+
+void DomainViewer::updateAudioVolume(SpicePlaybackChannel *channel)
+{
+    if (!channel) {
+        return;
+    }
+
+    // "volume" is a borrowed array of 0..65535 per-channel values; nchannels
+    // keeps its default of 2 until the first volume message arrives, so only
+    // use the array when the server actually sent one.
+    guint16 *volume = nullptr;
+    guint nchannels = 0;
+    gboolean mute = FALSE;
+    g_object_get(channel, "volume", &volume, "nchannels", &nchannels, "mute", &mute, NULL);
+    if (volume && nchannels > 0) {
+        m_audioVolumeLeft = volume[0];
+        m_audioVolumeRight = volume[nchannels > 1 ? 1 : 0];
+    }
+    m_audioMuted = mute;
+    qCDebug(KARTON_DEBUG) << "Guest audio volume:" << m_audioVolumeLeft << m_audioVolumeRight << "muted:" << m_audioMuted;
+    applyAudioVolume();
+}
+
+void DomainViewer::applyAudioVolume()
+{
+    if (!m_audioPipeWire) {
+        return;
+    }
+
+    // SPICE volume is a perceptually scaled 0..65535 level, not an amplitude.
+    // spice-gtk maps it with GST_STREAM_VOLUME_FORMAT_CUBIC, i.e. the linear
+    // gain is the cube of the fraction, so other SPICE clients sound the same.
+    const float left = m_audioMuted ? 0.0f : static_cast<float>(m_audioVolumeLeft) / 65535.0f;
+    const float right = m_audioMuted ? 0.0f : static_cast<float>(m_audioVolumeRight) / 65535.0f;
+    m_audioPipeWire->setVolume(left * left * left, right * right * right);
 }
 
 void DomainViewer::stopAudio()
@@ -1276,6 +1407,7 @@ void DomainViewer::setSpiceTlsEnabled(bool enabled)
     }
     m_spiceTlsEnabled = enabled;
     m_endpointValid = false;
+    m_xmlSkipPrefetch = false;
     Q_EMIT spiceTlsEnabledChanged();
 }
 
@@ -1286,6 +1418,7 @@ void DomainViewer::setSpiceCaCertificate(const QString &path)
     }
     m_spiceCaCertificate = path;
     m_endpointValid = false;
+    m_xmlSkipPrefetch = false;
     Q_EMIT spiceCaCertificateChanged();
 }
 
@@ -1806,8 +1939,19 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
     event->accept();
 }
 
+void DomainViewer::focusInEvent(QFocusEvent *event)
+{
+    if (m_clipboard) {
+        m_clipboard->setActive(true);
+    }
+    QQuickItem::focusInEvent(event);
+}
+
 void DomainViewer::focusOutEvent(QFocusEvent *event)
 {
+    if (m_clipboard) {
+        m_clipboard->setActive(false);
+    }
     if (!window() || !window()->isActive()) {
         releasePointerGrab();
     }

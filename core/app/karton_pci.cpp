@@ -45,6 +45,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
@@ -118,15 +119,16 @@ pciHostdevXmlForAddress(virDomainPtr domain, const QString &pciDomain, const QSt
     return deviceXml;
 }
 
-QVariantList Karton::pciDevices() const
+QVariantList collectPciDevices(virConnectPtr conn)
 {
+    ScopedCallTimer timer("Karton::pciDevices");
     QVariantList result;
-    if (!m_conn) {
+    if (!conn) {
         return result;
     }
 
     virNodeDevicePtr *nodeDevices = nullptr;
-    const int count = virConnectListAllNodeDevices(m_conn, &nodeDevices, VIR_CONNECT_LIST_NODE_DEVICES_CAP_PCI_DEV);
+    const int count = virConnectListAllNodeDevices(conn, &nodeDevices, VIR_CONNECT_LIST_NODE_DEVICES_CAP_PCI_DEV);
     if (count < 0) {
         return result;
     }
@@ -192,6 +194,42 @@ QVariantList Karton::pciDevices() const
     return result;
 }
 
+QVariantList Karton::pciDevices()
+{
+    ScopedCallTimer timer("Karton::pciDevices");
+    if (!m_readerEnabled.load()) {
+        return collectPciDevices(m_conn);
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_pciDevicesTime == 0 || now - m_pciDevicesTime > 5000) {
+        requestPciDevices();
+    }
+    return m_pciDevicesCache;
+}
+
+void Karton::requestPciDevices()
+{
+    if (!m_readerEnabled.load() || m_pciDevicesPending) {
+        return;
+    }
+    m_pciDevicesPending = true;
+    postReaderTask([this]() {
+        QVariantList result;
+        if (virConnectPtr conn = m_readerConn.load()) {
+            result = collectPciDevices(conn);
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, result]() {
+                m_pciDevicesPending = false;
+                m_pciDevicesCache = result;
+                m_pciDevicesTime = QDateTime::currentMSecsSinceEpoch();
+                Q_EMIT pciDevicesUpdated();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
 QVariantList Karton::domainPciDevices(const Domain *domain) const
 {
     QVariantList result;
@@ -199,10 +237,7 @@ QVariantList Karton::domainPciDevices(const Domain *domain) const
         return result;
     }
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
-    if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
-    }
+    char *xml = cachedDomainXml(domain, true);
     if (!xml) {
         return result;
     }
@@ -240,6 +275,10 @@ QVariantList Karton::domainPciDevices(const Domain *domain) const
 bool Karton::attachPciDevice(const Domain *domain, const QString &pciDomain, const QString &bus, const QString &slot, const QString &function)
 {
     if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+    if (connectionIsRemote(domainConnectionUri(domain))) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "pci_passthrough_to_a_remote_vm_is_not_supported"));
         return false;
     }
 

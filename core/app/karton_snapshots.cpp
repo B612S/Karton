@@ -45,18 +45,20 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
-QVariantList Karton::domainSnapshots(const Domain *domain) const
+QVariantList collectSnapshots(virDomainPtr domainPtr)
 {
+    ScopedCallTimer timer("Karton::domainSnapshots");
     QVariantList result;
-    if (!domain || !domain->domainPtr()) {
+    if (!domainPtr) {
         return result;
     }
 
     virDomainSnapshotPtr *snapshots = nullptr;
-    const int count = virDomainListAllSnapshots(domain->domainPtr(), &snapshots, 0);
+    const int count = virDomainListAllSnapshots(domainPtr, &snapshots, 0);
     if (count < 0) {
         return result;
     }
@@ -139,32 +141,85 @@ QVariantList Karton::domainSnapshots(const Domain *domain) const
     return result;
 }
 
-bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, const QString &description, bool includeMemory)
+QVariantList Karton::domainSnapshots(const Domain *domain)
 {
+    ScopedCallTimer timer("Karton::domainSnapshots");
     if (!domain || !domain->domainPtr()) {
-        return false;
+        return {};
     }
+    const QString uuid = Domain::uuidString(domain->domainPtr());
+    if (uuid.isEmpty()) {
+        return {};
+    }
+    if (!readerConnectionForUuid(uuid)) {
+        return collectSnapshots(domain->domainPtr());
+    }
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const auto it = m_snapshotsCache.constFind(uuid);
+    if (it == m_snapshotsCache.cend() || now - m_snapshotsTimes.value(uuid, 0) > 2000) {
+        requestDomainSnapshots(uuid);
+    }
+    return it == m_snapshotsCache.cend() ? QVariantList{} : *it;
+}
 
-    const QString name = requestedName.trimmed();
-    if (!isValidDomainName(name)) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_snapshot_name_may_only_contain_letters_digits_dots_underscores_and_dashes"));
-        return false;
+void Karton::requestDomainSnapshots(const QString &uuid)
+{
+    virConnectPtr readerConn = readerConnectionForUuid(uuid);
+    if (!m_reader || !readerConn || m_snapshotsPending.contains(uuid)) {
+        return;
     }
+    m_snapshotsPending.insert(uuid);
+    postReaderJob([this, uuid, readerConn]() {
+        QVariantList result;
+        if (virConnectPtr conn = readerConn) {
+            virDomainPtr dom = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
+            if (dom) {
+                result = collectSnapshots(dom);
+                virDomainFree(dom);
+            }
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, uuid, result]() {
+                m_snapshotsPending.remove(uuid);
+                if (domainByUuid(uuid)) {
+                    m_snapshotsCache.insert(uuid, result);
+                    m_snapshotsTimes.insert(uuid, QDateTime::currentMSecsSinceEpoch());
+                    Q_EMIT snapshotsUpdated(uuid);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+namespace
+{
+struct SnapshotPlan {
+    bool ok = false;
+    QString xml;
+    unsigned int flags = 0;
+    QStringList overlayPaths;
+    QString error;
+};
+
+// Builds the snapshot XML on the GUI thread. For a running VM without memory
+// this prepares one external qcow2 overlay per data disk; the actual libvirt
+// call then runs in the worker (async) or inline (sync API).
+SnapshotPlan planSnapshot(const Domain *domain, const QString &name, const QString &description, bool includeMemory)
+{
+    SnapshotPlan plan;
     if (domain->isActive() && !includeMemory) {
-        // A running VM cannot use an internal snapshot without memory, so use
-        // an external disk-only snapshot: libvirt creates one qcow2 overlay
-        // per data disk and switches the live domain to the overlay.
         char *domainXml = virDomainGetXMLDesc(domain->domainPtr(), 0);
         if (!domainXml) {
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "could_not_read_the_vm_configuration_for_the_snapshot"));
-            return false;
+            plan.error = QCoreApplication::translate("Karton", "could_not_read_the_vm_configuration_for_the_snapshot");
+            return plan;
         }
 
         QDomDocument domainDocument;
         if (!domainDocument.setContent(QString::fromUtf8(domainXml))) {
             free(domainXml);
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "could_not_parse_the_vm_configuration_for_the_snapshot"));
-            return false;
+            plan.error = QCoreApplication::translate("Karton", "could_not_parse_the_vm_configuration_for_the_snapshot");
+            return plan;
         }
         free(domainXml);
 
@@ -216,8 +271,8 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
                 for (const QString &path : std::as_const(overlayPaths)) {
                     QFile::remove(path);
                 }
-                Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "snapshot_overlay_already_exists_1").arg(overlayPath));
-                return false;
+                plan.error = QCoreApplication::translate("Karton", "snapshot_overlay_already_exists_1").arg(overlayPath);
+                return plan;
             }
 
             QDomElement diskElement = snapshotDocument.createElement(QStringLiteral("disk"));
@@ -238,25 +293,15 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
         }
 
         if (overlayPaths.isEmpty()) {
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_vm_has_no_local_data_disks_to_snapshot"));
-            return false;
+            plan.error = QCoreApplication::translate("Karton", "the_vm_has_no_local_data_disks_to_snapshot");
+            return plan;
         }
 
-        virDomainSnapshotPtr snapshot = virDomainSnapshotCreateXML(domain->domainPtr(),
-                                                                   snapshotDocument.toString().toUtf8().constData(),
-                                                                   VIR_DOMAIN_SNAPSHOT_CREATE_DISK_ONLY | VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC);
-        if (!snapshot) {
-            for (const QString &path : std::as_const(overlayPaths)) {
-                QFile::remove(path);
-            }
-            Q_EMIT errorOccurred(
-                QCoreApplication::translate("Karton", "failed_to_create_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage())));
-            return false;
-        }
-
-        virDomainSnapshotFree(snapshot);
-        refreshDomain(domain->domainPtr());
-        return true;
+        plan.xml = snapshotDocument.toString();
+        plan.flags = VIR_DOMAIN_SNAPSHOT_CREATE_DISK_ONLY | VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC;
+        plan.overlayPaths = overlayPaths;
+        plan.ok = true;
+        return plan;
     }
 
     QDomDocument document;
@@ -277,20 +322,98 @@ bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, 
     memoryElement.setAttribute(QStringLiteral("snapshot"), (includeMemory && domain->isActive()) ? QStringLiteral("internal") : QStringLiteral("no"));
     root.appendChild(memoryElement);
 
-    virDomainSnapshotPtr snapshot = virDomainSnapshotCreateXML(domain->domainPtr(), document.toString().toUtf8().constData(), 0);
+    plan.xml = document.toString();
+    plan.flags = 0;
+    plan.ok = true;
+    return plan;
+}
+} // namespace
+
+bool Karton::createSnapshot(const Domain *domain, const QString &requestedName, const QString &description, bool includeMemory)
+{
+    ScopedCallTimer timer("Karton::createSnapshot");
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    const QString name = requestedName.trimmed();
+    if (!isValidDomainName(name)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_snapshot_name_may_only_contain_letters_digits_dots_underscores_and_dashes"));
+        return false;
+    }
+
+    const SnapshotPlan plan = planSnapshot(domain, name, description, includeMemory);
+    if (!plan.ok) {
+        Q_EMIT errorOccurred(plan.error);
+        return false;
+    }
+
+    virDomainSnapshotPtr snapshot = virDomainSnapshotCreateXML(domain->domainPtr(), plan.xml.toUtf8().constData(), plan.flags);
     if (!snapshot) {
-        const QString errorMsg =
-            QCoreApplication::translate("Karton", "failed_to_create_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
-        Q_EMIT errorOccurred(errorMsg);
+        for (const QString &path : std::as_const(plan.overlayPaths)) {
+            QFile::remove(path);
+        }
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage())));
         return false;
     }
 
     virDomainSnapshotFree(snapshot);
+    refreshDomain(domain->domainPtr());
     return true;
+}
+
+bool Karton::createSnapshotAsync(const Domain *domain, const QString &requestedName, const QString &description, bool includeMemory)
+{
+    ScopedCallTimer timer("Karton::createSnapshotAsync");
+    if (!domain || !domain->domainPtr()) {
+        return false;
+    }
+
+    const QString name = requestedName.trimmed();
+    if (!isValidDomainName(name)) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "a_snapshot_name_may_only_contain_letters_digits_dots_underscores_and_dashes"));
+        return false;
+    }
+
+    const SnapshotPlan plan = planSnapshot(domain, name, description, includeMemory);
+    if (!plan.ok) {
+        Q_EMIT errorOccurred(plan.error);
+        return false;
+    }
+
+    const QString xml = plan.xml;
+    const unsigned int flags = plan.flags;
+    const QStringList overlays = plan.overlayPaths;
+    return startBusyOperation(
+        domain,
+        QStringLiteral("snapshot-create"),
+        name,
+        [name, xml, flags, overlays](virConnectPtr conn, const QString &uuid, QString *error) {
+            virDomainPtr jobDomain = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
+            if (!jobDomain) {
+                *error = QString::fromUtf8(virGetLastErrorMessage());
+                return false;
+            }
+            virDomainSnapshotPtr snapshot = virDomainSnapshotCreateXML(jobDomain, xml.toUtf8().constData(), flags);
+            const bool success = snapshot != nullptr;
+            if (snapshot) {
+                virDomainSnapshotFree(snapshot);
+            } else {
+                *error = QCoreApplication::translate("Karton", "failed_to_create_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
+            }
+            virDomainFree(jobDomain);
+            if (!success) {
+                for (const QString &path : overlays) {
+                    QFile::remove(path);
+                }
+            }
+            return success;
+        });
 }
 
 bool Karton::deleteSnapshot(const Domain *domain, const QString &name)
 {
+    ScopedCallTimer timer("Karton::deleteSnapshot");
     if (!domain || !domain->domainPtr()) {
         return false;
     }
@@ -329,6 +452,7 @@ bool Karton::deleteSnapshot(const Domain *domain, const QString &name)
 
 bool Karton::revertSnapshot(const Domain *domain, const QString &name)
 {
+    ScopedCallTimer timer("Karton::revertSnapshot");
     if (!domain || !domain->domainPtr()) {
         return false;
     }
@@ -352,4 +476,77 @@ bool Karton::revertSnapshot(const Domain *domain, const QString &name)
         refreshDomain(domain->domainPtr());
     }
     return success;
+}
+
+bool Karton::revertSnapshotAsync(const Domain *domain, const QString &name)
+{
+    ScopedCallTimer timer("Karton::revertSnapshotAsync");
+    if (!domain || !domain->domainPtr() || name.isEmpty()) {
+        return false;
+    }
+    return startBusyOperation(domain, QStringLiteral("snapshot-revert"), name, [name](virConnectPtr conn, const QString &uuid, QString *error) {
+        virDomainPtr jobDomain = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
+        if (!jobDomain) {
+            *error = QString::fromUtf8(virGetLastErrorMessage());
+            return false;
+        }
+        virDomainSnapshotPtr snapshot = virDomainSnapshotLookupByName(jobDomain, name.toUtf8().constData(), 0);
+        bool success = false;
+        if (!snapshot) {
+            *error = QCoreApplication::translate("Karton", "failed_to_find_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
+        } else {
+            success = virDomainRevertToSnapshot(snapshot, 0) == 0;
+            if (!success) {
+                *error = QCoreApplication::translate("Karton", "failed_to_revert_to_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
+            }
+            virDomainSnapshotFree(snapshot);
+        }
+        virDomainFree(jobDomain);
+        return success;
+    });
+}
+
+bool Karton::deleteSnapshotAsync(const Domain *domain, const QString &name)
+{
+    ScopedCallTimer timer("Karton::deleteSnapshotAsync");
+    if (!domain || !domain->domainPtr() || name.isEmpty()) {
+        return false;
+    }
+
+    // The delete flags depend on whether the snapshot is external. The lookup
+    // is cheap and keeps the worker free of any policy decisions.
+    virDomainSnapshotPtr snapshot = virDomainSnapshotLookupByName(domain->domainPtr(), name.toUtf8().constData(), 0);
+    if (!snapshot) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_find_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage())));
+        return false;
+    }
+    bool external = false;
+    char *snapshotXml = virDomainSnapshotGetXMLDesc(snapshot, 0);
+    if (snapshotXml) {
+        external = QString::fromUtf8(snapshotXml).contains(QStringLiteral("snapshot='external'"));
+        free(snapshotXml);
+    }
+    virDomainSnapshotFree(snapshot);
+
+    const unsigned int flags = external ? 0 : VIR_DOMAIN_SNAPSHOT_DELETE_CHILDREN;
+    return startBusyOperation(domain, QStringLiteral("snapshot-delete"), name, [name, flags](virConnectPtr conn, const QString &uuid, QString *error) {
+        virDomainPtr jobDomain = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
+        if (!jobDomain) {
+            *error = QString::fromUtf8(virGetLastErrorMessage());
+            return false;
+        }
+        virDomainSnapshotPtr jobSnapshot = virDomainSnapshotLookupByName(jobDomain, name.toUtf8().constData(), 0);
+        bool success = false;
+        if (!jobSnapshot) {
+            *error = QCoreApplication::translate("Karton", "failed_to_find_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
+        } else {
+            success = virDomainSnapshotDelete(jobSnapshot, flags) == 0;
+            if (!success) {
+                *error = QCoreApplication::translate("Karton", "failed_to_delete_snapshot_1_2").arg(name).arg(QString::fromUtf8(virGetLastErrorMessage()));
+            }
+            virDomainSnapshotFree(jobSnapshot);
+        }
+        virDomainFree(jobDomain);
+        return success;
+    });
 }

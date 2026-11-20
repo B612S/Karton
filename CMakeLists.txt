@@ -150,11 +150,15 @@ target_sources(karton
     main.cpp
     core/app/karton.cpp
     core/app/karton_private.h
+    core/app/libvirtconnection.cpp
+    core/app/libvirtconnection.h
     core/app/karton_devices.cpp
     core/app/karton_disk.cpp
     core/app/karton_domain.cpp
     core/app/karton_import.cpp
+    core/app/karton_storage.cpp
     core/app/karton_ovf.cpp
+    core/app/ovfextract.cpp
     core/app/karton_network.cpp
     core/app/karton_os.cpp
     core/app/karton_pci.cpp
@@ -170,6 +174,7 @@ target_sources(karton
     core/domain/domainconfig.cpp
     core/libvirt/libvirtmonitor.cpp
     core/libvirt/libvirteventloop.cpp
+    core/libvirt/libvirtreader.cpp
     core/viewer/domainviewer.cpp
     core/viewer/clipboardmanager.cpp
     core/viewer/pipewireaudio.cpp
@@ -198,10 +203,14 @@ ecm_target_qml_sources(karton
     SOURCES
     qml/Main.qml
     qml/VMListPage.qml
+    qml/EmptyDetailsPage.qml
+    qml/NetworksPage.qml
+    qml/StoragePoolsPage.qml
+    qml/ConnectionSettingsDialog.qml
+    qml/ImportDomainDialog.qml
     qml/VMViewerWindow.qml
     qml/QmlSmokeTest.qml
     qml/InstallationDialog.qml
-    qml/PermissionGrantDialog.qml
     qml/VMPage.qml
     qml/UsageGraph.qml
     qml/KartonDialog.qml
@@ -215,7 +224,9 @@ ecm_target_qml_sources(karton
     qml/UsbDevicesDialog.qml
     qml/SettingsDialog.qml
     qml/SnapshotsDialog.qml
+    qml/BusyOperationDialog.qml
     qml/CloneDialog.qml
+    qml/StorageVolumePickerDialog.qml
 )
 
 qt_add_translations(karton

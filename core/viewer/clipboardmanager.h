@@ -23,6 +23,10 @@ public:
     void attach(SpiceSession *session, SpiceMainChannel *channel);
     void detach();
 
+    // Host clipboard reads can block on Wayland while the viewer is not the
+    // active/focused window; only read when the viewer is actually using it.
+    void setActive(bool active);
+
     void setTextMode(int mode);
     int textMode() const
     {
@@ -33,7 +37,6 @@ public:
     {
         return m_filesMode;
     }
-
 
 private:
     static gboolean clipboardSelectionGrabCallback(SpiceMainChannel *channel, guint selection, guint32 *types, guint ntypes, gpointer userData);
@@ -54,6 +57,7 @@ private:
     QString m_lastGuestClipboardText;
     QString m_lastSentHostClipboard;
     bool m_settingClipboard = false;
+    bool m_active = false;
     bool m_pendingHostGrab = false;
     QByteArray m_pendingFileList;
 };

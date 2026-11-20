@@ -18,6 +18,9 @@ class DomainXmlBuilder : public QObject
 public:
     using QObject::QObject;
 
+    // Loads the libosinfo database once, off the first wizard's critical path.
+    static void warmUpOsInfo();
+
     struct EditableConfig {
         int maxRam;
         int cpus;
@@ -35,8 +38,8 @@ public:
         bool readonly;
     };
 
-    bool setupDomain(virConnectPtr conn, const DomainConfig *config);
-    QString generateXML(const DomainConfig *config);
+    bool setupDomain(virConnectPtr conn, const DomainConfig *config, bool remote = false);
+    QString generateXML(const DomainConfig *config, bool remote = false);
     QString updateXML(const QString &xmlDesc, const EditableConfig &config);
     QString generateDiskXML(const DiskDeviceConfig &config);
 
@@ -52,6 +55,8 @@ private:
         QString type;
         QString autoport;
         QString listen;
+        QString address;
+        QString password;
         bool glEnable = false;
         QString uuid;
     };

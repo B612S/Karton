@@ -38,6 +38,7 @@
 <message><source>controller</source><translation>Controller</translation></message>
 <message><source>create_disk</source><translation>Create disk</translation></message>
 <message><source>create_new_disk</source><translation>Create new disk</translation></message>
+<message><source>creating_the_disk</source><translation>Creating the disk…</translation></message>
 <message><source>device</source><translation>Device</translation></message>
 <message><source>device_added</source><translation>Device added</translation></message>
 <message><source>discard_mode</source><translation>Discard mode</translation></message>
@@ -76,6 +77,21 @@
 <message><source>usb_host_device</source><translation>USB Host Device</translation></message>
 <message><source>usb_host_devices</source><translation>USB host devices</translation></message>
 <message><source>usb_redirection_over_spice</source><translation>USB redirection over SPICE</translation></message>
+<message><source>remote_image_path_note</source><translation>Remote connection: enter the path of an existing image or ISO on the remote host.</translation></message>
+<message><source>remote_no_storage_pools_note</source><translation>No active storage pools on the remote host. Create a pool in the host libvirt, or switch to "Existing image" and enter a path.</translation></message>
+<message><source>remote_advanced_options_note</source><translation>Bus, cache, discard, serial and shareable options are not applied to remote disks yet.</translation></message>
+<message><source>failed_to_create_the_disk_on_the_remote_host</source><translation>Failed to create the disk on the remote host.</translation></message>
+<message><source>storage_pool</source><translation>Storage pool</translation></message>
+<message><source>volume_name</source><translation>Volume name</translation></message>
+<message><source>select_a_storage_pool</source><translation>Select a storage pool.</translation></message>
+<message><source>remote_pool_note</source><translation>A new volume will be created in the selected storage pool on the remote host.</translation></message>
+<message><source>use_a_storage_pool</source><translation>Use a storage pool</translation></message>
+<message><source>local_pool_note</source><translation>A new volume will be created in the selected storage pool.</translation></message>
+<message><source>failed_to_create_the_storage_volume</source><translation>Failed to create the storage volume.</translation></message>
+<message><source>storage_pool_inactive_will_be_started</source><translation>This pool is inactive and will be started automatically.</translation></message>
+<message><source>no_active_storage_pools</source><translation>No active storage pools. Create or start one in Connection Settings → Storage pools.</translation></message>
+<message><source>from_pool</source><translation>From pool…</translation></message>
+<message><source>passthrough_is_not_supported_for_remote_vms</source><translation>USB/PCI passthrough is not supported for remote VMs yet.</translation></message>
 </context>
 <context>
 <name>ApplicationSettingsDialog</name>
@@ -96,8 +112,6 @@
 <message><source>choose_a_ca_certificate</source><translation>Choose a CA certificate</translation></message>
 <message><source>choose_vm_image_folder</source><translation>Choose VM image folder</translation></message>
 <message><source>clear</source><translation>Clear</translation></message>
-<message><source>clear_granted_permissions</source><translation>Clear granted permissions</translation></message>
-<message><source>clear_granted_permissions_2</source><translation>Clear granted permissions?</translation></message>
 <message><source>clear_preview_images</source><translation>Clear preview images</translation></message>
 <message><source>connection_uri</source><translation>Connection URI</translation></message>
 <message><source>console</source><translation>Console</translation></message>
@@ -126,14 +140,12 @@
 <message><source>forward_to</source><translation>Forward to</translation></message>
 <message><source>github_repository</source><translation>GitHub repository</translation></message>
 <message><source>gpl_3_0_or_later_karton_contributors</source><translation>GPL-3.0-or-later · © Karton contributors</translation></message>
-<message><source>granted_access</source><translation>Granted access</translation></message>
 <message><source>image_folder</source><translation>Image folder</translation></message>
 <message><source>inactive</source><translation>inactive</translation></message>
 <message><source>ipv4_configuration</source><translation>IPv4 configuration</translation></message>
 <message><source>ipv6_configuration</source><translation>IPv6 configuration</translation></message>
 <message><source>isolated</source><translation>Isolated</translation></message>
 <message><source>karton</source><translation>Karton</translation></message>
-<message><source>karton_will_remove_the_acl_entries_it_added_for_the_libvirt_qemu_user_ownership_and_other</source><translation>Karton will remove the ACL entries it added for the libvirt QEMU user. Ownership and other permissions will not be changed.</translation></message>
 <message><source>language_auto</source><translation>System</translation></message>
 <message><source>libvirt_networks</source><translation>Libvirt Networks</translation></message>
 <message><source>libvirt_uri</source><translation>Libvirt URI</translation></message>
@@ -145,7 +157,6 @@
 <message><source>network_created</source><translation>Network created</translation></message>
 <message><source>network_updated</source><translation>Network updated</translation></message>
 <message><source>new_vm_disks_are_created_in_this_folder_by_default_default_1</source><translation>New VM disks are created in this folder by default. Default: %1</translation></message>
-<message><source>no_folders_have_been_granted_access_by_karton</source><translation>No folders have been granted access by Karton.</translation></message>
 <message><source>open</source><translation>Open</translation></message>
 <message><source>path_to_the_ca_certificate</source><translation>Path to the CA certificate</translation></message>
 <message><source>removed_1_preview_images</source><translation>Removed %1 preview images</translation></message>
@@ -174,7 +185,30 @@
 <message><source>virtual_networks</source><translation>Virtual networks</translation></message>
 <message><source>vm_storage</source><translation>VM storage</translation></message>
 <message><source>dhcp</source><translation>DHCP</translation></message>
+<message><source>connections</source><translation>Connections</translation></message>
+<message><source>add_connection</source><translation>Add connection</translation></message>
+<message><source>remove</source><translation>Remove</translation></message>
+<message><source>additional_connections_are_applied_immediately</source><translation>Additional connections are applied immediately. The default connection is used after restarting Karton.</translation></message>
+<message><source>edit</source><translation>Edit</translation></message>
+<message><source>edit_connection</source><translation>Edit connection</translation></message>
+<message><source>connection_uri_applied_immediately</source><translation>The new address is used immediately.</translation></message>
+<message><source>connection_uri_already_used</source><translation>This connection is already in the list.</translation></message>
+<message><source>no_connections</source><translation>No connections configured.</translation></message>
+<message><source>connection</source><translation>Connection</translation></message>
 </context>
+<context>
+<name>BusyOperationDialog</name>
+<message><source>hibernating_the_vm</source><translation>Hibernating the virtual machine</translation></message>
+<message><source>saving_the_memory_of_1_to_disk</source><translation>Saving the memory of %1 to disk…</translation></message>
+<message><source>saving_the_vm_memory_to_disk</source><translation>Saving the VM memory to disk…</translation></message>
+<message><source>this_can_take_a_few_minutes</source><translation>This can take a few minutes.</translation></message>
+<message><source>creating_snapshot</source><translation>Creating the snapshot</translation></message>
+<message><source>reverting_to_snapshot</source><translation>Reverting to the snapshot</translation></message>
+<message><source>deleting_snapshot</source><translation>Deleting the snapshot</translation></message>
+<message><source>snapshot_operation_in_progress</source><translation>The snapshot operation is running…</translation></message>
+<message><source>cancel</source><translation>Cancel</translation></message>
+</context>
+
 <context>
 <name>CloneDialog</name>
 <message><source>name</source><translation>Name</translation></message>
@@ -193,6 +227,12 @@
 <message><source>the_copied_disk_images_will_be_placed_in_this_folder</source><translation>The copied disk images will be placed in this folder.</translation></message>
 </context>
 <context>
+<name>CommandRunner</name>
+<message><source>command_timed_out_after_1_s</source><translation>The command timed out after %1 s.</translation></message>
+<message><source>command_cancelled</source><translation>The command was cancelled.</translation></message>
+</context>
+
+<context>
 <name>DomainViewer</name>
 <message><source>could_not_connect_to_the_spice_display_or_serial_console</source><translation>Could not connect to the SPICE display or serial console.</translation></message>
 <message><source>failed_to_parse_the_virtual_machine_configuration</source><translation>Failed to parse the virtual machine configuration.</translation></message>
@@ -202,6 +242,7 @@
 <message><source>no_virtual_machine_is_selected</source><translation>No virtual machine is selected.</translation></message>
 <message><source>the_serial_console_connection_was_closed</source><translation>The serial console connection was closed.</translation></message>
 <message><source>this_virtual_machine_has_no_usable_spice_display_or_serial_console</source><translation>This virtual machine has no usable SPICE display or serial console.</translation></message>
+<message><source>remote_spice_display_is_not_reachable</source><translation>The remote SPICE display is not reachable: it is bound to the remote host's loopback or is exposed through a local socket.</translation></message>
 </context>
 <context>
 <name>InstallationDialog</name>
@@ -212,6 +253,7 @@
 <message><source>choose</source><translation>Choose…</translation></message>
 <message><source>choose_a_disk_image</source><translation>Choose a disk image</translation></message>
 <message><source>choose_disk_folder</source><translation>Choose disk folder</translation></message>
+<message><source>connection</source><translation>Connection</translation></message>
 <message><source>cpus</source><translation>CPUs</translation></message>
 <message><source>create</source><translation>Create</translation></message>
 <message><source>created_vm_1</source><translation>Created VM: %1</translation></message>
@@ -255,6 +297,21 @@
 <message><source>unknown_os_variant_leave_the_field_empty_to_create_a_generic_vm</source><translation>Unknown OS variant. Leave the field empty to create a generic VM.</translation></message>
 <message><source>vm_name</source><translation>VM name</translation></message>
 <message><source>yes</source><translation>Yes</translation></message>
+<message><source>enter_the_remote_disk_path</source><translation>Enter the path of an existing disk image on the remote host.</translation></message>
+<message><source>remote_disk_path</source><translation>Remote disk path</translation></message>
+<message><source>remote_disk_path_note</source><translation>Remote connection: a disk cannot be created on the remote host with qemu-img. Enter the path of an existing image on that host; new disks can be created in its storage pools.</translation></message>
+<message><source>not_set</source><translation>not set</translation></message>
+<message><source>storage_pool</source><translation>Storage pool</translation></message>
+<message><source>volume_name</source><translation>Volume name</translation></message>
+<message><source>use_an_existing_image</source><translation>Use an existing image on the remote host</translation></message>
+<message><source>select_a_storage_pool</source><translation>Select a storage pool.</translation></message>
+<message><source>remote_pool_note</source><translation>A new volume will be created in the selected storage pool on the remote host.</translation></message>
+<message><source>remote_installation_image</source><translation>Remote installation image</translation></message>
+<message><source>use_a_storage_pool</source><translation>Use a storage pool</translation></message>
+<message><source>local_pool_note</source><translation>A new volume will be created in the selected storage pool.</translation></message>
+<message><source>storage_pool_inactive_will_be_started</source><translation>This pool is inactive and will be started automatically.</translation></message>
+<message><source>no_active_storage_pools</source><translation>No active storage pools. Create or start one in Connection Settings → Storage pools.</translation></message>
+<message><source>hardware_acceleration_is_disabled_for_remote_connections</source><translation>3D acceleration is disabled for remote connections (the remote host may have no GPU).</translation></message>
 </context>
 <context>
 <name>Karton</name>
@@ -473,6 +530,12 @@
 <message><source>a_port_forward_for_port_1_already_exists</source><translation>A port forward for port %1 already exists.</translation></message>
 <message><source>failed_to_start_port_forward_on_port_1_2</source><translation>Failed to start the port forward on port %1: %2</translation></message>
 <message><source>another_ovf_import_is_already_running</source><translation>Another OVF import is already running.</translation></message>
+<message><source>ovf_import_cancelled</source><translation>Import cancelled.</translation></message>
+<message><source>another_operation_is_in_progress</source><translation>Another operation is already running.</translation></message>
+<message><source>operation_cancelled</source><translation>Operation cancelled.</translation></message>
+<message><source>hibernation_failed</source><translation>Hibernation failed.</translation></message>
+<message><source>snapshot_operation_failed</source><translation>The snapshot operation failed.</translation></message>
+<message><source>the_virtual_machine_is_not_running</source><translation>The virtual machine is not running.</translation></message>
 <message><source>failed_to_import_the_ova_1</source><translation>Failed to import the OVA: %1</translation></message>
 <message><source>the_file_is_not_an_ovf_or_ova_package</source><translation>The file is not an OVF or OVA package.</translation></message>
 <message><source>failed_to_parse_the_ovf_1</source><translation>Failed to parse the OVF: %1</translation></message>
@@ -500,6 +563,25 @@
 <message><source>the_ip_address_1_is_already_reserved</source><translation>The IP address %1 is already reserved.</translation></message>
 <message><source>the_mac_address_1_already_has_a_reservation</source><translation>MAC address %1 already has a reservation.</translation></message>
 <message><source>the_mac_address_1_is_not_connected_to_network_2</source><translation>MAC address %1 is not connected to the network %2.</translation></message>
+<message><source>remote_disk_path_required</source><translation>Enter a disk path on the remote host.</translation></message>
+<message><source>remote_disk_creation_is_not_supported</source><translation>Creating a new disk on a remote connection is not supported yet.</translation></message>
+<message><source>cloning_remote_vms_is_not_supported</source><translation>Cloning VMs from a remote connection is not supported yet.</translation></message>
+<message><source>ovf_import_to_a_remote_connection_is_not_supported</source><translation>OVF/OVA import into a remote connection is not supported yet.</translation></message>
+<message><source>not_set</source><translation>not set</translation></message>
+<message><source>invalid_storage_volume_configuration</source><translation>Enter a valid volume name and size.</translation></message>
+<message><source>storage_pool_1_was_not_found</source><translation>Storage pool %1 was not found.</translation></message>
+<message><source>storage_volume_1_already_exists</source><translation>Storage volume %1 already exists.</translation></message>
+<message><source>failed_to_create_storage_volume_1_2</source><translation>Failed to create storage volume %1: %2</translation></message>
+<message><source>failed_to_delete_storage_volume_1_2</source><translation>Failed to delete storage volume %1: %2</translation></message>
+<message><source>failed_to_start_storage_pool_1_2</source><translation>Failed to start storage pool %1: %2.</translation></message>
+<message><source>failed_to_stop_storage_pool_1_2</source><translation>Failed to stop storage pool %1: %2.</translation></message>
+<message><source>invalid_storage_pool_configuration</source><translation>Invalid storage pool configuration.</translation></message>
+<message><source>storage_pool_1_already_exists</source><translation>Storage pool %1 already exists.</translation></message>
+<message><source>failed_to_create_storage_pool_1_2</source><translation>Failed to create storage pool %1: %2.</translation></message>
+<message><source>failed_to_delete_storage_pool_1_2</source><translation>Failed to delete storage pool %1: %2.</translation></message>
+<message><source>ovf_export_from_a_remote_connection_is_not_supported</source><translation>OVF export from a remote connection is not supported yet.</translation></message>
+<message><source>usb_passthrough_to_a_remote_vm_is_not_supported</source><translation>USB passthrough to a remote VM is not supported yet.</translation></message>
+<message><source>pci_passthrough_to_a_remote_vm_is_not_supported</source><translation>PCI passthrough to a remote VM is not supported yet.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -515,13 +597,6 @@
 <message><source>manage_and_run_virtual_machines_with_ease</source><translation>Manage and run virtual machines with ease</translation></message>
 <message><source>your_emails</source><translation>Your emails</translation></message>
 <message><source>your_names</source><translation>Your names</translation></message>
-</context>
-<context>
-<name>PermissionGrantDialog</name>
-<message><source>cancel</source><translation>Cancel</translation></message>
-<message><source>give_the_libvirt_qemu_user_access_to_this_folder</source><translation>Give the libvirt QEMU user access to this folder?</translation></message>
-<message><source>grant_access</source><translation>Grant access</translation></message>
-<message><source>karton_will_add_acl_entries_only_for_the_libvirt_qemu_user_execute_permission_on_parent_fo</source><translation>Karton will add ACL entries only for the libvirt QEMU user: execute permission on parent folders and read/write/execute permission on this folder. Ownership and other permissions are not changed.</translation></message>
 </context>
 <context>
 <name>SettingsDialog</name>
@@ -700,6 +775,7 @@
 <message><source>port_forwarding_forwards_tcp_connections_from_this_machine_to_the_guest</source><translation>Forward TCP connections from this machine to the guest. UDP is not forwarded.</translation></message>
 <message><source>port_forwarding_is_tcp_only_use_ports_above_1024</source><translation>TCP only. Ports below 1024 usually require root privileges.</translation></message>
 <message><source>remove</source><translation>Remove</translation></message>
+<message><source>from_pool</source><translation>From pool…</translation></message>
 </context>
 <context>
 <name>SnapshotsDialog</name>
@@ -748,17 +824,40 @@
 <message><source>all</source><translation>All</translation></message>
 <message><source>cannot_connect_to_libvirt</source><translation>Cannot connect to libvirt</translation></message>
 <message><source>check_that_libvirt_is_running_and_that_the_1_connection_is_available</source><translation>Check that libvirt is running and that the %1 connection is available.</translation></message>
-<message><source>connected_to_1_create_a_new_virtual_machine_to_proceed</source><translation>Connected to %1. Create a new virtual machine to proceed.</translation></message>
+<message><source>connecting_to_1</source><translation>Connecting to %1…</translation></message>
+<message><source>connecting_to_1_explanation</source><translation>Karton is opening the libvirt connection. This can take a few seconds on a busy host.</translation></message>
+<message><source>reconnecting_to_1</source><translation>Reconnecting to %1…</translation></message>
+<message><source>reconnecting_to_1_explanation</source><translation>The libvirt connection is unavailable. Karton retries every few seconds.</translation></message>
 <message><source>create</source><translation>Create</translation></message>
 <message><source>filter_by_state</source><translation>Filter by state</translation></message>
 <message><source>no_matching_vms</source><translation>No matching virtual machines</translation></message>
+<message><source>no_virtual_machines</source><translation>No virtual machines</translation></message>
+<message><source>create_or_import_a_virtual_machine_to_get_started</source><translation>Create a new virtual machine or import one to get started.</translation></message>
 <message><source>running</source><translation>Running</translation></message>
 <message><source>search_virtual_machines</source><translation>Search virtual machines</translation></message>
 <message><source>settings</source><translation>Settings</translation></message>
 <message><source>stopped</source><translation>Stopped</translation></message>
 <message><source>try_a_different_search_or_filter</source><translation>Try a different search or filter.</translation></message>
 <message><source>virtual_machines</source><translation>Virtual Machines</translation></message>
-<message><source>welcome_to_karton</source><translation>Welcome to Karton!</translation></message>
+<message><source>vm_count</source><translation>%1 VMs</translation></message>
+<message><source>reconnect</source><translation>Reconnect</translation></message>
+<message><source>disconnect</source><translation>Disconnect</translation></message>
+<message><source>open</source><translation>Open</translation></message>
+<message><source>open_viewer</source><translation>Open viewer</translation></message>
+<message><source>delete_virtual_machine</source><translation>Delete virtual machine</translation></message>
+<message><source>delete</source><translation>Delete</translation></message>
+<message><source>delete_disk</source><translation>Delete disk</translation></message>
+<message><source>cancel</source><translation>Cancel</translation></message>
+<message><source>snapshots</source><translation>Snapshots</translation></message>
+<message><source>clone</source><translation>Clone</translation></message>
+<message><source>power_off</source><translation>Power off</translation></message>
+<message><source>shut_down</source><translation>Shut down</translation></message>
+<message><source>start</source><translation>Start</translation></message>
+<message><source>pause</source><translation>Pause</translation></message>
+<message><source>resume</source><translation>Resume</translation></message>
+<message><source>reboot</source><translation>Reboot</translation></message>
+<message><source>reset</source><translation>Reset</translation></message>
+<message><source>delete_vm_1</source><translation>Delete %1? This removes the virtual machine from libvirt.</translation></message>
 </context>
 <context>
 <name>VMPage</name>
@@ -793,6 +892,8 @@ This action cannot be undone.</translation></message>
 <message><source>memory</source><translation>Memory</translation></message>
 <message><source>memory_usage</source><translation>Memory Usage</translation></message>
 <message><source>more</source><translation>More</translation></message>
+<message><source>network</source><translation>Network</translation></message>
+<message><source>no_network_interfaces</source><translation>No network interfaces</translation></message>
 <message><source>pause</source><translation>Pause</translation></message>
 <message><source>power_off</source><translation>Power Off</translation></message>
 <message><source>ram</source><translation>RAM</translation></message>
@@ -901,10 +1002,14 @@ This action cannot be undone.</translation></message>
 <name>OvfImportDialog</name>
 <message><source>all_files</source><translation>All files (*)</translation></message>
 <message><source>cancel</source><translation>Cancel</translation></message>
+<message><source>cancelling_the_import</source><translation>Cancelling the import…</translation></message>
 <message><source>choose</source><translation>Choose…</translation></message>
 <message><source>choose_an_ovf_or_ova_file</source><translation>Choose an OVF or OVA file</translation></message>
 <message><source>choose_destination_folder</source><translation>Choose destination folder</translation></message>
+<message><source>connection</source><translation>Connection</translation></message>
 <message><source>destination</source><translation>Destination</translation></message>
+<message><source>extracting_1_of_2</source><translation>Extracting %1 of %2…</translation></message>
+<message><source>extracting_the_archive</source><translation>Extracting the archive…</translation></message>
 <message><source>import</source><translation>Import</translation></message>
 <message><source>import_ovf_ova</source><translation>Import OVF/OVA</translation></message>
 <message><source>importing_the_ovf_disks_are_converted_to_qcow2</source><translation>Importing. Disks are converted to qcow2…</translation></message>
@@ -915,6 +1020,7 @@ This action cannot be undone.</translation></message>
 <message><source>ovf_ova_packages</source><translation>OVF/OVA packages (*.ovf *.ova)</translation></message>
 <message><source>source</source><translation>Source</translation></message>
 <message><source>the_vm_is_created_stopped_and_can_be_started_from_the_list</source><translation>The VM is created stopped and can be started from the list.</translation></message>
+<message><source>ovf_import_to_a_remote_connection_is_not_supported</source><translation>OVF import to a remote connection is not supported yet.</translation></message>
 </context>
 <context>
 <name>OvfExportDialog</name>
@@ -931,5 +1037,110 @@ This action cannot be undone.</translation></message>
 <message><source>ova_archive</source><translation>OVA archive</translation></message>
 <message><source>ovf_exported_1</source><translation>OVF package exported to %1</translation></message>
 <message><source>ovf_folder</source><translation>OVF folder</translation></message>
+</context>
+<context>
+<name>NetworksPage</name>
+<message><source>active</source><translation>active</translation></message>
+<message><source>add_network</source><translation>Add network</translation></message>
+<message><source>any_physical_device</source><translation>Any physical device</translation></message>
+<message><source>bridge</source><translation>Bridge</translation></message>
+<message><source>bridge_name</source><translation>Bridge name</translation></message>
+<message><source>cancel</source><translation>Cancel</translation></message>
+<message><source>changes_to_an_active_network_briefly_restart_it_so_the_new_configuration_takes_effect</source><translation>Changes to an active network briefly restart it so the new configuration takes effect.</translation></message>
+<message><source>create</source><translation>Create</translation></message>
+<message><source>create_network</source><translation>Create Network</translation></message>
+<message><source>custom</source><translation>Custom</translation></message>
+<message><source>delete</source><translation>Delete</translation></message>
+<message><source>dhcp</source><translation>DHCP</translation></message>
+<message><source>dhcpv4_range</source><translation>DHCPv4 range</translation></message>
+<message><source>dhcpv6_range</source><translation>DHCPv6 range</translation></message>
+<message><source>dns_domain_name</source><translation>DNS domain name</translation></message>
+<message><source>domain</source><translation>Domain</translation></message>
+<message><source>edit</source><translation>Edit</translation></message>
+<message><source>edit_network</source><translation>Edit Network</translation></message>
+<message><source>enable_dhcpv4</source><translation>Enable DHCPv4</translation></message>
+<message><source>enable_dhcpv6</source><translation>Enable DHCPv6</translation></message>
+<message><source>enable_ipv4</source><translation>Enable IPv4</translation></message>
+<message><source>enable_ipv6</source><translation>Enable IPv6</translation></message>
+<message><source>end</source><translation>End</translation></message>
+<message><source>example_lan</source><translation>example.lan</translation></message>
+<message><source>forward_to</source><translation>Forward to</translation></message>
+<message><source>inactive</source><translation>inactive</translation></message>
+<message><source>ipv4_configuration</source><translation>IPv4 configuration</translation></message>
+<message><source>ipv6_configuration</source><translation>IPv6 configuration</translation></message>
+<message><source>isolated</source><translation>Isolated</translation></message>
+<message><source>mode</source><translation>Mode</translation></message>
+<message><source>name</source><translation>Name</translation></message>
+<message><source>nat</source><translation>NAT</translation></message>
+<message><source>network</source><translation>Network</translation></message>
+<message><source>network_created</source><translation>Network created</translation></message>
+<message><source>network_updated</source><translation>Network updated</translation></message>
+<message><source>open</source><translation>Open</translation></message>
+<message><source>routed</source><translation>Routed</translation></message>
+<message><source>save</source><translation>Save</translation></message>
+<message><source>start</source><translation>Start</translation></message>
+<message><source>start_on_boot</source><translation>Start on boot</translation></message>
+<message><source>stop</source><translation>Stop</translation></message>
+<message><source>these_networks_are_shared_by_all_virtual_machines</source><translation>These networks are shared by all virtual machines.</translation></message>
+<message><source>use_network_name</source><translation>Use network name</translation></message>
+<message><source>virtual_networks</source><translation>Virtual networks</translation></message>
+</context>
+<context>
+<name>ConnectionSettingsDialog</name>
+<message><source>close</source><translation>Close</translation></message>
+<message><source>connection_settings</source><translation>Connection settings</translation></message>
+<message><source>connection_uri</source><translation>Connection URI</translation></message>
+<message><source>connection_uri_already_used</source><translation>This connection is already in the list.</translation></message>
+<message><source>connection_uri_applied_immediately</source><translation>The new address is used immediately.</translation></message>
+<message><source>restart_karton_to_apply_the_new_connection</source><translation>Restart Karton to apply the new connection.</translation></message>
+<message><source>save_connection</source><translation>Save connection</translation></message>
+</context>
+<context>
+<name>ImportDomainDialog</name>
+<message><source>all_files</source><translation>All files (*)</translation></message>
+<message><source>cancel</source><translation>Cancel</translation></message>
+<message><source>choose</source><translation>Choose…</translation></message>
+<message><source>choose_a_domain_xml_file</source><translation>Choose a domain XML file.</translation></message>
+<message><source>connection</source><translation>Connection</translation></message>
+<message><source>domain_xml_file</source><translation>Domain XML file</translation></message>
+<message><source>import</source><translation>Import</translation></message>
+<message><source>import_vm</source><translation>Import virtual machine</translation></message>
+<message><source>libvirt_domain_xml</source><translation>Libvirt domain XML (*.xml)</translation></message>
+<message><source>source</source><translation>Source</translation></message>
+<message><source>the_virtual_machine_is_imported_stopped</source><translation>The virtual machine is imported stopped.</translation></message>
+</context>
+<context>
+    <name>StorageVolumePickerDialog</name>
+    <message><source>select_storage_volume</source><translation>Select a storage volume</translation></message>
+    <message><source>storage_pool</source><translation>Storage pool</translation></message>
+    <message><source>storage_volume</source><translation>Storage volume</translation></message>
+    <message><source>no_storage_volumes</source><translation>This storage pool has no volumes.</translation></message>
+    <message><source>cancel</source><translation>Cancel</translation></message>
+    <message><source>select</source><translation>Select</translation></message>
+<message><source>capacity_allocation</source><translation>%1 GB capacity · %2 GB allocated</translation></message>
+<message><source>no_matching_storage_volumes</source><translation>No matching storage volumes in this pool.</translation></message>
+</context>
+<context>
+    <name>StoragePoolsPage</name>
+    <message><source>storage_pools</source><translation>Storage pools</translation></message>
+    <message><source>add_storage_pool</source><translation>Add pool</translation></message>
+    <message><source>active</source><translation>Active</translation></message>
+    <message><source>inactive</source><translation>Inactive</translation></message>
+    <message><source>capacity_allocation</source><translation>%1 GB capacity · %2 GB allocated</translation></message>
+    <message><source>stop</source><translation>Stop</translation></message>
+    <message><source>start</source><translation>Start</translation></message>
+    <message><source>delete</source><translation>Delete</translation></message>
+    <message><source>no_storage_pools_defined</source><translation>No storage pools are defined.</translation></message>
+    <message><source>storage_pools_are_shared_by_all_virtual_machines</source><translation>These storage pools are shared by all virtual machines of this connection.</translation></message>
+    <message><source>create_storage_pool</source><translation>Create storage pool</translation></message>
+    <message><source>pool_name</source><translation>Pool name</translation></message>
+    <message><source>target_path</source><translation>Target path</translation></message>
+    <message><source>a_directory_storage_pool_is_created_and_started_at_this_path_on_the_connection_host</source><translation>A directory storage pool is created and started at this path on the connection host.</translation></message>
+    <message><source>cancel</source><translation>Cancel</translation></message>
+    <message><source>create</source><translation>Create</translation></message>
+    <message><source>failed_to_create_the_storage_pool</source><translation>Failed to create the storage pool.</translation></message>
+    <message><source>delete_storage_pool</source><translation>Delete storage pool</translation></message>
+    <message><source>delete_storage_pool_question_1</source><translation>Delete the storage pool "%1"? Stop it first.</translation></message>
+    <message><source>failed_to_delete_the_storage_pool</source><translation>Failed to delete the storage pool.</translation></message>
 </context>
 </TS>

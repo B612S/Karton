@@ -42,12 +42,22 @@ public:
     {
     }
 
-    void releaseWayland()
+    void releaseWaylandInhibitor()
     {
         if (inhibitor) {
             zwp_keyboard_shortcuts_inhibitor_v1_destroy(inhibitor);
             inhibitor = nullptr;
+            // Make sure the compositor processes the release before we return:
+            // a pending destroy left the desktop shortcuts inhibited.
+            if (display) {
+                wl_display_roundtrip(display);
+            }
         }
+    }
+
+    void releaseWaylandGlobals()
+    {
+        releaseWaylandInhibitor();
         if (manager) {
             zwp_keyboard_shortcuts_inhibit_manager_v1_destroy(manager);
             manager = nullptr;
@@ -78,6 +88,9 @@ ShortcutInhibitor::ShortcutInhibitor(QObject *parent)
 ShortcutInhibitor::~ShortcutInhibitor()
 {
     release();
+#if QT_CONFIG(wayland)
+    d->releaseWaylandGlobals();
+#endif
 }
 
 void ShortcutInhibitor::setWindow(QWindow *window)
@@ -86,6 +99,9 @@ void ShortcutInhibitor::setWindow(QWindow *window)
         return;
     }
     release();
+#if QT_CONFIG(wayland)
+    d->releaseWaylandGlobals();
+#endif
     d->window = window;
 }
 
@@ -107,22 +123,25 @@ bool ShortcutInhibitor::setInhibited(bool inhibited)
     if (platform == QStringLiteral("wayland")) {
         auto *wayland = qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>();
         if (wayland) {
-            d->display = wayland->display();
-            if (d->display) {
+            if (d->display != wayland->display()) {
+                d->releaseWaylandGlobals();
+                d->display = wayland->display();
+            }
+            if (d->display && !d->registry) {
                 d->registry = wl_display_get_registry(d->display);
                 static const wl_registry_listener listener = {Private::global, Private::globalRemove};
                 wl_registry_add_listener(d->registry, &listener, d.get());
+                // Only the first bind needs a roundtrip; the manager is kept for
+                // the lifetime of this window so hovering does not block again.
                 wl_display_roundtrip(d->display);
-                auto *surface = reinterpret_cast<wl_surface *>(d->window->winId());
-                if (d->manager && surface) {
-                    d->inhibitor = zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(d->manager, surface, wayland->seat());
-                    wl_display_roundtrip(d->display);
-                    if (d->inhibitor) {
-                        d->inhibited = true;
-                        return true;
-                    }
+            }
+            auto *surface = reinterpret_cast<wl_surface *>(d->window->winId());
+            if (d->manager && surface) {
+                d->inhibitor = zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(d->manager, surface, wayland->seat());
+                if (d->inhibitor) {
+                    d->inhibited = true;
+                    return true;
                 }
-                d->releaseWayland();
             }
         }
     }
@@ -141,7 +160,7 @@ bool ShortcutInhibitor::setInhibited(bool inhibited)
 void ShortcutInhibitor::release()
 {
 #if QT_CONFIG(wayland)
-    d->releaseWayland();
+    d->releaseWaylandInhibitor();
 #endif
     d->releaseX11();
     d->inhibited = false;

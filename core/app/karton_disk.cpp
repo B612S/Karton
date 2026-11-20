@@ -47,6 +47,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
@@ -126,15 +127,13 @@ static QString diskXmlForTarget(virDomainPtr domain, const QString &targetDev, u
 
 QVariantList Karton::domainDisks(const Domain *domain) const
 {
+    ScopedCallTimer timer("Karton::domainDisks");
     QVariantList result;
     if (!domain || !domain->domainPtr()) {
         return result;
     }
 
-    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
-    if (!xml) {
-        xml = virDomainGetXMLDesc(domain->domainPtr(), 0);
-    }
+    char *xml = cachedDomainXml(domain, true);
     if (!xml) {
         return result;
     }
@@ -165,15 +164,16 @@ QVariantList Karton::domainDisks(const Domain *domain) const
     return result;
 }
 
-QVariantList Karton::domainDiskStats(const Domain *domain) const
+namespace
+{
+QVariantList collectDiskStats(virDomainPtr domainPtr)
 {
     QVariantList result;
-    if (!domain || !domain->domainPtr()) {
+    if (!domainPtr) {
         return result;
     }
 
-    virDomainPtr domainPtr = domain->domainPtr();
-    const bool running = domain->isActive();
+    const bool running = virDomainIsActive(domainPtr) == 1;
     char *xml = virDomainGetXMLDesc(domainPtr, running ? 0 : VIR_DOMAIN_XML_INACTIVE);
     if (!xml) {
         xml = virDomainGetXMLDesc(domainPtr, VIR_DOMAIN_XML_INACTIVE);
@@ -235,14 +235,72 @@ QVariantList Karton::domainDiskStats(const Domain *domain) const
 
     return result;
 }
+} // namespace
+
+QVariantList Karton::domainDiskStats(const Domain *domain)
+{
+    ScopedCallTimer timer("Karton::domainDiskStats");
+    if (!domain || !domain->domainPtr()) {
+        return {};
+    }
+    const QString cacheKey = Domain::uuidString(domain->domainPtr());
+    if (cacheKey.isEmpty()) {
+        return {};
+    }
+    if (!readerConnectionForUuid(cacheKey)) {
+        return collectDiskStats(domain->domainPtr());
+    }
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const auto it = m_diskStatsCache.constFind(cacheKey);
+    if (it == m_diskStatsCache.cend() || now - m_diskStatsTimes.value(cacheKey, 0) > 2000) {
+        requestDomainDiskStats(cacheKey);
+    }
+    return it == m_diskStatsCache.cend() ? QVariantList{} : *it;
+}
+
+void Karton::requestDomainDiskStats(const QString &uuid)
+{
+    virConnectPtr readerConn = readerConnectionForUuid(uuid);
+    if (!m_reader || !readerConn || m_diskStatsPending.contains(uuid)) {
+        return;
+    }
+    m_diskStatsPending.insert(uuid);
+    postReaderJob([this, uuid, readerConn]() {
+        QVariantList result;
+        if (virConnectPtr conn = readerConn) {
+            virDomainPtr dom = virDomainLookupByUUIDString(conn, uuid.toUtf8().constData());
+            if (dom) {
+                result = collectDiskStats(dom);
+                virDomainFree(dom);
+            }
+        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, uuid, result]() {
+                m_diskStatsPending.remove(uuid);
+                if (domainByUuid(uuid)) {
+                    m_diskStatsCache.insert(uuid, result);
+                    m_diskStatsTimes.insert(uuid, QDateTime::currentMSecsSinceEpoch());
+                    Q_EMIT domainDiskStatsUpdated(uuid);
+                }
+            },
+            Qt::QueuedConnection);
+    });
+}
 
 bool Karton::addDisk(const Domain *domain, int sizeGB, const QString &format, const QVariantMap &options)
 {
+    ScopedCallTimer timer("Karton::addDisk");
     if (!domain || !domain->domainPtr()) {
         return false;
     }
     if (sizeGB < 1 || sizeGB > 2048) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "disk_size_must_be_between_1_and_2048_gb"));
+        return false;
+    }
+    if (connectionIsRemote(domainConnectionUri(domain))) {
+        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "remote_disk_creation_is_not_supported"));
         return false;
     }
 
@@ -323,20 +381,6 @@ bool Karton::addDisk(const Domain *domain, int sizeGB, const QString &format, co
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_disk_path_already_exists_1").arg(path));
         return false;
     }
-    const QString accessError = checkDiskDirectoryAccess(pathInfo.absolutePath());
-    if (!accessError.isEmpty()) {
-        Q_EMIT errorOccurred(accessError);
-        return false;
-    }
-
-    QString output;
-    if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
-                                            {QStringLiteral("create"), QStringLiteral("-f"), diskFormat, path, QStringLiteral("%1G").arg(sizeGB)},
-                                            &output)) {
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_create_disk_1_2").arg(path).arg(output));
-        return false;
-    }
-
     QString driverAttributes;
     if (!cache.isEmpty()) {
         driverAttributes += QStringLiteral(" cache='%1'").arg(cache);
@@ -364,28 +408,72 @@ bool Karton::addDisk(const Domain *domain, int sizeGB, const QString &format, co
     }
     xml += QStringLiteral("</disk>");
 
-    bool success = false;
-    if (domain->isActive()) {
-        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
-            Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_attach_disk_1_2").arg(path).arg(QString::fromUtf8(virGetLastErrorMessage())));
-        } else {
-            success = true;
-        }
-        if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
-            qCWarning(KARTON_DEBUG) << "Failed to persist disk:" << virGetLastErrorMessage();
-        }
-    } else if (virDomainAttachDeviceFlags(domain->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) == 0) {
-        success = true;
-    } else {
-        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_attach_disk_1_2").arg(path).arg(QString::fromUtf8(virGetLastErrorMessage())));
-    }
+    // qemu-img create runs asynchronously: a slow image (network filesystem,
+    // thinning on a huge sparse file) must not freeze the window. The dialog
+    // stays open and waits for diskCreated().
+    const QString connectionUri = domainConnectionUri(domain);
+    const bool readonlyDisk = options.value(QStringLiteral("readonly")).toBool();
+    QPointer<Domain> guard(const_cast<Domain *>(domain));
+    m_commandRunner->runCommand(
+        QStringLiteral("qemu-img"),
+        {QStringLiteral("create"), QStringLiteral("-f"), diskFormat, path, QStringLiteral("%1G").arg(sizeGB)},
+        [this, guard, path, xml, connectionUri, readonlyDisk](bool created, const QString &output) {
+            if (!guard) {
+                // The domain disappeared while the image was being created;
+                // do not leave an orphan file behind, but still answer the
+                // dialog so it cannot stay in its "creating" state forever.
+                QFile::remove(path);
+                const QString message = QCoreApplication::translate("Karton", "the_virtual_machine_was_removed");
+                Q_EMIT diskCreated(false, path, message);
+                return;
+            }
+            if (!created) {
+                QFile::remove(path);
+                const QString message = QCoreApplication::translate("Karton", "failed_to_create_disk_1_2").arg(path, output);
+                qCWarning(KARTON_DEBUG) << message;
+                Q_EMIT errorOccurred(message);
+                Q_EMIT diskCreated(false, path, message);
+                return;
+            }
 
-    if (!success) {
-        QFile::remove(path);
-        return false;
-    }
+            const QString aclError = ensureDiskAccess(path, connectionUri, readonlyDisk);
+            if (!aclError.isEmpty()) {
+                QFile::remove(path);
+                qCWarning(KARTON_DEBUG) << aclError;
+                Q_EMIT errorOccurred(aclError);
+                Q_EMIT diskCreated(false, path, aclError);
+                return;
+            }
 
-    refreshDomain(domain->domainPtr());
+            bool success = false;
+            QString message;
+            if (guard->isActive()) {
+                if (virDomainAttachDeviceFlags(guard->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_LIVE) < 0) {
+                    message = QCoreApplication::translate("Karton", "failed_to_attach_disk_1_2").arg(path, QString::fromUtf8(virGetLastErrorMessage()));
+                } else {
+                    success = true;
+                }
+                if (virDomainAttachDeviceFlags(guard->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) < 0) {
+                    qCWarning(KARTON_DEBUG) << "Failed to persist disk:" << virGetLastErrorMessage();
+                }
+            } else if (virDomainAttachDeviceFlags(guard->domainPtr(), xml.toUtf8().constData(), VIR_DOMAIN_AFFECT_CONFIG) == 0) {
+                success = true;
+            } else {
+                message = QCoreApplication::translate("Karton", "failed_to_attach_disk_1_2").arg(path, QString::fromUtf8(virGetLastErrorMessage()));
+            }
+
+            if (!success) {
+                QFile::remove(path);
+                qCWarning(KARTON_DEBUG) << message;
+                Q_EMIT errorOccurred(message);
+                Q_EMIT diskCreated(false, path, message);
+                return;
+            }
+
+            refreshDomain(guard->domainPtr());
+            Q_EMIT diskCreated(true, path, QString());
+        },
+        60000);
     return true;
 }
 
@@ -394,8 +482,16 @@ bool Karton::attachDiskImage(const Domain *domain, const QString &path, const QS
     if (!domain || !domain->domainPtr()) {
         return false;
     }
-    if (!QFileInfo::exists(path)) {
+    const QString connectionUri = domainConnectionUri(domain);
+    const bool remote = connectionIsRemote(connectionUri);
+    const bool volumePath = !remote && isStorageVolumePath(path, connectionUri);
+    if (!remote && !volumePath && !QFileInfo::exists(path)) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "disk_image_does_not_exist_1").arg(path));
+        return false;
+    }
+    const QString aclError = ensureDiskAccess(path, connectionUri);
+    if (!aclError.isEmpty()) {
+        Q_EMIT errorOccurred(aclError);
         return false;
     }
 
@@ -438,11 +534,19 @@ bool Karton::attachDiskImage(const Domain *domain, const QString &path, const QS
 
 bool Karton::setDiskMedia(const Domain *domain, const QString &targetDev, const QString &path)
 {
-    if (!domain || !domain->domainPtr() || !m_conn || targetDev.isEmpty()) {
+    if (!domain || !domain->domainPtr() || targetDev.isEmpty()) {
         return false;
     }
-    if (!path.isEmpty() && !QFileInfo::exists(path)) {
+    const QString connectionUri = domainConnectionUri(domain);
+    const bool remote = connectionIsRemote(connectionUri);
+    const bool volumePath = !remote && isStorageVolumePath(path, connectionUri);
+    if (!remote && !volumePath && !path.isEmpty() && !QFileInfo::exists(path)) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_media_file_does_not_exist_1").arg(path));
+        return false;
+    }
+    const QString aclError = ensureDiskAccess(path, connectionUri, true);
+    if (!aclError.isEmpty()) {
+        Q_EMIT errorOccurred(aclError);
         return false;
     }
 
@@ -505,7 +609,7 @@ bool Karton::setDiskMedia(const Domain *domain, const QString &targetDev, const 
         }
     }
 
-    virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
+    virDomainPtr redefined = virDomainDefineXML(virDomainGetConnect(domain->domainPtr()), document.toString().toUtf8().constData());
     if (!redefined) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_configuration_for_domain_1_2")
                                  .arg(domain->config()->name())
@@ -522,8 +626,16 @@ bool Karton::attachIso(const Domain *domain, const QString &path)
     if (!domain || !domain->domainPtr()) {
         return false;
     }
-    if (!QFileInfo::exists(path)) {
+    const QString connectionUri = domainConnectionUri(domain);
+    const bool remote = connectionIsRemote(connectionUri);
+    const bool volumePath = !remote && isStorageVolumePath(path, connectionUri);
+    if (!remote && !volumePath && !QFileInfo::exists(path)) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "iso_image_does_not_exist_1").arg(path));
+        return false;
+    }
+    const QString aclError = ensureDiskAccess(path, connectionUri, true);
+    if (!aclError.isEmpty()) {
+        Q_EMIT errorOccurred(aclError);
         return false;
     }
 
@@ -616,10 +728,23 @@ bool Karton::detachDisk(const Domain *domain, const QString &targetDev, bool del
     }
 
     if (success) {
-        if (deleteFile && diskDevice == QStringLiteral("disk") && !diskSource.isEmpty() && QFile::exists(diskSource)) {
-            if (!QFile::remove(diskSource)) {
-                Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_disk_was_detached_but_its_file_could_not_be_removed_1").arg(diskSource));
-                success = false;
+        if (deleteFile && diskDevice == QStringLiteral("disk") && !diskSource.isEmpty()) {
+            if (connectionIsRemote(domainConnectionUri(domain))) {
+                virConnectPtr conn = connectionHandleForUri(domainConnectionUri(domain));
+                virStorageVolPtr volume = conn ? virStorageVolLookupByPath(conn, diskSource.toUtf8().constData()) : nullptr;
+                if (volume) {
+                    if (virStorageVolDelete(volume, 0) != 0) {
+                        Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_delete_storage_volume_1_2")
+                                                 .arg(diskSource, QString::fromUtf8(virGetLastErrorMessage())));
+                        success = false;
+                    }
+                    virStorageVolFree(volume);
+                }
+            } else if (QFile::exists(diskSource)) {
+                if (!QFile::remove(diskSource)) {
+                    Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_disk_was_detached_but_its_file_could_not_be_removed_1").arg(diskSource));
+                    success = false;
+                }
             }
         }
         refreshDomain(domain->domainPtr());
@@ -671,9 +796,11 @@ QVariantMap Karton::domainDiskAdvanced(const Domain *domain, const QString &targ
 
 bool Karton::editDomainDiskAdvanced(const Domain *domain, const QString &targetDev, const QVariantMap &settings)
 {
-    if (!domain || !domain->domainPtr() || !m_conn || targetDev.isEmpty()) {
+    if (!domain || !domain->domainPtr() || targetDev.isEmpty()) {
         return false;
     }
+    const QString connectionUri = domainConnectionUri(domain);
+    const bool remote = connectionIsRemote(connectionUri);
 
     char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
     if (!xml) {
@@ -716,11 +843,18 @@ bool Karton::editDomainDiskAdvanced(const Domain *domain, const QString &targetD
         QString requestedSource = settings.value(QStringLiteral("source")).toString().trimmed();
         if (!requestedSource.isEmpty()) {
             requestedSource = QDir::cleanPath(requestedSource);
-            if (QFileInfo(requestedSource).isRelative()) {
+            const bool volumeSource = !remote && isStorageVolumePath(requestedSource, connectionUri);
+            if (!remote && !volumeSource && QFileInfo(requestedSource).isRelative()) {
                 requestedSource = QDir::current().absoluteFilePath(requestedSource);
             }
-            if (!QFileInfo::exists(requestedSource)) {
+            if (!remote && !volumeSource && !QFileInfo::exists(requestedSource)) {
                 Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "the_disk_image_does_not_exist_1").arg(requestedSource));
+                return false;
+            }
+            const bool readOnlyDisk = isCdrom || settings.value(QStringLiteral("readonly")).toBool();
+            const QString aclError = ensureDiskAccess(requestedSource, connectionUri, readOnlyDisk);
+            if (!aclError.isEmpty()) {
+                Q_EMIT errorOccurred(aclError);
                 return false;
             }
         }
@@ -800,7 +934,7 @@ bool Karton::editDomainDiskAdvanced(const Domain *domain, const QString &targetD
         }
     }
 
-    virDomainPtr redefined = virDomainDefineXML(m_conn, document.toString().toUtf8().constData());
+    virDomainPtr redefined = virDomainDefineXML(virDomainGetConnect(domain->domainPtr()), document.toString().toUtf8().constData());
     if (!redefined) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_update_configuration_for_domain_1_2")
                                  .arg(domain->config()->name())
@@ -831,7 +965,7 @@ QString Karton::getVirtualDiskPath(const QString &domainName, const QString &for
     return directory.filePath(domainName + QLatin1Char('.') + suffix);
 }
 
-int Karton::diskSizeGB(const QString &path)
+int Karton::diskSizeGB(const QString &path, bool queryIfMissing)
 {
     if (path.isEmpty()) {
         return 0;
@@ -841,13 +975,17 @@ int Karton::diskSizeGB(const QString &path)
     if (cached != m_diskSizeCache.cend()) {
         return *cached;
     }
+    if (!queryIfMissing) {
+        return 0;
+    }
 
     QString output;
     // -U / --force-share lets us inspect a disk image that a running VM has
     // locked for writing.
     if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
                                             {QStringLiteral("info"), QStringLiteral("-U"), QStringLiteral("--output=json"), path},
-                                            &output)) {
+                                            &output,
+                                            10000)) {
         return 0;
     }
 
@@ -866,6 +1004,39 @@ int Karton::diskSizeGB(const QString &path)
     const int sizeGB = static_cast<int>((bytes + (1LL << 30) - 1) / (1LL << 30));
     m_diskSizeCache.insert(path, sizeGB);
     return sizeGB;
+}
+
+void Karton::scheduleDiskSizeQuery(const QString &path)
+{
+    if (path.isEmpty() || m_diskSizeCache.contains(path) || m_diskSizeLookups.contains(path)) {
+        return;
+    }
+    m_diskSizeLookups.insert(path);
+    // Never spawn qemu-img from the synchronous refresh: a stuck image
+    // (network filesystem, stale lock) would freeze the GUI thread. The size
+    // is filled in when the answer arrives and the model updates itself.
+    m_commandRunner->runCommand(
+        QStringLiteral("qemu-img"),
+        {QStringLiteral("info"), QStringLiteral("-U"), QStringLiteral("--output=json"), path},
+        [this, path](bool success, const QString &output) {
+            m_diskSizeLookups.remove(path);
+            if (!success) {
+                return;
+            }
+            const QJsonDocument document = QJsonDocument::fromJson(output.toUtf8());
+            const qint64 bytes = document.object().value(QStringLiteral("virtual-size")).toVariant().toLongLong();
+            if (bytes <= 0) {
+                return;
+            }
+            const int sizeGB = static_cast<int>((bytes + (1LL << 30) - 1) / (1LL << 30));
+            m_diskSizeCache.insert(path, sizeGB);
+            for (Domain *domain : std::as_const(m_domains)) {
+                if (domain->config()->virtualDiskPaths().contains(path)) {
+                    domain->config()->setMaxDiskStorage(sizeGB);
+                }
+            }
+        },
+        10000);
 }
 
 bool Karton::ejectDisk(const Domain *domain)
@@ -979,6 +1150,7 @@ bool Karton::checkDiskImage(const Domain *domain, const QString &path)
 
 bool Karton::compactDiskImage(const Domain *domain, const QString &path)
 {
+    ScopedCallTimer timer("Karton::compactDiskImage");
     if (!domain || !domain->domainPtr()) {
         return false;
     }
@@ -997,7 +1169,8 @@ bool Karton::compactDiskImage(const Domain *domain, const QString &path)
     QString infoOutput;
     if (!m_commandRunner->runCommandAndWait(QStringLiteral("qemu-img"),
                                             {QStringLiteral("info"), QStringLiteral("-U"), QStringLiteral("--output=json"), path},
-                                            &infoOutput)) {
+                                            &infoOutput,
+                                            10000)) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_read_disk_image_information_1").arg(path));
         return false;
     }

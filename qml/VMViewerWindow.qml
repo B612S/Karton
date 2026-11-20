@@ -58,6 +58,17 @@ Kirigami.ApplicationWindow {
         && !(rebootMenu && rebootMenu.opened)
         && !(viewerMenu && viewerMenu.opened)
     property bool wasRunning: false
+    // The "pointer captured" hint is informative, not permanent: show it when
+    // the grab starts, then hide it after a few seconds. A new grab shows it
+    // again. It is never shown while the pointer is released.
+    property bool showPointerCaptureHint: false
+
+    Timer {
+        id: pointerCaptureHintTimer
+        interval: 4000
+        repeat: false
+        onTriggered: viewerWindow.showPointerCaptureHint = false
+    }
 
 
     property bool sizeRestored: false
@@ -111,6 +122,14 @@ Kirigami.ApplicationWindow {
     // page's HoverHandler instead.
     property string hoveredToolbarButton: ""
     property bool toolbarMoved: false
+    // The floating fullscreen bar keeps its More button and window controls;
+    // the VM action buttons collapse into the More menu when the window is
+    // too narrow for them, instead of being clipped by the bar.
+    // 128 (power + power-off arrow) + 112 (reboot + reset arrow) + 88 (pause)
+    // + 32 (more/minimize/fullscreen/close) * 4 + 4 px spacing * 6; keep in
+    // sync with the frames below.
+    readonly property real fullScreenActionButtonsWidth: 128 + 112 + 88 + 32 * 4 + 6 * 4
+    readonly property bool fullScreenToolbarCompact: viewerPage.width < fullScreenActionButtonsWidth + Kirigami.Units.gridUnit * 12
 
     function clampToolbar() {
         if (!toolbarMoved || !floatingToolbar) {
@@ -996,6 +1015,14 @@ Kirigami.ApplicationWindow {
 
     Connections {
         target: Karton
+        function onDomainStateSaved(success, name, message) {
+            if (!viewerWindow.domain || viewerWindow.domain.config.name !== name) {
+                return;
+            }
+            if (!success && message.length > 0) {
+                viewerWindow.showPassiveNotification(message, "long");
+            }
+        }
         function onDomainRemoved(removedDomain) {
             if (removedDomain === viewerWindow.domain) {
                 if (viewerWindow.previewMode) {
@@ -1212,14 +1239,18 @@ Kirigami.ApplicationWindow {
 
                     Rectangle {
                         id: powerFrame
-                        width: 104
+                        width: 128
                         height: 32
                         radius: 6
-                        color: viewerWindow.hoveredToolbarButton === "power" || powerButton.hovered || powerButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                        color: viewerWindow.hoveredToolbarButton === "power" || powerButton.hovered || powerButton.down
+                            || powerOffButton.hovered || powerOffButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
 
                         Controls.ToolButton {
                             id: powerButton
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 104
                             text: viewerWindow.isRunning ? qsTr("shut_down") : qsTr("start")
                             icon.name: viewerWindow.isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
                             flat: true
@@ -1235,11 +1266,78 @@ Kirigami.ApplicationWindow {
                                 viewerWindow.focusDisplay();
                             }
                         }
+                        Controls.ToolButton {
+                            id: powerOffButton
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 24
+                            icon.name: "arrow-down-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            display: Controls.AbstractButton.IconOnly
+                            enabled: viewerWindow.isRunning
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            Controls.ToolTip.visible: hovered
+                            Controls.ToolTip.text: qsTr("power_off")
+                            onClicked: {
+                                domainViewer.releasePointerGrab();
+                                powerMenu.popup(powerOffButton, 0, powerOffButton.height);
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: rebootFrame
+                        visible: viewerWindow.isRunning
+                        width: 112
+                        height: 32
+                        radius: 6
+                        color: viewerWindow.hoveredToolbarButton === "reboot" || rebootButton.hovered || rebootButton.down
+                            || resetButton.hovered || resetButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+
+                        Controls.ToolButton {
+                            id: rebootButton
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 88
+                            text: qsTr("reboot")
+                            icon.name: "system-reboot-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            onClicked: {
+                                Karton.rebootDomain(viewerWindow.domain);
+                                viewerWindow.focusDisplay();
+                            }
+                        }
+                        Controls.ToolButton {
+                            id: resetButton
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 24
+                            icon.name: "arrow-down-symbolic"
+                            flat: true
+                            hoverEnabled: true
+                            display: Controls.AbstractButton.IconOnly
+                            Kirigami.Theme.inherit: false
+                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                            Controls.ToolTip.visible: hovered
+                            Controls.ToolTip.text: qsTr("reset")
+                            onClicked: {
+                                domainViewer.releasePointerGrab();
+                                rebootMenu.popup(resetButton, 0, resetButton.height);
+                            }
+                        }
                     }
 
                     Rectangle {
                         id: pauseFrame
-                        visible: viewerWindow.isRunning
+                        visible: viewerWindow.isRunning && !viewerWindow.fullScreenToolbarCompact
                         width: 88
                         height: 32
                         radius: 6
@@ -1260,30 +1358,6 @@ Kirigami.ApplicationWindow {
                                 } else {
                                     Karton.pauseDomain(viewerWindow.domain);
                                 }
-                                viewerWindow.focusDisplay();
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        id: rebootFrame
-                        visible: viewerWindow.isRunning
-                        width: 88
-                        height: 32
-                        radius: 6
-                        color: viewerWindow.hoveredToolbarButton === "reboot" || rebootButton.hovered || rebootButton.down ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
-
-                        Controls.ToolButton {
-                            id: rebootButton
-                            anchors.fill: parent
-                            text: qsTr("reboot")
-                            icon.name: "system-reboot-symbolic"
-                            flat: true
-                            hoverEnabled: true
-                            Kirigami.Theme.inherit: false
-                            Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                            onClicked: {
-                                Karton.rebootDomain(viewerWindow.domain);
                                 viewerWindow.focusDisplay();
                             }
                         }
@@ -1410,10 +1484,15 @@ Kirigami.ApplicationWindow {
             }
         }
 
+        // Below this width the toolbar cannot fit the title and the VM
+        // buttons; move the whole group into the always-present More menu.
+        readonly property bool compactToolbar: viewerWindow.width < Kirigami.Units.gridUnit * 44
+
         actions: [
             Kirigami.Action {
                 text: viewerWindow.isRunning ? qsTr("shut_down") : qsTr("start")
                 icon.name: viewerWindow.isRunning ? "system-shutdown-symbolic" : "media-playback-start-symbolic"
+                displayHint: Kirigami.DisplayHint.KeepVisible
                 onTriggered: {
                     if (viewerWindow.isRunning) {
                         Karton.stopDomain(viewerWindow.domain);
@@ -1426,14 +1505,32 @@ Kirigami.ApplicationWindow {
             Kirigami.Action {
                 text: qsTr("power_off")
                 icon.name: "arrow-down-symbolic"
-                displayHint: Kirigami.DisplayHint.IconOnly
+                displayHint: Kirigami.DisplayHint.KeepVisible | Kirigami.DisplayHint.IconOnly
                 visible: viewerWindow.isRunning
                 onTriggered: powerMenu.popup()
+            },
+            Kirigami.Action {
+                text: qsTr("reboot")
+                icon.name: "system-reboot-symbolic"
+                visible: viewerWindow.isRunning
+                displayHint: Kirigami.DisplayHint.KeepVisible
+                onTriggered: {
+                    Karton.rebootDomain(viewerWindow.domain);
+                    viewerWindow.focusDisplay();
+                }
+            },
+            Kirigami.Action {
+                text: qsTr("reset")
+                icon.name: "arrow-down-symbolic"
+                displayHint: Kirigami.DisplayHint.KeepVisible | Kirigami.DisplayHint.IconOnly
+                visible: viewerWindow.isRunning
+                onTriggered: rebootMenu.popup()
             },
             Kirigami.Action {
                 text: viewerWindow.domain && viewerWindow.domain.isPaused ? qsTr("resume") : qsTr("pause")
                 icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
                 visible: viewerWindow.isRunning
+                displayHint: viewerPage.compactToolbar ? Kirigami.DisplayHint.AlwaysHide : Kirigami.DisplayHint.NoPreference
                 onTriggered: {
                     if (!viewerWindow.domain) {
                         return;
@@ -1446,93 +1543,94 @@ Kirigami.ApplicationWindow {
                     viewerWindow.focusDisplay();
                 }
             },
+            // Everything below is only reachable from the toolbar overflow,
+            // so Kirigami keeps its own "More" button on the toolbar and the
+            // primary buttons join that same menu when the window is narrow.
             Kirigami.Action {
-                text: qsTr("reboot")
-                icon.name: "system-reboot-symbolic"
-                visible: viewerWindow.isRunning
+                text: qsTr("display")
+                enabled: false
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("actual_size")
+                icon.name: "zoom-original-symbolic"
+                enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
+                displayHint: Kirigami.DisplayHint.AlwaysHide
                 onTriggered: {
-                    Karton.rebootDomain(viewerWindow.domain);
-                    viewerWindow.focusDisplay();
+                    viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
+                    viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
                 }
             },
             Kirigami.Action {
-                text: qsTr("reset")
-                icon.name: "arrow-down-symbolic"
-                displayHint: Kirigami.DisplayHint.IconOnly
+                text: qsTr("fit_guest_to_window")
+                icon.name: "transform-scale-symbolic"
+                enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+                onTriggered: domainViewer.fitGuestToWindow()
+            },
+            Kirigami.Action {
+                separator: true
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("devices")
+                enabled: false
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("usb_devices")
+                icon.name: "drive-removable-media-usb-symbolic"
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+                onTriggered: usbDialog.open()
+            },
+            Kirigami.Action {
+                separator: true
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("machine")
+                enabled: false
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("hibernate")
+                icon.name: "document-save-symbolic"
                 visible: viewerWindow.isRunning
-                onTriggered: rebootMenu.popup()
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+                onTriggered: {
+                    Karton.saveDomainStateAsync(viewerWindow.domain);
+                }
             },
             Kirigami.Action {
-                text: qsTr("more")
-                icon.name: "view-more-symbolic"
-
-                // Keep the overflow submenu anchored to the toolbar button;
-                // popup() at the cursor left it floating in a narrow window.
-                Kirigami.Action {
-                    text: qsTr("display")
-                    enabled: false
-                }
-                Kirigami.Action {
-                    text: qsTr("actual_size")
-                    icon.name: "zoom-original-symbolic"
-                    enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
-                    onTriggered: {
-                        viewerWindow.width = Math.max(320, domainViewer.implicitWidth / domainViewer.dprHelper.devicePixelRatio);
-                        viewerWindow.height = Math.max(240, domainViewer.implicitHeight / domainViewer.dprHelper.devicePixelRatio + pageStack.globalToolBar.height);
-                    }
-                }
-                Kirigami.Action {
-                    text: qsTr("fit_guest_to_window")
-                    icon.name: "transform-scale-symbolic"
-                    enabled: !domainViewer.serialConsoleActive && viewerWindow.fixedContentWidth <= 0
-                    onTriggered: domainViewer.fitGuestToWindow()
-                }
-                Kirigami.Action { separator: true }
-                Kirigami.Action {
-                    text: qsTr("devices")
-                    enabled: false
-                }
-                Kirigami.Action {
-                    text: qsTr("usb_devices")
-                    icon.name: "drive-removable-media-usb-symbolic"
-                    onTriggered: usbDialog.open()
-                }
-                Kirigami.Action { separator: true }
-                Kirigami.Action {
-                    text: qsTr("machine")
-                    enabled: false
-                }
-                Kirigami.Action {
-                    text: qsTr("hibernate")
-                    icon.name: "document-save-symbolic"
-                    visible: viewerWindow.isRunning
-                    onTriggered: {
-                        if (Karton.saveDomainState(viewerWindow.domain)) {
-                            viewerWindow.showPassiveNotification(qsTr("hibernating_vm_1").arg(viewerWindow.domain.config.name));
-                        }
-                    }
-                }
-                Kirigami.Action {
-                    text: qsTr("snapshots")
-                    icon.name: "camera-photo-symbolic"
-                    onTriggered: snapshotsDialog.open()
-                }
-                Kirigami.Action { separator: true }
-                Kirigami.Action {
-                    text: qsTr("configuration")
-                    enabled: false
-                }
-                Kirigami.Action {
-                    text: qsTr("settings")
-                    icon.name: "preferences-system-symbolic"
-                    onTriggered: settingsDialog.open()
-                }
-                Kirigami.Action { separator: true }
-                Kirigami.Action {
-                    text: qsTr("close_viewer")
-                    icon.name: "window-close-symbolic"
-                    onTriggered: viewerWindow.closeViewer()
-                }
+                text: qsTr("snapshots")
+                icon.name: "camera-photo-symbolic"
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+                onTriggered: snapshotsDialog.open()
+            },
+            Kirigami.Action {
+                separator: true
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("configuration")
+                enabled: false
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("settings")
+                icon.name: "preferences-system-symbolic"
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+                onTriggered: settingsDialog.open()
+            },
+            Kirigami.Action {
+                separator: true
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+            },
+            Kirigami.Action {
+                text: qsTr("close_viewer")
+                icon.name: "window-close-symbolic"
+                displayHint: Kirigami.DisplayHint.AlwaysHide
+                onTriggered: viewerWindow.closeViewer()
             },
             Kirigami.Action {
                 text: qsTr("fullscreen")
@@ -1583,6 +1681,27 @@ Kirigami.ApplicationWindow {
             closePolicy: Controls.Popup.CloseOnPressOutside | Controls.Popup.CloseOnEscape
             onClosed: Qt.callLater(viewerWindow.focusDisplay)
 
+            // The floating bar's action buttons collapse into this menu when
+            // the window is too narrow.
+            Controls.MenuItem {
+                text: viewerWindow.domain && viewerWindow.domain.isPaused ? qsTr("resume") : qsTr("pause")
+                icon.name: viewerWindow.domain && viewerWindow.domain.isPaused ? "media-playback-start-symbolic" : "media-playback-pause-symbolic"
+                visible: viewerWindow.fullScreenToolbarCompact && viewerWindow.isRunning
+                onTriggered: {
+                    if (!viewerWindow.domain) {
+                        return;
+                    }
+                    if (viewerWindow.domain.isPaused) {
+                        Karton.resumeDomain(viewerWindow.domain);
+                    } else {
+                        Karton.pauseDomain(viewerWindow.domain);
+                    }
+                }
+            }
+            Controls.MenuSeparator {
+                visible: viewerWindow.fullScreenToolbarCompact
+            }
+
             Controls.MenuItem {
                 text: qsTr("display")
                 enabled: false
@@ -1627,9 +1746,7 @@ Kirigami.ApplicationWindow {
                 icon.name: "document-save-symbolic"
                 visible: viewerWindow.isRunning
                 onTriggered: {
-                    if (Karton.saveDomainState(viewerWindow.domain)) {
-                        viewerWindow.showPassiveNotification(qsTr("hibernating_vm_1").arg(viewerWindow.domain.config.name));
-                    }
+                    Karton.saveDomainStateAsync(viewerWindow.domain);
                 }
             }
             Controls.MenuItem {
@@ -1733,6 +1850,15 @@ Kirigami.ApplicationWindow {
                 }
                 viewerWindow.domain.setConsolePreviewActive(domainViewer.serialConsoleActive);
             }
+            function onPointerGrabbedChanged() {
+                if (domainViewer.pointerGrabbed) {
+                    viewerWindow.showPointerCaptureHint = true;
+                    pointerCaptureHintTimer.restart();
+                } else {
+                    viewerWindow.showPointerCaptureHint = false;
+                    pointerCaptureHintTimer.stop();
+                }
+            }
         }
 
         Kirigami.InlineMessage {
@@ -1740,7 +1866,8 @@ Kirigami.ApplicationWindow {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Kirigami.Units.largeSpacing
             width: Math.min(parent.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 40)
-            visible: viewerWindow.isRunning && domainViewer.pointerGrabbed && domainViewer.errorMessage.length === 0
+            visible: viewerWindow.isRunning && domainViewer.pointerGrabbed
+                     && viewerWindow.showPointerCaptureHint && domainViewer.errorMessage.length === 0
             text: qsTr("pointer_captured_press_ctrl_alt_to_release_it")
             type: Kirigami.MessageType.Information
         }
@@ -1810,7 +1937,13 @@ Kirigami.ApplicationWindow {
             }
         }
 
-        UsbDevicesDialog {
+        BusyOperationDialog {
+        id: busyOperationDialog
+        windowActive: viewerWindow.active
+        domain: viewerWindow.domain
+    }
+
+    UsbDevicesDialog {
             id: usbDialog
             domain: viewerWindow.domain
         }

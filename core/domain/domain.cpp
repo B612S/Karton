@@ -97,6 +97,16 @@ void Domain::setAutostart(bool autostart)
     m_config->setAutostart(autostart);
 }
 
+void Domain::setCpus(int cpus)
+{
+    m_config->setCpus(cpus);
+}
+
+void Domain::setMaxRam(int maxRam)
+{
+    m_config->setMaxRam(maxRam);
+}
+
 QString Domain::uuidString(virDomainPtr domainPtr)
 {
     if (!domainPtr) {

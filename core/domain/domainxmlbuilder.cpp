@@ -24,9 +24,9 @@
 #define ETH_ALEN 6
 #endif
 
-bool DomainXmlBuilder::setupDomain(virConnectPtr conn, const DomainConfig *config)
+bool DomainXmlBuilder::setupDomain(virConnectPtr conn, const DomainConfig *config, bool remote)
 {
-    const QString xmlString = generateXML(config);
+    const QString xmlString = generateXML(config, remote);
     if (xmlString.isEmpty()) {
         return false;
     }
@@ -43,9 +43,23 @@ bool DomainXmlBuilder::setupDomain(virConnectPtr conn, const DomainConfig *confi
     return true;
 }
 
-QString DomainXmlBuilder::generateXML(const DomainConfig *config)
+namespace
 {
-    OsinfoConfig osinfo;
+OsinfoConfig &sharedOsInfo()
+{
+    static OsinfoConfig instance;
+    return instance;
+}
+} // namespace
+
+void DomainXmlBuilder::warmUpOsInfo()
+{
+    sharedOsInfo();
+}
+
+QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
+{
+    OsinfoConfig &osinfo = sharedOsInfo();
     QString osId;
     if (!config->shortOsId().isEmpty()) {
         osId = osinfo.getOsIdFromShortId(config->shortOsId());
@@ -201,7 +215,9 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
                        devices,
                        {.type = QStringLiteral("spice"),
                         .autoport = QStringLiteral("yes"),
-                        .listen = enableAccel3d ? QStringLiteral("socket") : QStringLiteral("address"),
+                        .listen = (remote || !enableAccel3d) ? QStringLiteral("address") : QStringLiteral("socket"),
+                        .address = remote ? QStringLiteral("0.0.0.0") : QString(),
+                        .password = remote ? QUuid::createUuid().toString(QUuid::WithoutBraces) : QString(),
                         .glEnable = enableAccel3d,
                         .uuid = uuidString});
 
@@ -212,9 +228,16 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config)
     addAudioDevices(document, devices, {.id = QStringLiteral("1"), .type = QStringLiteral("spice")});
 
     // devices->video element
+    // Remote hosts often have no GPU/DRM. QXL is the SPICE-native video
+    // device and provides a VGA framebuffer for the BIOS and console; virtio
+    // without 3D can leave the remote preview black until a guest driver
+    // takes over.
     addVideoDevices(document,
                     devices,
-                    {.model = QStringLiteral("virtio"), .heads = QStringLiteral("1"), .primary = QStringLiteral("yes"), .enableAccel3d = enableAccel3d});
+                    {.model = remote ? QStringLiteral("qxl") : QStringLiteral("virtio"),
+                     .heads = QStringLiteral("1"),
+                     .primary = QStringLiteral("yes"),
+                     .enableAccel3d = enableAccel3d});
 
     addInputDevices(document, devices, {.type = QStringLiteral("tablet"), .bus = QStringLiteral("usb")});
 
@@ -359,6 +382,12 @@ void DomainXmlBuilder::addGraphicsDevices(QDomDocument &document, QDomElement &p
         listen[QStringLiteral("socket")] = socketPath;
     } else {
         graphics.setAttribute(QStringLiteral("autoport"), config.autoport);
+        if (!config.address.isEmpty()) {
+            listen[QStringLiteral("address")] = config.address;
+        }
+        if (!config.password.isEmpty()) {
+            graphics.setAttribute(QStringLiteral("passwd"), config.password);
+        }
     }
 
     addElementWithAttributes(document, graphics, QStringLiteral("listen"), QString(), listen);

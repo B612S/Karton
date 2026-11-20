@@ -37,8 +37,7 @@ KartonDialog {
     }
 
     function createSnapshot() {
-        if (Karton.createSnapshot(root.domain, nameField.text, descriptionField.text, includeMemoryCheck.checked)) {
-            root.refresh();
+        if (Karton.createSnapshotAsync(root.domain, nameField.text, descriptionField.text, includeMemoryCheck.checked)) {
             nameField.text = root.defaultName();
             descriptionField.text = "";
         }
@@ -58,6 +57,22 @@ KartonDialog {
         target: Karton
         function onErrorOccurred(errorMessage) {
             root.errorText = errorMessage;
+        }
+        function onSnapshotsUpdated(uuid) {
+            if (root.domain && root.domain.config.uuid === uuid) {
+                root.refresh();
+            }
+        }
+        function onSnapshotOperationFinished(success, domainUuid, name, message) {
+            if (!root.domain || root.domain.config.uuid !== domainUuid) {
+                return;
+            }
+            root.refresh();
+            if (success) {
+                root.errorText = "";
+            } else if (message.length > 0) {
+                root.errorText = message;
+            }
         }
     }
 
@@ -149,20 +164,14 @@ KartonDialog {
                     Controls.Button {
                         text: qsTr("revert")
                         icon.name: "edit-undo-symbolic"
-                        onClicked: {
-                            if (Karton.revertSnapshot(root.domain, modelData.name)) {
-                                root.refresh();
-                            }
-                        }
+                        enabled: !Karton.busy
+                        onClicked: Karton.revertSnapshotAsync(root.domain, modelData.name)
                     }
                     Controls.Button {
                         text: qsTr("delete")
                         icon.name: "edit-delete-symbolic"
-                        onClicked: {
-                            if (Karton.deleteSnapshot(root.domain, modelData.name)) {
-                                root.refresh();
-                            }
-                        }
+                        enabled: !Karton.busy
+                        onClicked: Karton.deleteSnapshotAsync(root.domain, modelData.name)
                     }
                 }
             }
@@ -231,7 +240,7 @@ KartonDialog {
         Kirigami.Action {
             text: qsTr("create_snapshot")
             icon.name: "camera-photo-symbolic"
-            enabled: nameField.text.trim().length > 0 && root.domain !== null
+            enabled: nameField.text.trim().length > 0 && root.domain !== null && !Karton.busy
             onTriggered: root.createSnapshot()
         }
     ]

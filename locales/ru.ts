@@ -38,6 +38,7 @@
 <message><source>controller</source><translation>Контроллер</translation></message>
 <message><source>create_disk</source><translation>Создать диск</translation></message>
 <message><source>create_new_disk</source><translation>Создать новый диск</translation></message>
+<message><source>creating_the_disk</source><translation>Создание диска…</translation></message>
 <message><source>device</source><translation>Устройство</translation></message>
 <message><source>device_added</source><translation>Устройство добавлено</translation></message>
 <message><source>discard_mode</source><translation>Режим отбрасывания</translation></message>
@@ -76,6 +77,21 @@
 <message><source>usb_host_device</source><translation>Устройство USB хоста</translation></message>
 <message><source>usb_host_devices</source><translation>Устройства USB хоста</translation></message>
 <message><source>usb_redirection_over_spice</source><translation>Перенаправление USB через SPICE</translation></message>
+<message><source>remote_image_path_note</source><translation>Удалённое подключение: укажите путь к существующему образу или ISO на удалённом хосте.</translation></message>
+<message><source>remote_no_storage_pools_note</source><translation>На удалённом хосте нет активных пулов хранения. Создайте пул в libvirt хоста или выберите «Existing image» и укажите путь.</translation></message>
+<message><source>remote_advanced_options_note</source><translation>Параметры bus, cache, discard, serial и shareable пока не применяются к удалённым дискам.</translation></message>
+<message><source>failed_to_create_the_disk_on_the_remote_host</source><translation>Не удалось создать диск на удалённом хосте.</translation></message>
+<message><source>storage_pool</source><translation>Пул хранения</translation></message>
+<message><source>volume_name</source><translation>Имя тома</translation></message>
+<message><source>select_a_storage_pool</source><translation>Выберите пул хранения.</translation></message>
+<message><source>remote_pool_note</source><translation>Новый том будет создан в выбранном пуле хранения на удалённом хосте.</translation></message>
+<message><source>use_a_storage_pool</source><translation>Использовать пул хранения</translation></message>
+<message><source>local_pool_note</source><translation>Новый том будет создан в выбранном пуле хранения.</translation></message>
+<message><source>failed_to_create_the_storage_volume</source><translation>Не удалось создать том хранения.</translation></message>
+<message><source>storage_pool_inactive_will_be_started</source><translation>Этот пул неактивен и будет запущен автоматически.</translation></message>
+<message><source>no_active_storage_pools</source><translation>Нет активных пулов хранения. Создайте или запустите пул в настройках подключения → Пулы хранения.</translation></message>
+<message><source>from_pool</source><translation>Из пула…</translation></message>
+<message><source>passthrough_is_not_supported_for_remote_vms</source><translation>USB/PCI-проброс для удалённых ВМ пока не поддерживается.</translation></message>
 </context>
 <context>
 <name>ApplicationSettingsDialog</name>
@@ -96,8 +112,6 @@
 <message><source>choose_a_ca_certificate</source><translation>Выберите сертификат CA</translation></message>
 <message><source>choose_vm_image_folder</source><translation>Выберите папку образов ВМ</translation></message>
 <message><source>clear</source><translation>Очистить</translation></message>
-<message><source>clear_granted_permissions</source><translation>Очистить предоставленные разрешения</translation></message>
-<message><source>clear_granted_permissions_2</source><translation>Очистить предоставленные разрешения?</translation></message>
 <message><source>clear_preview_images</source><translation>Очистить изображения предпросмотра</translation></message>
 <message><source>connection_uri</source><translation>URI подключения</translation></message>
 <message><source>console</source><translation>Консоль</translation></message>
@@ -126,14 +140,12 @@
 <message><source>forward_to</source><translation>Перенаправить на</translation></message>
 <message><source>github_repository</source><translation>Репозиторий GitHub</translation></message>
 <message><source>gpl_3_0_or_later_karton_contributors</source><translation>GPL-3.0-or-later · © участники Karton</translation></message>
-<message><source>granted_access</source><translation>Предоставленный доступ</translation></message>
 <message><source>image_folder</source><translation>Папка образов</translation></message>
 <message><source>inactive</source><translation>неактивно</translation></message>
 <message><source>ipv4_configuration</source><translation>Конфигурация IPv4</translation></message>
 <message><source>ipv6_configuration</source><translation>Конфигурация IPv6</translation></message>
 <message><source>isolated</source><translation>Изолированная</translation></message>
 <message><source>karton</source><translation>Karton</translation></message>
-<message><source>karton_will_remove_the_acl_entries_it_added_for_the_libvirt_qemu_user_ownership_and_other</source><translation>Karton удалит записи ACL, добавленные для пользователя libvirt QEMU. Владелец и остальные разрешения не изменятся.</translation></message>
 <message><source>language_auto</source><translation>Системный</translation></message>
 <message><source>libvirt_networks</source><translation>Сети libvirt</translation></message>
 <message><source>libvirt_uri</source><translation>URI libvirt</translation></message>
@@ -145,7 +157,6 @@
 <message><source>network_created</source><translation>Сеть создана</translation></message>
 <message><source>network_updated</source><translation>Сеть обновлена</translation></message>
 <message><source>new_vm_disks_are_created_in_this_folder_by_default_default_1</source><translation>Новые диски ВМ по умолчанию создаются в этой папке. По умолчанию: %1</translation></message>
-<message><source>no_folders_have_been_granted_access_by_karton</source><translation>Karton не предоставил доступ ни к одной папке.</translation></message>
 <message><source>open</source><translation>Открыть</translation></message>
 <message><source>path_to_the_ca_certificate</source><translation>Путь к сертификату CA</translation></message>
 <message><source>removed_1_preview_images</source><translation>Удалено изображений предпросмотра: %1</translation></message>
@@ -174,7 +185,30 @@
 <message><source>virtual_networks</source><translation>Виртуальные сети</translation></message>
 <message><source>vm_storage</source><translation>Хранилище ВМ</translation></message>
 <message><source>dhcp</source><translation>DHCP</translation></message>
+<message><source>connections</source><translation>Подключения</translation></message>
+<message><source>add_connection</source><translation>Добавить подключение</translation></message>
+<message><source>remove</source><translation>Удалить</translation></message>
+<message><source>additional_connections_are_applied_immediately</source><translation>Дополнительные подключения применяются сразу. Подключение по умолчанию используется после перезапуска Karton.</translation></message>
+<message><source>edit</source><translation>Изменить</translation></message>
+<message><source>edit_connection</source><translation>Изменение подключения</translation></message>
+<message><source>connection_uri_applied_immediately</source><translation>Новый адрес применяется сразу.</translation></message>
+<message><source>connection_uri_already_used</source><translation>Такое подключение уже есть в списке.</translation></message>
+<message><source>no_connections</source><translation>Подключения не настроены.</translation></message>
+<message><source>connection</source><translation>Подключение</translation></message>
 </context>
+<context>
+<name>BusyOperationDialog</name>
+<message><source>hibernating_the_vm</source><translation>Перевод виртуальной машины в спящий режим</translation></message>
+<message><source>saving_the_memory_of_1_to_disk</source><translation>Сохранение памяти %1 на диск…</translation></message>
+<message><source>saving_the_vm_memory_to_disk</source><translation>Сохранение памяти виртуальной машины на диск…</translation></message>
+<message><source>this_can_take_a_few_minutes</source><translation>Это может занять несколько минут.</translation></message>
+<message><source>creating_snapshot</source><translation>Создание снапшота</translation></message>
+<message><source>reverting_to_snapshot</source><translation>Возврат к снапшоту</translation></message>
+<message><source>deleting_snapshot</source><translation>Удаление снапшота</translation></message>
+<message><source>snapshot_operation_in_progress</source><translation>Операция со снапшотом выполняется…</translation></message>
+<message><source>cancel</source><translation>Отмена</translation></message>
+</context>
+
 <context>
 <name>CloneDialog</name>
 <message><source>name</source><translation>Имя</translation></message>
@@ -193,6 +227,12 @@
 <message><source>the_copied_disk_images_will_be_placed_in_this_folder</source><translation>Скопированные образы дисков будут размещены в этой папке.</translation></message>
 </context>
 <context>
+<name>CommandRunner</name>
+<message><source>command_timed_out_after_1_s</source><translation>Команда не завершилась за %1 с.</translation></message>
+<message><source>command_cancelled</source><translation>Команда отменена.</translation></message>
+</context>
+
+<context>
 <name>DomainViewer</name>
 <message><source>could_not_connect_to_the_spice_display_or_serial_console</source><translation>Не удалось подключиться к дисплею SPICE или последовательной консоли.</translation></message>
 <message><source>failed_to_parse_the_virtual_machine_configuration</source><translation>Не удалось разобрать конфигурацию виртуальной машины.</translation></message>
@@ -202,6 +242,7 @@
 <message><source>no_virtual_machine_is_selected</source><translation>Виртуальная машина не выбрана.</translation></message>
 <message><source>the_serial_console_connection_was_closed</source><translation>Соединение с последовательной консолью закрыто.</translation></message>
 <message><source>this_virtual_machine_has_no_usable_spice_display_or_serial_console</source><translation>У этой виртуальной машины нет доступного дисплея SPICE или последовательной консоли.</translation></message>
+<message><source>remote_spice_display_is_not_reachable</source><translation>Удалённый SPICE-дисплей недоступен: он привязан к loopback удалённого хоста или использует локальный сокет.</translation></message>
 </context>
 <context>
 <name>InstallationDialog</name>
@@ -212,6 +253,7 @@
 <message><source>choose</source><translation>Выбрать…</translation></message>
 <message><source>choose_a_disk_image</source><translation>Выберите образ диска</translation></message>
 <message><source>choose_disk_folder</source><translation>Выберите папку диска</translation></message>
+<message><source>connection</source><translation>Подключение</translation></message>
 <message><source>cpus</source><translation>ЦП</translation></message>
 <message><source>create</source><translation>Создать</translation></message>
 <message><source>created_vm_1</source><translation>ВМ создана: %1</translation></message>
@@ -255,6 +297,21 @@
 <message><source>unknown_os_variant_leave_the_field_empty_to_create_a_generic_vm</source><translation>Неизвестный вариант ОС. Оставьте поле пустым, чтобы создать универсальную ВМ.</translation></message>
 <message><source>vm_name</source><translation>Имя ВМ</translation></message>
 <message><source>yes</source><translation>Да</translation></message>
+<message><source>enter_the_remote_disk_path</source><translation>Укажите путь к существующему диску на удалённом хосте.</translation></message>
+<message><source>remote_disk_path</source><translation>Путь к диску на удалённом хосте</translation></message>
+<message><source>remote_disk_path_note</source><translation>Удалённое подключение: создание диска на удалённом хосте через qemu-img невозможно. Укажите путь к существующему образу на этом хосте; новый диск можно создать в его пулах хранения.</translation></message>
+<message><source>not_set</source><translation>не задано</translation></message>
+<message><source>storage_pool</source><translation>Пул хранения</translation></message>
+<message><source>volume_name</source><translation>Имя тома</translation></message>
+<message><source>use_an_existing_image</source><translation>Использовать существующий образ на удалённом хосте</translation></message>
+<message><source>select_a_storage_pool</source><translation>Выберите пул хранения.</translation></message>
+<message><source>remote_pool_note</source><translation>Новый том будет создан в выбранном пуле хранения на удалённом хосте.</translation></message>
+<message><source>remote_installation_image</source><translation>Установочный образ на удалённом хосте</translation></message>
+<message><source>use_a_storage_pool</source><translation>Использовать пул хранения</translation></message>
+<message><source>local_pool_note</source><translation>Новый том будет создан в выбранном пуле хранения.</translation></message>
+<message><source>storage_pool_inactive_will_be_started</source><translation>Этот пул неактивен и будет запущен автоматически.</translation></message>
+<message><source>no_active_storage_pools</source><translation>Нет активных пулов хранения. Создайте или запустите пул в настройках подключения → Пулы хранения.</translation></message>
+<message><source>hardware_acceleration_is_disabled_for_remote_connections</source><translation>3D-ускорение отключено для удалённых подключений (на удалённом хосте может не быть GPU).</translation></message>
 </context>
 <context>
 <name>Karton</name>
@@ -473,6 +530,12 @@
 <message><source>a_port_forward_for_port_1_already_exists</source><translation>Проброс для порта %1 уже существует.</translation></message>
 <message><source>failed_to_start_port_forward_on_port_1_2</source><translation>Не удалось запустить проброс порта %1: %2</translation></message>
 <message><source>another_ovf_import_is_already_running</source><translation>Другой импорт OVF уже выполняется.</translation></message>
+<message><source>ovf_import_cancelled</source><translation>Импорт отменён.</translation></message>
+<message><source>another_operation_is_in_progress</source><translation>Другая операция уже выполняется.</translation></message>
+<message><source>operation_cancelled</source><translation>Операция отменена.</translation></message>
+<message><source>hibernation_failed</source><translation>Не удалось перевести виртуальную машину в спящий режим.</translation></message>
+<message><source>snapshot_operation_failed</source><translation>Не удалось выполнить операцию со снапшотом.</translation></message>
+<message><source>the_virtual_machine_is_not_running</source><translation>Виртуальная машина не запущена.</translation></message>
 <message><source>failed_to_import_the_ova_1</source><translation>Не удалось импортировать OVA: %1</translation></message>
 <message><source>the_file_is_not_an_ovf_or_ova_package</source><translation>Файл не является пакетом OVF или OVA.</translation></message>
 <message><source>failed_to_parse_the_ovf_1</source><translation>Не удалось разобрать OVF: %1</translation></message>
@@ -500,6 +563,25 @@
 <message><source>the_ip_address_1_is_already_reserved</source><translation>IP-адрес %1 уже зарезервирован.</translation></message>
 <message><source>the_mac_address_1_already_has_a_reservation</source><translation>Для MAC-адреса %1 уже есть резервирование.</translation></message>
 <message><source>the_mac_address_1_is_not_connected_to_network_2</source><translation>MAC-адрес %1 не подключён к сети %2.</translation></message>
+<message><source>remote_disk_path_required</source><translation>Укажите путь к диску на удалённом хосте.</translation></message>
+<message><source>remote_disk_creation_is_not_supported</source><translation>Создание нового диска на удалённом подключении пока не поддерживается.</translation></message>
+<message><source>cloning_remote_vms_is_not_supported</source><translation>Клонирование ВМ с удалённого подключения пока не поддерживается.</translation></message>
+<message><source>ovf_import_to_a_remote_connection_is_not_supported</source><translation>Импорт OVF/OVA в удалённое подключение пока не поддерживается.</translation></message>
+<message><source>not_set</source><translation>не задано</translation></message>
+<message><source>invalid_storage_volume_configuration</source><translation>Укажите корректные имя и размер тома.</translation></message>
+<message><source>storage_pool_1_was_not_found</source><translation>Пул хранения %1 не найден.</translation></message>
+<message><source>storage_volume_1_already_exists</source><translation>Том хранения %1 уже существует.</translation></message>
+<message><source>failed_to_create_storage_volume_1_2</source><translation>Не удалось создать том хранения %1: %2</translation></message>
+<message><source>failed_to_delete_storage_volume_1_2</source><translation>Не удалось удалить том хранения %1: %2</translation></message>
+<message><source>failed_to_start_storage_pool_1_2</source><translation>Не удалось запустить пул хранения %1: %2.</translation></message>
+<message><source>failed_to_stop_storage_pool_1_2</source><translation>Не удалось остановить пул хранения %1: %2.</translation></message>
+<message><source>invalid_storage_pool_configuration</source><translation>Некорректная конфигурация пула хранения.</translation></message>
+<message><source>storage_pool_1_already_exists</source><translation>Пул хранения %1 уже существует.</translation></message>
+<message><source>failed_to_create_storage_pool_1_2</source><translation>Не удалось создать пул хранения %1: %2.</translation></message>
+<message><source>failed_to_delete_storage_pool_1_2</source><translation>Не удалось удалить пул хранения %1: %2.</translation></message>
+<message><source>ovf_export_from_a_remote_connection_is_not_supported</source><translation>Экспорт OVF из удалённого подключения пока не поддерживается.</translation></message>
+<message><source>usb_passthrough_to_a_remote_vm_is_not_supported</source><translation>USB-проброс в удалённую ВМ пока не поддерживается.</translation></message>
+<message><source>pci_passthrough_to_a_remote_vm_is_not_supported</source><translation>PCI-проброс в удалённую ВМ пока не поддерживается.</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -515,13 +597,6 @@
 <message><source>manage_and_run_virtual_machines_with_ease</source><translation>Управляйте виртуальными машинами с удобством</translation></message>
 <message><source>your_emails</source><translation>Ваши адреса эл. почты</translation></message>
 <message><source>your_names</source><translation>Ваши имена</translation></message>
-</context>
-<context>
-<name>PermissionGrantDialog</name>
-<message><source>cancel</source><translation>Отмена</translation></message>
-<message><source>give_the_libvirt_qemu_user_access_to_this_folder</source><translation>Предоставить пользователю libvirt QEMU доступ к этой папке?</translation></message>
-<message><source>grant_access</source><translation>Предоставить доступ</translation></message>
-<message><source>karton_will_add_acl_entries_only_for_the_libvirt_qemu_user_execute_permission_on_parent_fo</source><translation>Karton добавит записи ACL только для пользователя libvirt QEMU: право на выполнение в родительских папках и право на чтение/запись/выполнение в этой папке. Владелец и остальные разрешения не изменяются.</translation></message>
 </context>
 <context>
 <name>SettingsDialog</name>
@@ -700,6 +775,7 @@
 <message><source>port_forwarding_forwards_tcp_connections_from_this_machine_to_the_guest</source><translation>Пробрасывает TCP-подключения с этой машины в гостя. UDP не пробрасывается.</translation></message>
 <message><source>port_forwarding_is_tcp_only_use_ports_above_1024</source><translation>Только TCP. Порты ниже 1024 обычно требуют прав root.</translation></message>
 <message><source>remove</source><translation>Удалить</translation></message>
+<message><source>from_pool</source><translation>Из пула…</translation></message>
 </context>
 <context>
 <name>SnapshotsDialog</name>
@@ -748,17 +824,40 @@
 <message><source>all</source><translation>Все</translation></message>
 <message><source>cannot_connect_to_libvirt</source><translation>Не удалось подключиться к libvirt</translation></message>
 <message><source>check_that_libvirt_is_running_and_that_the_1_connection_is_available</source><translation>Проверьте, что libvirt запущен и подключение %1 доступно.</translation></message>
-<message><source>connected_to_1_create_a_new_virtual_machine_to_proceed</source><translation>Подключено к %1. Создайте новую виртуальную машину, чтобы продолжить.</translation></message>
+<message><source>connecting_to_1</source><translation>Подключение к %1…</translation></message>
+<message><source>connecting_to_1_explanation</source><translation>Karton открывает подключение к libvirt. На загруженной системе это может занять несколько секунд.</translation></message>
+<message><source>reconnecting_to_1</source><translation>Переподключение к %1…</translation></message>
+<message><source>reconnecting_to_1_explanation</source><translation>Соединение с libvirt недоступно. Karton повторяет попытку каждые несколько секунд.</translation></message>
 <message><source>create</source><translation>Создать</translation></message>
 <message><source>filter_by_state</source><translation>Фильтр по состоянию</translation></message>
 <message><source>no_matching_vms</source><translation>Нет подходящих виртуальных машин</translation></message>
+<message><source>no_virtual_machines</source><translation>Виртуальных машин нет</translation></message>
+<message><source>create_or_import_a_virtual_machine_to_get_started</source><translation>Создайте новую виртуальную машину или импортируйте её, чтобы начать.</translation></message>
 <message><source>running</source><translation>Запущенные</translation></message>
 <message><source>search_virtual_machines</source><translation>Поиск виртуальных машин</translation></message>
 <message><source>settings</source><translation>Настройки</translation></message>
 <message><source>stopped</source><translation>Остановленные</translation></message>
 <message><source>try_a_different_search_or_filter</source><translation>Попробуйте изменить запрос или фильтр.</translation></message>
 <message><source>virtual_machines</source><translation>Виртуальные машины</translation></message>
-<message><source>welcome_to_karton</source><translation>Добро пожаловать в Karton!</translation></message>
+<message><source>vm_count</source><translation>%1 ВМ</translation></message>
+<message><source>reconnect</source><translation>Переподключиться</translation></message>
+<message><source>disconnect</source><translation>Отключиться</translation></message>
+<message><source>open</source><translation>Открыть</translation></message>
+<message><source>open_viewer</source><translation>Открыть окно ВМ</translation></message>
+<message><source>delete_virtual_machine</source><translation>Удаление виртуальной машины</translation></message>
+<message><source>delete</source><translation>Удалить</translation></message>
+<message><source>delete_disk</source><translation>Удалить диск</translation></message>
+<message><source>cancel</source><translation>Отмена</translation></message>
+<message><source>snapshots</source><translation>Снимки</translation></message>
+<message><source>clone</source><translation>Клонировать</translation></message>
+<message><source>power_off</source><translation>Выключить принудительно</translation></message>
+<message><source>shut_down</source><translation>Завершить работу</translation></message>
+<message><source>start</source><translation>Запустить</translation></message>
+<message><source>pause</source><translation>Пауза</translation></message>
+<message><source>resume</source><translation>Продолжить</translation></message>
+<message><source>reboot</source><translation>Перезагрузить</translation></message>
+<message><source>reset</source><translation>Сброс</translation></message>
+<message><source>delete_vm_1</source><translation>Удалить %1? Виртуальная машина будет удалена из libvirt.</translation></message>
 </context>
 <context>
 <name>VMPage</name>
@@ -793,6 +892,8 @@
 <message><source>memory</source><translation>Память</translation></message>
 <message><source>memory_usage</source><translation>Использование памяти</translation></message>
 <message><source>more</source><translation>Ещё</translation></message>
+<message><source>network</source><translation>Сеть</translation></message>
+<message><source>no_network_interfaces</source><translation>Нет сетевых интерфейсов</translation></message>
 <message><source>pause</source><translation>Приостановить</translation></message>
 <message><source>power_off</source><translation>Отключить питание</translation></message>
 <message><source>ram</source><translation>ОЗУ</translation></message>
@@ -901,10 +1002,14 @@
 <name>OvfImportDialog</name>
 <message><source>all_files</source><translation>Все файлы (*)</translation></message>
 <message><source>cancel</source><translation>Отмена</translation></message>
+<message><source>cancelling_the_import</source><translation>Отмена импорта…</translation></message>
 <message><source>choose</source><translation>Выбрать…</translation></message>
 <message><source>choose_an_ovf_or_ova_file</source><translation>Выберите файл OVF или OVA</translation></message>
 <message><source>choose_destination_folder</source><translation>Выберите папку назначения</translation></message>
+<message><source>connection</source><translation>Подключение</translation></message>
 <message><source>destination</source><translation>Назначение</translation></message>
+<message><source>extracting_1_of_2</source><translation>Распаковка %1 из %2…</translation></message>
+<message><source>extracting_the_archive</source><translation>Распаковка архива…</translation></message>
 <message><source>import</source><translation>Импорт</translation></message>
 <message><source>import_ovf_ova</source><translation>Импорт OVF/OVA</translation></message>
 <message><source>importing_the_ovf_disks_are_converted_to_qcow2</source><translation>Импорт. Диски преобразуются в qcow2…</translation></message>
@@ -915,6 +1020,7 @@
 <message><source>ovf_ova_packages</source><translation>Пакеты OVF/OVA (*.ovf *.ova)</translation></message>
 <message><source>source</source><translation>Источник</translation></message>
 <message><source>the_vm_is_created_stopped_and_can_be_started_from_the_list</source><translation>ВМ создаётся остановленной, запустить её можно из списка.</translation></message>
+<message><source>ovf_import_to_a_remote_connection_is_not_supported</source><translation>Импорт OVF в удалённое подключение пока не поддерживается.</translation></message>
 </context>
 <context>
 <name>OvfExportDialog</name>
@@ -931,5 +1037,110 @@
 <message><source>ova_archive</source><translation>Архив OVA</translation></message>
 <message><source>ovf_exported_1</source><translation>Пакет OVF экспортирован в %1</translation></message>
 <message><source>ovf_folder</source><translation>Папка OVF</translation></message>
+</context>
+<context>
+<name>NetworksPage</name>
+<message><source>active</source><translation>активно</translation></message>
+<message><source>add_network</source><translation>Добавить сеть</translation></message>
+<message><source>any_physical_device</source><translation>Любое физическое устройство</translation></message>
+<message><source>bridge</source><translation>Мост</translation></message>
+<message><source>bridge_name</source><translation>Имя моста</translation></message>
+<message><source>cancel</source><translation>Отмена</translation></message>
+<message><source>changes_to_an_active_network_briefly_restart_it_so_the_new_configuration_takes_effect</source><translation>Изменения активной сети ненадолго перезапускают её, чтобы новая конфигурация вступила в силу.</translation></message>
+<message><source>create</source><translation>Создать</translation></message>
+<message><source>create_network</source><translation>Создать сеть</translation></message>
+<message><source>custom</source><translation>Другой</translation></message>
+<message><source>delete</source><translation>Удалить</translation></message>
+<message><source>dhcp</source><translation>DHCP</translation></message>
+<message><source>dhcpv4_range</source><translation>Диапазон DHCPv4</translation></message>
+<message><source>dhcpv6_range</source><translation>Диапазон DHCPv6</translation></message>
+<message><source>dns_domain_name</source><translation>Доменное имя DNS</translation></message>
+<message><source>domain</source><translation>Домен</translation></message>
+<message><source>edit</source><translation>Изменить</translation></message>
+<message><source>edit_network</source><translation>Изменить сеть</translation></message>
+<message><source>enable_dhcpv4</source><translation>Включить DHCPv4</translation></message>
+<message><source>enable_dhcpv6</source><translation>Включить DHCPv6</translation></message>
+<message><source>enable_ipv4</source><translation>Включить IPv4</translation></message>
+<message><source>enable_ipv6</source><translation>Включить IPv6</translation></message>
+<message><source>end</source><translation>Конец</translation></message>
+<message><source>example_lan</source><translation>example.lan</translation></message>
+<message><source>forward_to</source><translation>Перенаправить на</translation></message>
+<message><source>inactive</source><translation>неактивно</translation></message>
+<message><source>ipv4_configuration</source><translation>Конфигурация IPv4</translation></message>
+<message><source>ipv6_configuration</source><translation>Конфигурация IPv6</translation></message>
+<message><source>isolated</source><translation>Изолированная</translation></message>
+<message><source>mode</source><translation>Режим</translation></message>
+<message><source>name</source><translation>Имя</translation></message>
+<message><source>nat</source><translation>NAT</translation></message>
+<message><source>network</source><translation>Сеть</translation></message>
+<message><source>network_created</source><translation>Сеть создана</translation></message>
+<message><source>network_updated</source><translation>Сеть обновлена</translation></message>
+<message><source>open</source><translation>Открыть</translation></message>
+<message><source>routed</source><translation>Маршрутизируемая</translation></message>
+<message><source>save</source><translation>Сохранить</translation></message>
+<message><source>start</source><translation>Запустить</translation></message>
+<message><source>start_on_boot</source><translation>Запускать при загрузке</translation></message>
+<message><source>stop</source><translation>Остановить</translation></message>
+<message><source>these_networks_are_shared_by_all_virtual_machines</source><translation>Эти сети являются общими для всех виртуальных машин.</translation></message>
+<message><source>use_network_name</source><translation>Использовать имя сети</translation></message>
+<message><source>virtual_networks</source><translation>Виртуальные сети</translation></message>
+</context>
+<context>
+<name>ConnectionSettingsDialog</name>
+<message><source>close</source><translation>Закрыть</translation></message>
+<message><source>connection_settings</source><translation>Настройки подключения</translation></message>
+<message><source>connection_uri</source><translation>URI подключения</translation></message>
+<message><source>connection_uri_already_used</source><translation>Такое подключение уже есть в списке.</translation></message>
+<message><source>connection_uri_applied_immediately</source><translation>Новый адрес применяется сразу.</translation></message>
+<message><source>restart_karton_to_apply_the_new_connection</source><translation>Перезапустите Karton, чтобы применить новое подключение.</translation></message>
+<message><source>save_connection</source><translation>Сохранить подключение</translation></message>
+</context>
+<context>
+<name>ImportDomainDialog</name>
+<message><source>all_files</source><translation>Все файлы (*)</translation></message>
+<message><source>cancel</source><translation>Отмена</translation></message>
+<message><source>choose</source><translation>Выбрать…</translation></message>
+<message><source>choose_a_domain_xml_file</source><translation>Выберите XML-файл домена.</translation></message>
+<message><source>connection</source><translation>Подключение</translation></message>
+<message><source>domain_xml_file</source><translation>XML-файл домена</translation></message>
+<message><source>import</source><translation>Импорт</translation></message>
+<message><source>import_vm</source><translation>Импорт виртуальной машины</translation></message>
+<message><source>libvirt_domain_xml</source><translation>XML домена libvirt (*.xml)</translation></message>
+<message><source>source</source><translation>Источник</translation></message>
+<message><source>the_virtual_machine_is_imported_stopped</source><translation>Виртуальная машина импортируется в выключенном состоянии.</translation></message>
+</context>
+<context>
+    <name>StorageVolumePickerDialog</name>
+    <message><source>select_storage_volume</source><translation>Выбор тома хранения</translation></message>
+    <message><source>storage_pool</source><translation>Пул хранения</translation></message>
+    <message><source>storage_volume</source><translation>Том хранения</translation></message>
+    <message><source>no_storage_volumes</source><translation>В этом пуле хранения нет томов.</translation></message>
+    <message><source>cancel</source><translation>Отмена</translation></message>
+    <message><source>select</source><translation>Выбрать</translation></message>
+<message><source>capacity_allocation</source><translation>%1 ГБ ёмкость · %2 ГБ занято</translation></message>
+<message><source>no_matching_storage_volumes</source><translation>В этом пуле нет подходящих томов.</translation></message>
+</context>
+<context>
+    <name>StoragePoolsPage</name>
+    <message><source>storage_pools</source><translation>Пулы хранения</translation></message>
+    <message><source>add_storage_pool</source><translation>Добавить пул</translation></message>
+    <message><source>active</source><translation>Активен</translation></message>
+    <message><source>inactive</source><translation>Неактивен</translation></message>
+    <message><source>capacity_allocation</source><translation>%1 ГБ ёмкость · %2 ГБ занято</translation></message>
+    <message><source>stop</source><translation>Остановить</translation></message>
+    <message><source>start</source><translation>Запустить</translation></message>
+    <message><source>delete</source><translation>Удалить</translation></message>
+    <message><source>no_storage_pools_defined</source><translation>Пулы хранения не определены.</translation></message>
+    <message><source>storage_pools_are_shared_by_all_virtual_machines</source><translation>Эти пулы хранения общие для всех виртуальных машин этого подключения.</translation></message>
+    <message><source>create_storage_pool</source><translation>Создать пул хранения</translation></message>
+    <message><source>pool_name</source><translation>Имя пула</translation></message>
+    <message><source>target_path</source><translation>Целевой путь</translation></message>
+    <message><source>a_directory_storage_pool_is_created_and_started_at_this_path_on_the_connection_host</source><translation>Пул хранения типа directory создаётся и запускается по этому пути на хосте подключения.</translation></message>
+    <message><source>cancel</source><translation>Отмена</translation></message>
+    <message><source>create</source><translation>Создать</translation></message>
+    <message><source>failed_to_create_the_storage_pool</source><translation>Не удалось создать пул хранения.</translation></message>
+    <message><source>delete_storage_pool</source><translation>Удалить пул хранения</translation></message>
+    <message><source>delete_storage_pool_question_1</source><translation>Удалить пул хранения «%1»? Сначала остановите его.</translation></message>
+    <message><source>failed_to_delete_the_storage_pool</source><translation>Не удалось удалить пул хранения.</translation></message>
 </context>
 </TS>

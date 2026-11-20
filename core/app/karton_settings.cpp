@@ -51,6 +51,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
@@ -150,51 +151,19 @@ int modeBitsFor(const struct stat &info, uid_t uid, const QVector<gid_t> &groups
     return info.st_mode & 7;
 }
 
-bool isUnsafeImageDirectory(const QString &path)
-{
-    const QString home = QDir::cleanPath(QDir::homePath());
-    if (path == QDir::rootPath() || path == home || path == home + QStringLiteral("/.local") || path == home + QStringLiteral("/.local/share")
-        || path == home + QStringLiteral("/.cache") || path == home + QStringLiteral("/.config")) {
-        return true;
-    }
-    if (path == QStringLiteral("/home")) {
-        return true;
-    }
-    if (path.startsWith(QStringLiteral("/home/")) && !path.startsWith(home + QLatin1Char('/'))) {
-        return true;
-    }
-    static const QStringList systemPrefixes = {QStringLiteral("/etc"),
-                                               QStringLiteral("/usr"),
-                                               QStringLiteral("/bin"),
-                                               QStringLiteral("/sbin"),
-                                               QStringLiteral("/lib"),
-                                               QStringLiteral("/lib64"),
-                                               QStringLiteral("/boot"),
-                                               QStringLiteral("/dev"),
-                                               QStringLiteral("/proc"),
-                                               QStringLiteral("/sys"),
-                                               QStringLiteral("/root"),
-                                               QStringLiteral("/run")};
-    for (const QString &prefix : systemPrefixes) {
-        if (path == prefix || path.startsWith(prefix + QLatin1Char('/'))) {
-            return true;
-        }
-    }
-    static const QStringList sensitiveHomeDirectories = {QStringLiteral(".ssh"), QStringLiteral(".gnupg")};
-    for (const QString &name : sensitiveHomeDirectories) {
-        if (path == home + QLatin1Char('/') + name || path.startsWith(home + QLatin1Char('/') + name + QLatin1Char('/'))) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool qemuCanAccess(const QString &path, uid_t uid, const QVector<gid_t> &groups, int required)
 {
     struct stat info = {};
     const QByteArray nativePath = path.toLocal8Bit();
     if (::stat(nativePath.constData(), &info) != 0) {
         return false;
+    }
+
+    // ACL entries can only add permissions on top of the traditional mode
+    // bits. When those bits already grant access, skip the getfacl process:
+    // this check runs for every path component on every folder selection.
+    if ((modeBitsFor(info, uid, groups) & required) == required) {
+        return true;
     }
 
     QProcess process;
@@ -257,6 +226,24 @@ bool qemuCanAccess(const QString &path, uid_t uid, const QVector<gid_t> &groups,
         effective = groupClass & mask;
     }
     return (effective & required) == required;
+}
+
+// setfacl is spawned from the GUI thread while granting folder access. A hung
+// network mount must not leave the dialog frozen forever, so cap the wait.
+bool runSetfacl(const QStringList &arguments)
+{
+    QProcess process;
+    process.start(QStringLiteral("setfacl"), arguments);
+    if (!process.waitForStarted(5000)) {
+        return false;
+    }
+    if (!process.waitForFinished(5000)) {
+        process.kill();
+        process.waitForFinished(1000);
+        qCWarning(KARTON_DEBUG) << "setfacl timed out for" << arguments;
+        return false;
+    }
+    return process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
 }
 } // namespace
 
@@ -511,121 +498,26 @@ void Karton::saveImagesDirectory(const QString &path)
     Q_EMIT imagesDirectoryChanged();
 }
 
-bool Karton::canGrantDiskDirectoryAccess(const QString &path) const
+QString Karton::ensureDiskAccess(const QString &path, const QString &connectionUri, bool readOnly)
 {
-    // A grant can only fix an ACL that Karton is allowed to add: the target
-    // must be a dedicated folder owned by the current user. Root, the home
-    // directory itself, system folders and other users' folders are refused by
-    // grantDiskDirectoryAccess(), so do not offer the dialog for them.
+    ScopedCallTimer timer("Karton::ensureDiskAccess");
     if (path.trimmed().isEmpty()) {
-        return false;
-    }
-    const QString directoryPath = QDir::cleanPath(QDir(path).absolutePath());
-    if (isUnsafeImageDirectory(directoryPath)) {
-        return false;
-    }
-    const QFileInfo info(directoryPath);
-    return info.exists() && info.isDir() && info.ownerId() == static_cast<uint>(::getuid());
-}
-
-QString Karton::grantDiskDirectoryAccess(const QString &path)
-{
-    if (path.trimmed().isEmpty()) {
-        return QCoreApplication::translate("Karton", "the_disk_folder_is_empty");
-    }
-    const QString directoryPath = QDir::cleanPath(QDir(path).absolutePath());
-    if (isUnsafeImageDirectory(directoryPath)) {
-        return QCoreApplication::translate("Karton", "choose_a_dedicated_folder_for_vm_images_not_a_system_home_or_sensitive_directory");
-    }
-    if (!QDir().mkpath(directoryPath)) {
-        return QCoreApplication::translate("Karton", "failed_to_create_the_disk_folder_1").arg(directoryPath);
-    }
-    if (::access(directoryPath.toLocal8Bit().constData(), R_OK | W_OK | X_OK) != 0) {
-        return QCoreApplication::translate("Karton", "karton_has_no_write_access_to_the_disk_folder_1").arg(directoryPath);
-    }
-
-    if (!m_activeUri.startsWith(QStringLiteral("qemu:///system"))) {
         return {};
     }
-    struct passwd *qemuUser = getpwnam("libvirt-qemu");
-    if (!qemuUser) {
-        qemuUser = getpwnam("qemu");
+    const QString uri = connectionUri.isEmpty() ? (m_activeUri.isEmpty() ? this->connectionUri() : m_activeUri) : connectionUri;
+    if (connectionIsRemote(uri)) {
+        return {};
     }
-    if (!qemuUser) {
-        return QCoreApplication::translate("Karton", "could_not_find_the_libvirt_qemu_user_grant_access_manually");
+    // Only qemu:///system needs the libvirt QEMU user ACL. A session QEMU
+    // process runs as the Karton user; remote paths are managed on the host.
+    const QUrl url(uri);
+    if (url.path() != QStringLiteral("/system")) {
+        return {};
     }
-
-    gid_t groupBuffer[256];
-    int groupCount = 256;
-    if (getgrouplist(qemuUser->pw_name, qemuUser->pw_gid, groupBuffer, &groupCount) < 0) {
-        groupCount = 1;
-    }
-    QVector<gid_t> groups;
-    groups.reserve(groupCount);
-    for (int i = 0; i < groupCount; ++i) {
-        groups.append(groupBuffer[i]);
-    }
-
-    QString current = QStringLiteral("/");
-    bool changed = false;
-    const QStringList parts = directoryPath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
-    for (int i = 0; i < parts.size(); ++i) {
-        current = QDir(current).filePath(parts.at(i));
-        const bool isTarget = (i == parts.size() - 1);
-        const int required = isTarget ? (R_OK | W_OK | X_OK) : X_OK;
-        if (qemuCanAccess(current, qemuUser->pw_uid, groups, required)) {
-            continue;
-        }
-        const QFileInfo info(current);
-        if (info.ownerId() != static_cast<uint>(::getuid())) {
-            return QCoreApplication::translate("Karton", "cannot_grant_access_to_1_because_it_is_owned_by_another_user").arg(current);
-        }
-        const QString permissions = isTarget ? QStringLiteral("rwx") : QStringLiteral("x");
-        const QString acl = QStringLiteral("u:%1:%2").arg(QString::fromUtf8(qemuUser->pw_name), permissions);
-        if (QProcess::execute(QStringLiteral("setfacl"), {QStringLiteral("-m"), acl, current}) != 0) {
-            return QCoreApplication::translate("Karton", "failed_to_grant_libvirt_access_to_1").arg(current);
-        }
-        changed = true;
-        {
-            QSettings settings(kartonConfigPath(), QSettings::IniFormat);
-            QStringList aclPaths = settings.value(QStringLiteral("storage/grantedAclPaths")).toStringList();
-            if (!aclPaths.contains(current)) {
-                aclPaths.append(current);
-                settings.setValue(QStringLiteral("storage/grantedAclPaths"), aclPaths);
-            }
-            QStringList directories = settings.value(QStringLiteral("storage/grantedDirectories")).toStringList();
-            if (!directories.contains(directoryPath)) {
-                directories.append(directoryPath);
-                settings.setValue(QStringLiteral("storage/grantedDirectories"), directories);
-            }
-        }
-        if (!qemuCanAccess(current, qemuUser->pw_uid, groups, required)) {
-            return QCoreApplication::translate("Karton", "libvirt_still_cannot_access_1_after_granting_permissions").arg(current);
-        }
-    }
-    if (changed) {
-        QSettings settings(kartonConfigPath(), QSettings::IniFormat);
-        QStringList directories = settings.value(QStringLiteral("storage/grantedDirectories")).toStringList();
-        if (!directories.contains(directoryPath)) {
-            directories.append(directoryPath);
-            settings.setValue(QStringLiteral("storage/grantedDirectories"), directories);
-        }
-    }
-    return {};
-}
-
-QStringList Karton::grantedDiskDirectories() const
-{
-    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
-    return settings.value(QStringLiteral("storage/grantedDirectories")).toStringList();
-}
-
-QString Karton::revokeGrantedDiskAccess()
-{
-    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
-    const QStringList aclPaths = settings.value(QStringLiteral("storage/grantedAclPaths")).toStringList();
-    if (aclPaths.isEmpty()) {
-        settings.remove(QStringLiteral("storage/grantedDirectories"));
+    const QString targetPath = QDir::cleanPath(path);
+    // Storage pool volumes are owned and chowned by libvirt itself; Karton
+    // must not (and usually cannot) add ACLs inside a pool directory.
+    if (isStorageVolumePath(targetPath, uri)) {
         return {};
     }
 
@@ -636,60 +528,6 @@ QString Karton::revokeGrantedDiskAccess()
     if (!qemuUser) {
         return QCoreApplication::translate("Karton", "could_not_find_the_libvirt_qemu_user");
     }
-    const QString user = QString::fromUtf8(qemuUser->pw_name);
-
-    QStringList failed;
-    for (const QString &path : aclPaths) {
-        if (!QFileInfo::exists(path)) {
-            continue;
-        }
-        if (QProcess::execute(QStringLiteral("setfacl"), {QStringLiteral("-x"), QStringLiteral("u:%1").arg(user), path}) != 0) {
-            failed.append(path);
-        }
-    }
-    if (failed.isEmpty()) {
-        settings.remove(QStringLiteral("storage/grantedAclPaths"));
-    } else {
-        settings.setValue(QStringLiteral("storage/grantedAclPaths"), failed);
-    }
-    settings.remove(QStringLiteral("storage/grantedDirectories"));
-    if (!failed.isEmpty()) {
-        return QCoreApplication::translate("Karton", "failed_to_remove_access_from_1").arg(failed.join(QStringLiteral(", ")));
-    }
-    return {};
-}
-
-QString Karton::checkDiskDirectoryAccess(const QString &path) const
-{
-    if (path.trimmed().isEmpty()) {
-        return QCoreApplication::translate("Karton", "the_disk_folder_is_empty");
-    }
-    const QString directoryPath = QDir::cleanPath(QDir(path).absolutePath());
-    if (isUnsafeImageDirectory(directoryPath)) {
-        return QCoreApplication::translate("Karton", "choose_a_dedicated_folder_for_vm_images_not_a_system_home_or_sensitive_directory");
-    }
-    if (!QDir().mkpath(directoryPath)) {
-        return QCoreApplication::translate("Karton", "failed_to_create_the_disk_folder_1").arg(directoryPath);
-    }
-    const QByteArray directoryBytes = directoryPath.toLocal8Bit();
-    if (::access(directoryBytes.constData(), R_OK | W_OK | X_OK) != 0) {
-        return QCoreApplication::translate("Karton", "karton_has_no_write_access_to_the_disk_folder_1").arg(directoryPath);
-    }
-
-    // With qemu:///session the guest process runs as the same user. For a
-    // system connection libvirt's QEMU user needs to traverse every parent
-    // directory and read/write the image folder. This function only checks
-    // permissions; it never changes ownership, modes or ACLs.
-    if (!m_activeUri.startsWith(QStringLiteral("qemu:///system"))) {
-        return {};
-    }
-    struct passwd *qemuUser = getpwnam("libvirt-qemu");
-    if (!qemuUser) {
-        qemuUser = getpwnam("qemu");
-    }
-    if (!qemuUser) {
-        return {};
-    }
 
     gid_t groupBuffer[256];
     int groupCount = 256;
@@ -702,19 +540,111 @@ QString Karton::checkDiskDirectoryAccess(const QString &path) const
         groups.append(groupBuffer[i]);
     }
 
-    QString current = QStringLiteral("/");
-    const QStringList parts = directoryPath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
-    for (int i = 0; i < parts.size(); ++i) {
-        current = QDir(current).filePath(parts.at(i));
-        const bool isTarget = (i == parts.size() - 1);
-        const int required = isTarget ? (R_OK | W_OK | X_OK) : X_OK;
-        if (!qemuCanAccess(current, qemuUser->pw_uid, groups, required)) {
-            if (isTarget) {
-                return QCoreApplication::translate("Karton", "libvirt_qemu_user_cannot_read_write_1_grant_that_user_access_to_the_folder").arg(current);
-            }
-            return QCoreApplication::translate("Karton", "libvirt_qemu_user_cannot_traverse_1_grant_that_user_execute_permission_on_the_directory")
-                .arg(current);
+    const QFileInfo target(targetPath);
+    if (!target.exists()) {
+        // The file is created by the caller; ensure it again after creation.
+        return {};
+    }
+
+    // Traverse-only access on every parent directory (including the home
+    // directory and the disk folder). Never grant write access to a
+    // directory: write access is limited to the disk file itself.
+    QStringList directories;
+    if (target.isDir()) {
+        directories.append(targetPath);
+    }
+    QString parent = target.absolutePath();
+    while (!parent.isEmpty() && parent != QStringLiteral("/")) {
+        directories.append(parent);
+        parent = QFileInfo(parent).absolutePath();
+    }
+    directories.removeDuplicates();
+    for (const QString &directory : std::as_const(directories)) {
+        if (qemuCanAccess(directory, qemuUser->pw_uid, groups, X_OK)) {
+            continue;
         }
+        const QFileInfo info(directory);
+        if (info.ownerId() != static_cast<uint>(::getuid())) {
+            return QCoreApplication::translate("Karton", "cannot_grant_access_to_1_because_it_is_owned_by_another_user").arg(directory);
+        }
+        if (!runSetfacl({QStringLiteral("-m"), QStringLiteral("u:%1:x").arg(QString::fromUtf8(qemuUser->pw_name)), directory})) {
+            return QCoreApplication::translate("Karton", "failed_to_grant_libvirt_access_to_1").arg(directory);
+        }
+        if (!qemuCanAccess(directory, qemuUser->pw_uid, groups, X_OK)) {
+            return QCoreApplication::translate("Karton", "libvirt_still_cannot_access_1_after_granting_permissions").arg(directory);
+        }
+    }
+
+    if (target.isDir()) {
+        return {};
+    }
+
+    // Read/write for disks; read-only for ISO images and other media. The
+    // ACL is on the file, so moving the image and repointing the disk applies
+    // the same rule to the new location automatically.
+    const int required = readOnly ? R_OK : (R_OK | W_OK);
+    if (qemuCanAccess(targetPath, qemuUser->pw_uid, groups, required)) {
+        return {};
+    }
+    if (target.ownerId() != static_cast<uint>(::getuid())) {
+        return QCoreApplication::translate("Karton", "cannot_grant_access_to_1_because_it_is_owned_by_another_user").arg(targetPath);
+    }
+    const QString permissions = readOnly ? QStringLiteral("r") : QStringLiteral("rw");
+    if (!runSetfacl({QStringLiteral("-m"), QStringLiteral("u:%1:%2").arg(QString::fromUtf8(qemuUser->pw_name), permissions), targetPath})) {
+        return QCoreApplication::translate("Karton", "failed_to_grant_libvirt_access_to_1").arg(targetPath);
+    }
+    if (!qemuCanAccess(targetPath, qemuUser->pw_uid, groups, required)) {
+        return QCoreApplication::translate("Karton", "libvirt_still_cannot_access_1_after_granting_permissions").arg(targetPath);
+    }
+    return {};
+}
+
+QString Karton::ensureDomainDiskAccess(const Domain *domain)
+{
+    if (!domain || !domain->domainPtr()) {
+        return {};
+    }
+    char *xml = virDomainGetXMLDesc(domain->domainPtr(), VIR_DOMAIN_XML_INACTIVE);
+    if (!xml) {
+        return {};
+    }
+    QDomDocument document;
+    QStringList errors;
+    if (document.setContent(QString::fromUtf8(xml))) {
+        const QDomNodeList disks = document.elementsByTagName(QStringLiteral("disk"));
+        for (int i = 0; i < disks.count(); ++i) {
+            const QDomElement disk = disks.at(i).toElement();
+            const QString device = disk.attribute(QStringLiteral("device"));
+            if (device != QStringLiteral("disk") && device != QStringLiteral("cdrom")) {
+                continue;
+            }
+            const QString source = disk.firstChildElement(QStringLiteral("source")).attribute(QStringLiteral("file"));
+            if (source.isEmpty()) {
+                continue;
+            }
+            const bool readOnly = device == QStringLiteral("cdrom") || !disk.firstChildElement(QStringLiteral("readonly")).isNull();
+            const QString error = ensureDiskAccess(source, domainConnectionUri(domain), readOnly);
+            if (!error.isEmpty()) {
+                errors.append(error);
+            }
+        }
+    }
+    free(xml);
+    return errors.join(QLatin1Char('\n'));
+}
+
+QString Karton::checkDirectoryWritable(const QString &path) const
+{
+    ScopedCallTimer timer("Karton::checkDirectoryWritable");
+    if (path.trimmed().isEmpty()) {
+        return QCoreApplication::translate("Karton", "the_disk_folder_is_empty");
+    }
+    const QString directoryPath = QDir::cleanPath(QDir(path).absolutePath());
+    if (!QDir().mkpath(directoryPath)) {
+        return QCoreApplication::translate("Karton", "failed_to_create_the_disk_folder_1").arg(directoryPath);
+    }
+    if (::access(directoryPath.toLocal8Bit().constData(), R_OK | W_OK | X_OK) != 0) {
+        return QCoreApplication::translate("Karton", "karton_has_no_write_access_to_the_disk_folder_1").arg(directoryPath);
     }
     return {};
 }

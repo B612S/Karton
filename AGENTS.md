@@ -14,24 +14,31 @@ KF6 application with a Kirigami UI. It lists and manages local libvirt domains,
 defines new domains from OS installation media, and embeds a SPICE display for
 the VM console.
 
-Karton auto-detects the libvirt connection in `Karton::init()`: without an
-explicit setting it tries `qemu:///system` first, then `qemu:///session`, and
-selects the first connection that actually has domains. The active URI is shown
-in the empty-state message and can be overridden in Application Settings
-(requires a restart) or with the `KARTON_LIBVIRT_URI` environment
-variable, which takes precedence. A stored URI is used first; if it has no
-domains and is one of the two local URIs, the other one is tried. The URI is
-stored in QSettings under `connection/uri` in
-`$XDG_CONFIG_HOME/karton/karton.conf`. Any `virsh` command used during
-development or testing must pass `-c <same URI>` (usually
-`-c qemu:///system`).
+Karton supports several libvirt connections at once and shows one collapsible
+group per connection in the VM list. A libvirt domain UUID is only unique
+inside one connection, so the same UUID can legitimately appear in two groups
+(for example a session copy of a system VM); these are independent
+definitions, share per-UUID Karton settings, and must not run at the same
+time if they point at the same disk. The **primary** connection is
+auto-detected in `Karton::init()`: without an explicit setting it tries
+`qemu:///system` first, then `qemu:///session`, and selects the first
+connection that actually has domains. The primary URI can be changed in
+Application Settings → Connections (requires a restart) or with
+`KARTON_LIBVIRT_URI`, which takes precedence. Additional connections are kept
+in `connections/extraUris` and are added, edited and removed live on the same
+settings page; on a fresh profile Karton offers the other local URI as the
+first additional connection. The primary URI is stored under `connection/uri`
+in `$XDG_CONFIG_HOME/karton/karton.conf`; collapsed groups are stored under
+`connections/collapsed`. Any `virsh` command used during development or testing
+must pass `-c <same URI>` (usually `-c qemu:///system`).
 
 ## Repository layout
 
 | Path | Purpose |
 | --- | --- |
 | `main.cpp` | Entry point; sets up `KAboutData` and loads the QML module. |
-| `core/app/karton.{h,cpp}` | `Karton` QML singleton: libvirt connection, domain list, VM lifecycle operations, paths. |
+| `core/app/karton.{h,cpp}` | `Karton` QML singleton: libvirt connections, domain list, VM lifecycle operations, paths. |
+| `core/app/libvirtconnection.{h,cpp}` | Additional libvirt connection group: its handle, reader handle, reconnect loop, lifecycle monitor and VM list. |
 | `core/domain/domain.{h,cpp}` | QML-exposed `Domain` wrapper around a `virDomainPtr`. |
 | `core/domain/domainconfig.{h,cpp}` | QML-exposed per-domain configuration/state model. |
 | `core/app/vmlistmodel.{h,cpp}` | `VMModel`, the QML singleton list model shown on the main page. |
@@ -48,7 +55,7 @@ development or testing must pass `-c <same URI>` (usually
 | `core/libvirt/libvirtmonitor.*`, `core/libvirt/libvirteventloop.*` | libvirt lifecycle-event monitoring. |
 | `core/util/commandrunner.*` | Small `QProcess` helper used for `qemu-img`. |
 | `core/util/xmlhighlighter.*` | Theme-coloured XML syntax highlighter for the VM XML editor. |
-| `qml/` | Kirigami QML pages and dialogs. |
+| `qml/` | Kirigami QML pages and dialogs (including the per-connection `ConnectionSettingsDialog`/`NetworksPage`). |
 | `tests/` | Opt-in QtTest unit tests; never linked into the application. |
 | `scripts/guests/` | Standalone guest installers (`linux/install.sh`, `windows/install.cmd`) that download and install the guest agents themselves. |
 | `src/` | Reserved for makepkg's `$srcdir`; it is not used for source files. |
@@ -279,14 +286,71 @@ Karton style; do not invent a separate layout for a new screen.
   registers a Qt implementation of the libvirt event API (`QSocketNotifier` for
   handles, `QTimer` for timeouts) before the hypervisor connection is opened.
   The event callback emits synchronously on the GUI thread; keep handlers cheap
-  and do not block.
+  and do not block. libvirt timeouts are one-shot by contract, so the timers are
+  `setSingleShot(true)` and are re-armed from `updateTimeout()`; never make them
+  repeating.
+- Events are the fast path, not the only source of truth. `Karton` registers a
+  libvirt close callback (`virConnectRegisterCloseCallback`), and when the
+  connection drops it tears the connection down (`detachConnection()`), retries
+  every 3 seconds and rebuilds the model after reconnecting. In addition,
+  `refreshDomainStates()` runs every 5 seconds and on application activation: it
+  compares `virConnectListAllDomains()` state with the model and emits
+  `domainsChanged` only for domains that actually drifted, so a missed
+  lifecycle event heals within seconds instead of leaving a stopped VM shown as
+  running. Never put a full `refreshDomainList()` on a timer — it recreates
+  rows. `connected` is a `NOTIFY` property for the same reason.
+- Blocking libvirt reads that are polled or can be slow run on the
+  `LibvirtReader` thread (`core/libvirt/libvirtreader.*`), which owns its own
+  connection opened and closed inside that thread. `Karton::postReaderTask()`
+  queues `std::function` work; results come back through
+  `QMetaObject::invokeMethod(..., Qt::QueuedConnection)` and are applied on the
+  GUI thread. Only plain data crosses the boundary — never `Domain *` or
+  `virDomainPtr` owned by the model. `refreshDomainStates()` uses this path and
+  falls back to the synchronous call when the reader is unavailable.
+  `LibvirtEventLoop` is thread-safe: libvirt registers handles/timeouts from the
+  thread that opens the connection, so the notifiers and timers are created
+  parentless in that thread and the maps are mutex-protected. Host lists
+  (`networks()`, `pciDevices()`, `usbDevices()`) are cached on the reader too and
+  pre-warmed after connecting; `networksUpdated`/`pciDevicesUpdated`/
+  `usbDevicesUpdated` refresh the dialogs. `SettingsDialog` calls
+  `prefetchDomainXml()` first; `cachedDomainXml()` serves the live/inactive XML
+  from the reader cache to `domainHardwareInfo`, `domainDisks`,
+  `domainUsbDevices`, `domainPciDevices`, `domainXmlDevices` and
+  `domainInputDevices`, falling back to one synchronous fetch only when the
+  cache is empty. `refreshDomainList()` itself is collected on the reader and
+  applied on the GUI (`applyDomainList()`), with a synchronous fallback only if
+  the reader cannot list domains. `KARTON_NO_READER=1` disables the reader for
+  debugging.
+- The libvirt connection is opened by `Karton::start()` after the main window's
+  first frame: `main.cpp` hooks `QQuickWindow::frameSwapped` (with a 2 s
+  fallback) and `--check-qml` skips it. Never call `init()` from the
+  constructor — a slow or unresponsive libvirt must not keep the window from
+  appearing. `connecting`/`reconnecting` drive the connection group headers, so
+  the first attempt and the retry loop are not shown as a connection error. A
+  failed first connect starts the same 3 s reconnect timer as a dropped
+  connection. Additional connections (`LibvirtConnection`) have their own
+  probe, reader handle and reconnect loop.
+- `refreshDomainList()` must not spawn `qemu-img` synchronously: a stuck image
+  would freeze the GUI on every full refresh. Sizes come from the cache or from
+  `scheduleDiskSizeQuery()`, which updates `DomainConfig` when the answer
+  arrives.
+- `DomainConfig::cpus`/`maxRam` are updated by both `refreshDomainList()` and
+  `refreshDomain()`, so the details page follows lifecycle events and edits.
+  `domainStats()` reports guest memory only while the domain is running, and
+  `forgetDomainStats()` drops the cached CPU and memory samples on STOPPED —
+  otherwise the VM page keeps showing the last RAM percentage of a domain that
+  is no longer running.
 - `CommandRunner::runCommand()` starts a program with an explicit argument list
   (no shell) and invokes a callback with the exit status and output. It does not
-  support pipes, globbing, or shell escape sequences. Use
-  `runCommandAndWait()` only for short commands where blocking is acceptable
-  (currently cached `qemu-img info` queries). VM creation and disk resizing use
-  the asynchronous path and report completion through `domainCreated` /
-  `domainEdited`.
+  support pipes, globbing, or shell escape sequences. Both `runCommand()` and
+  `runCommandAndWait()` take `timeoutMs` (`0` means no limit): pass a timeout for
+  short metadata commands (`qemu-img info` 10 s, `qemu-img create` 60 s) and `0`
+  for long conversions. A timed-out command is killed and reported as a failure;
+  a dialog that waits for the callback must not stay open forever.
+- GUI-thread calls that can block (libvirt, `QProcess`, ACL/`stat` helpers) get a
+  `ScopedCallTimer` from `util/calltimer.h`. `--verbose` logs every call, a call
+  that takes 100 ms or more is logged as a warning: use those warnings to find
+  the operation that freezes the window.
 - Localization follows Luma: translations are stored as keys in
   `locales/en.ts`/`locales/ru.ts`, compiled by `qt_add_translations()` into
   embedded `:/i18n/<lang>.qm` resources and installed to
@@ -299,20 +363,26 @@ Karton style; do not invent a separate layout for a new screen.
 - The QML dialogs keep themselves open while an asynchronous create/edit is in
   flight; do not close them optimistically after calling `Karton`.
 - `ApplicationSettingsDialog.qml` is the window-attached Luma-style global
-  settings overlay. Its Application page edits the libvirt connection URI; its
-  Console page sets the default serial-console font size; its Libvirt Networks
-  page manages host networks (start/stop, autostart, NAT and delete); its About
-  page shows the application version and links. The Application page also
+  settings overlay. Its Application page selects the UI language and the SPICE
+  defaults; its Console page sets the default serial-console font size; its
+  Connections page lists the primary and additional libvirt connections
+  (edit/remove additional addresses, add new ones); its About page shows the
+  application version and links. Host libvirt networks are per connection and
+  live in `ConnectionSettingsDialog`, not in Application Settings. The Application page also
   selects the UI language (System/English/Русский) and has a Maintenance section
   that can clear all preview images. Data for deleted VMs
   is cleaned automatically: runtime removals call `removeDomainCache()`, and a
   per-connection `knownDomains/<hash>` UUID list cleans VMs deleted while
   Karton was closed without affecting other libvirt connections.
-- Libvirt network management lives on `Karton` (`networks()`, `startNetwork()`,
-  `stopNetwork()`, `createNatNetwork()`, `attachNetwork()`, `detachNetwork()`)
-  and is exposed inline by the Network page of `qml/SettingsDialog.qml`. The
-  per-VM page only manages VM interfaces (attach/edit/detach); host libvirt
-  network management is not duplicated there. NIC attach uses separate LIVE and
+- Libvirt network management lives on `Karton` (`networks(uri)`,
+  `startNetwork(name, uri)`, `stopNetwork()`, `createNatNetwork()`,
+  `attachNetwork()`, `detachNetwork()`). Host networks are per libvirt
+  connection: the connection context menu opens
+  `qml/ConnectionSettingsDialog.qml`, whose `qml/NetworksPage.qml` lists and
+  edits exactly that connection's networks (`Add network`, DHCP, Edit,
+  Start/Stop, Delete). `qml/SettingsDialog.qml` only manages the VM's own
+  interfaces (attach/edit/detach); it lists the networks of the VM's
+  connection via `Karton::domainConnectionUri()`. NIC attach uses separate LIVE and
   CONFIG libvirt calls so a running VM keeps the interface after shutdown; NIC
   detach removes the CONFIG device even if the guest cannot hot-unplug the live
   device. Interface rows show IP addresses obtained from the guest agent/lease
@@ -328,8 +398,9 @@ Karton style; do not invent a separate layout for a new screen.
   the name is sanitized to ASCII (dnsmasq cannot use spaces) and gets a numeric
   suffix when one VM has several reservations, because libvirt requires unique
   host names. Reservation times are stored in
-  `karton.conf` under `dhcpReservation/<network>/<mac>/addedAt` because libvirt
-  does not record them, and are removed with the reservation. Note that
+  `karton.conf` under `dhcpReservation/<network>/<mac>/addedAt` for the primary
+  connection (additional connections add a per-URI scope directory) because
+  libvirt does not record them, and are removed with the reservation. Note that
   `virNetworkUpdate()` takes the command before the section (see
   `libvirt-network.h`); passing the section first silently updates the wrong
   `<ip>` section.
@@ -340,8 +411,9 @@ Karton style; do not invent a separate layout for a new screen.
   `domainUsbDevices()`, `attachUsbDevice()` and `detachUsbDevice()`, with the
   UI in `qml/UsbDevicesDialog.qml`. Host devices come from libvirt node devices
   (`usb_device` capability) and are attached as USB hostdevs.
-- Snapshots are exposed through `Karton::domainSnapshots()`,
-  `createSnapshot()`, `revertSnapshot()` and `deleteSnapshot()`, with the UI in
+- Snapshots are exposed through `Karton::domainSnapshots()` (reader-cached,
+  `snapshotsUpdated`), `createSnapshot()`, `revertSnapshot()` and
+  `deleteSnapshot()`, with the UI in
   `qml/SnapshotsDialog.qml`. A running VM with "Include memory" uses an internal
   snapshot with memory; without it, the backend creates an external disk-only
   snapshot with one qcow2 overlay per local data disk. External snapshots must
@@ -363,13 +435,21 @@ Karton style; do not invent a separate layout for a new screen.
   `CommandRunner`; partial destination files are removed on failure.
 - OVF/OVA export and import live in `core/app/karton_ovf.cpp` with
   `qml/OvfExportDialog.qml` and `qml/OvfImportDialog.qml`. Both write as the
-  Karton user; the destination folder goes through the same
-  `checkDiskDirectoryAccess()` / `grantDiskDirectoryAccess()` confirmation as
-  disk creation, and the permission dialog is only offered for dedicated,
-  user-owned folders. Export refuses to start when a disk image is not readable
+  Karton user; the host QEMU permissions for the imported disks are applied
+  automatically when the VM is defined/started. Export refuses to start when a
+  disk image is not readable
   by Karton — a running system VM's image can still be owned by libvirt-qemu —
   and reports the exact image instead of qemu-img's duplicated error. Import
-  always defines the VM stopped.
+  always defines the VM stopped. OVA extraction runs on `QThreadPool`
+  (`app/ovfextract.*`) and polls an atomic cancel flag, so a multi-gigabyte
+  archive never blocks the GUI and can be stopped; parsing, disk conversion and
+  the domain definition stay on the GUI thread. `tar --checkpoint-action=echo=%T`
+  reports bytes read, matched against the total entry size from the earlier
+  `-tvf` listing, so the dialog shows a real percentage (indeterminate when the
+  listing has no sizes). `m_ovfActive` serialises imports, and
+  `cancelOvfImport()` kills either tar or the current `qemu-img` through
+  `CommandRunner::cancelCommand()`. Temporary directories are removed with a
+  `PoolTask`, not `removeRecursively()` on the GUI thread.
 - Disk/ISO hotplug is exposed through `Karton::domainDisks()`, `addDisk()`,
   `attachDiskImage()`, `attachIso()`, `setDiskMedia()` and `detachDisk()`, with
   the UI inline in the Disks page of `qml/SettingsDialog.qml`. New disks are
@@ -384,7 +464,13 @@ Karton style; do not invent a separate layout for a new screen.
   action, so the action is always visible without scrolling.
   Disk edit options include an editable Path row (Media for CD-ROM) with a
   Change… picker, so an existing disk can be repointed without detaching and
-  re-adding it. For a running VM the path change is saved to the inactive
+  re-adding it. Local and remote disks can also be created in an active
+  libvirt storage pool (`createStorageVolume` → `virStorageVolCreateXML`) from
+  the wizard and Add Hardware, and repointed to an existing pool volume with
+  the "From pool…" picker; the folder/file flow remains the default and its
+  host permissions are applied automatically. Pool volumes skip the local
+  file checks and are deleted through libvirt
+  when the VM is removed with "Delete disk". For a running VM the path change is saved to the inactive
   configuration and applies on the next start; CD-ROM media changes are applied
   live. CD-ROM edit options are limited to Media and the always-enabled
   read-only flag; shareable, serial, cache and discard are not shown and
@@ -408,10 +494,32 @@ Karton style; do not invent a separate layout for a new screen.
   Preserve unknown metadata when rewriting XML —
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
 - Disk shrinking is not supported; `qemu-img resize` is only safe to grow.
+- Local and remote storage pools are listed per connection
+  (`storagePools(uri, includeInactive)`/`storageVolumes(pool, uri)`); the
+  create wizard, Add Hardware (new disk, existing image and CD-ROM) and the
+  disk edit dialog offer pool selection via "Use a storage pool" / "From
+  pool…". Inactive pools are included and started automatically before a
+  volume is created/listed. `startStoragePool()`, `stopStoragePool()`,
+  `createStoragePool()` (directory pool) and `deleteStoragePool()` back the
+  per-connection StoragePoolsPage in ConnectionSettingsDialog. Pool volumes
+  are resolved with `virStorageVolLookupByPath`, so local file/ACL checks are
+  skipped and "Delete disk" removes them with `virStorageVolDelete` on both
+  local and remote connections. The volume picker shows capacity/format and
+  filters ISO/image volumes for CD-ROM use. Clone/OVF/image-folder destinations
+  are preflighted with `checkDirectoryWritable()` (current-user write access,
+  no ACL); remote USB/PCI passthrough is rejected because host devices belong
+  to the local host.
 - `Karton::deleteDomain()` undefines with
   `VIR_DOMAIN_UNDEFINE_NVRAM | SNAPSHOTS_METADATA | CHECKPOINTS_METADATA`
   (plus `MANAGED_SAVE` when needed), so UEFI VMs with an NVRAM/varstore can be
   removed; older libvirt falls back to NVRAM-only and then legacy undefine.
+  When the NVRAM file itself cannot be removed — it may be owned by
+  libvirt-qemu or shared with a domain on another connection, e.g. a session
+  copy of a system VM — `deleteDomain()` retries with
+  `VIR_DOMAIN_UNDEFINE_KEEP_NVRAM` and keeps the file instead of failing; the
+  definition is still removed. Model removal routes by the domain's own
+  libvirt handle (`connectionForDomain()`), not by UUID, because a UUID is
+  unique only within one connection.
   `DomainConfig::virtualDiskPaths` contains every `<disk device='disk'>` path
   found in the domain XML; deleting a VM with "Delete Disk" removes all of
   them. Creating a new VM still creates a single data disk, and size editing
@@ -420,20 +528,20 @@ Karton style; do not invent a separate layout for a new screen.
   falling back to `$XDG_DATA_HOME/libvirt/images`. Application Settings →
   Storage changes it, the create-VM wizard can override the folder/name for a
   single VM, and Add Hardware's storage page can choose a folder/name for a new
-  disk. `Karton::checkDiskDirectoryAccess()` validates the current user and,
-  for `qemu:///system`, the `libvirt-qemu` ACL access (using `getfacl`); it only
-  reports problems. `Karton::grantDiskDirectoryAccess()` runs after the
-  automatic permission confirmation dialog (create wizard Next, Add Hardware
-  create/attach, disk path save, Storage folder choice). The dialog is shown
-  before an error message; the error appears only if the user cancels or the
-  grant fails. Granting adds only a named-user ACL (`x` on parent directories,
-  `rwx` on the target), never chmod/chown, refuses root/home/system/sensitive
-  targets and paths owned by another user, and verifies the result. Granted
-  target folders are listed in Application Settings → Storage and can be
-  cleared there with `revokeGrantedDiskAccess()`, which removes only the tracked
-  ACL entries. Never grant broad access to `/`, `$HOME` or other critical
-  directories; the checks reject the filesystem root and the home directory
-  itself.
+  disk. Host permissions for local `qemu:///system` disks are applied
+  automatically by `Karton::ensureDiskAccess(path, uri, readOnly)`: it grants
+  the libvirt QEMU user (`libvirt-qemu`, falling back to `qemu`) traverse-only
+  `x` on every parent directory and `rw` on the disk file (`r` for ISO/media),
+  never write access to a directory, chmod or chown. Storage-pool volumes are
+  skipped because libvirt manages their ownership. The ACL is applied on disk
+  creation, attach and disk-path edit, and before every VM start (which also
+  covers cloned/imported disks); changing the path to a moved image applies the
+  same ACL to the new location.
+  There is no permission dialog and no stored grant list; failures are reported
+  as normal operation errors. Read-only disks receive `r` only. Session
+  connections need no ACL (QEMU runs as the user) and remote connections are
+  managed on the remote host; cloned disks are ensured after each copy,
+  imported disks at VM start.
 - New virtual disks can be created as `qcow2` (default), `raw` or `vmdk`.
   The format is stored in the domain XML `<driver type="…"/>` and exposed as
   `DomainConfig::diskFormat`; editing an existing domain does not convert its
@@ -454,9 +562,18 @@ Karton style; do not invent a separate layout for a new screen.
   `rebootDomain()`. `Domain::isPaused` mirrors `VIR_DOMAIN_PAUSED`; never infer
   paused state from the localized `DomainConfig::state` string.
 - `Karton::domainStats()` returns CPU percentage, CPU time, current/max memory
-  and vCPU count for the VM page. `VMPage.qml` polls it with a 2-second `Timer`
-  while the VM is running; the percentage is computed from the `virDomainInfo`
-  CPU-time delta since the previous call and averaged over the vCPUs.
+  and vCPU count for the VM page. With the reader active it reads a cache filled
+  by `requestDomainStats()` on the reader thread and returns the last sample
+  immediately (the first call can be empty; `domainStatsUpdated` refreshes the
+  UI), so the 2-second `VMPage.qml` timer never blocks the GUI. The CPU
+  percentage is computed from the `virDomainInfo` CPU-time delta in
+  `buildStatsMap()` and averaged over the vCPUs. The synchronous
+  `domainStatsSync()` stays as the fallback when the reader is unavailable.
+- `domainDiskStats()` and `domainInterfaces()` use the same cache pattern
+  (`m_diskStatsCache`/`m_interfaceCache`, refreshed on the reader thread, with
+  `domainDiskStatsUpdated`/`domainInterfacesUpdated`). The QML timers keep
+  calling them, but they only read the cache; a reader-less build falls back to
+  the synchronous helpers.
 - Managed save is exposed through `Karton::saveDomainState()` and
   `deleteSavedState()`, with `Domain::hasSavedState` driving the VM page
   actions. `startDomain()` restores a saved state automatically through
@@ -464,6 +581,17 @@ Karton style; do not invent a separate layout for a new screen.
   domain is running. A managed-save image also restores the old device set:
   after editing XML/adding devices, use Delete Hibernation before starting if
   the new hardware must be present immediately.
+- Hibernate goes through `saveDomainStateAsync()`: the blocking
+  `virDomainManagedSave()` runs on `QThreadPool` with a dedicated connection
+  opened and closed on the GUI thread, while `updateBusyProgress()` polls
+  `virDomainGetJobInfo()` and `cancelBusyOperation()` aborts the job. QML uses
+  the async call and `BusyOperationDialog`; do not call the blocking
+  `saveDomainState()` from QML.
+- Snapshot create/revert/delete from QML use `createSnapshotAsync()`,
+  `revertSnapshotAsync()` and `deleteSnapshotAsync()`: the blocking libvirt
+  call runs in the same `startBusyOperation()` worker as hibernate, and
+  `SnapshotsDialog` refreshes on `snapshotOperationFinished()`. The synchronous
+  variants remain for non-UI callers.
 - Application icons are installed under the reverse-DNS name
   `org.kde.karton`, matching `org.kde.karton.desktop` and `QGuiApplication`'s
   window icon lookup.
@@ -510,7 +638,17 @@ Karton style; do not invent a separate layout for a new screen.
   is written to the inactive domain XML and applies after a VM restart. Its
   Serial console section overrides the application console font size for this
   VM (`console/<uuid>/fontSize`); the per-VM value takes priority over the
-  global `console/fontSize`.
+  global `console/fontSize`. Console output is processed in bounded 8 KiB
+  chunks per event-loop turn (`TerminalView::feed()`), so a burst cannot block
+  painting or input.
+- The VM list is grouped per libvirt connection: `VMModel` emits one collapsible
+  header row per connection (status and VM count) followed by that connection's
+  VMs; headers have a connection context menu (Reconnect/Disconnect/Settings)
+  and VM rows a VM context menu (Open viewer, lifecycle actions, Snapshots,
+  Clone, Settings, Delete). Row order is stored per connection. The main window
+  always uses the fixed two-column layout (list on the left, details on the
+  right); opening or switching a VM replaces only the details page and never
+  hides or replaces the list.
 - The VM list uses `Karton::domainOsIcon()`/`domainOsName()` and flat
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
   macOS and DOS), installed into hicolor. Unknown guests use Karton's own
@@ -528,6 +666,9 @@ Karton style; do not invent a separate layout for a new screen.
   SPICE WebDAV channel and phodav virtual directories; the VM must have the
   `org.spice-space.webdav.0` channel.
 - Clipboard synchronization uses the SPICE main channel and the guest agent.
+  Host clipboard reads are skipped unless the viewer item has focus
+  (`ClipboardManager::setActive()`), because a Wayland clipboard read can block
+  while another client owns the selection.
   Application Settings has separate text/file modes: 0 disabled, 1 host to
   guest, 2 guest to host, 3 bidirectional (`clipboard/textMode` and
   `clipboard/filesMode`). Text uses `main-clipboard-selection-*` and is
@@ -572,11 +713,37 @@ Karton style; do not invent a separate layout for a new screen.
   libvirt's domain schema (`VIR_DOMAIN_DEFINE_VALIDATE`). Invalid or unsupported
   XML is rejected, reported, and the editor reverts to the last valid version.
   There are no separate Storage/Networks/PCI/USB menu actions.
+- Remote connections (a URI with a host, such as `qemu+ssh://`, `qemu+tcp://`
+  or `qemu+tls://`) keep their disks on the remote host. `connectionIsRemote()`
+  distinguishes them (local `qemu:///` and `qemu+unix:///` URIs have no host);
+  `KARTON_FORCE_REMOTE=1` forces the remote code paths for testing. Storage
+  pools and volumes are managed through `storagePools(uri)`,
+  `storageVolumes(pool, uri)`, `createStorageVolume()` and
+  `deleteStorageVolume()` (`core/app/karton_storage.cpp`); the create wizard
+  and Add Hardware's "New disk" create the volume in the selected remote pool
+  through `virStorageVolCreateXML` and pass `diskPrecreated`, so Karton never
+  runs local `qemu-img`, `mkpath` or ACL checks for it. Remote Add Hardware
+  and Settings use editable remote paths (existing image/ISO) and hide or
+  disable the local file pickers and local `qemu-img` disk tools. Disk sizes
+  come from the domain metadata or `virDomainGetBlockInfo`, never local
+  `qemu-img`. `deleteDomain` reads every `<disk device='disk'>` source from the
+  inactive XML before undefining and deletes the matching remote volumes with
+  `virStorageVolLookupByPath`/`virStorageVolDelete`; disk-folder permission
+  checks are skipped for remote domains. `cloneDomain()` and `importOvf()`
+  refuse remote targets with a clear error; `importDomainXml()` defines on the
+  selected connection.
+- The create wizard, the domain XML import dialog and the OVF/OVA import
+  dialog all ask for the **target libvirt connection**. `createDomain()`,
+  `importDomainXml()` and `importOvf()` take a `connectionUri` (empty means
+  the primary); the automatic disk ACL uses that URI (a system target needs the
+  libvirt-qemu ACL, a session target does not), and the selected connection's
+  group is refreshed after the operation instead of only the primary list. The create wizard's network picker lists the networks of the
+  selected connection.
 - New domains choose a named libvirt host network such as
   `br0-network`/`default` (`<interface type='network'><source network='…'/>`)
-  or no network; only active libvirt networks are listed, and the wizard does
-  not expose a separate QEMU user-mode option because networks are managed in
-  Application Settings. The NIC driver is a
+  or no network; only active libvirt networks of the selected connection are
+  listed, and the wizard does not expose a separate QEMU user-mode option
+  because networks are managed per connection in `ConnectionSettingsDialog`. The NIC driver is a
   separate choice (`virtio` default or `e1000`), stored in
   `DomainConfig::networkModel`; the selected libvirt network is passed as
   `networkName` and validated with `virNetworkLookupByName()` before defining
@@ -628,7 +795,9 @@ Karton style; do not invent a separate layout for a new screen.
   compositor shortcuts. Moving the pointer to the toolbar or title bar restores
   the normal shortcuts. It is released on
   deactivation, stop, close and app exit. A stopped viewer keeps normal Karton
-  shortcuts. Seats
+  shortcuts. The Wayland inhibitor keeps its registry/manager for the window
+  lifetime, so only the first inhibit does `wl_display_roundtrip()`; hovering
+  the guest does not block again. Seats
   and compositor grabs that never reach the client (for example some
   Meta/Super combinations) still cannot be intercepted.
 - `DomainViewer::updateDisplayResolution()` calls
@@ -719,12 +888,14 @@ Karton style; do not invent a separate layout for a new screen.
 - `VMViewerWindow.qml` registers itself with `Karton::registerViewer()`.
   Opening the same VM again focuses/raises the existing window instead of
   creating a duplicate. Its toolbar has the same split actions as the VM page:
-  Shut Down/Start with a separate arrow for Power Off, Pause (no extra menu),
-  Reboot with a separate arrow for Reset, a More menu (Actual Size, Fit Guest
-  to Window, USB Devices, Hibernate, Settings and Snapshots) and fullscreen,
-  in that order. The fullscreen floating bar orders the window controls as
-  More, minimize, restore/exit fullscreen and close (all monochrome symbolic
-  icons). Custom menus also close when the window frame is clicked or the
+  Shut Down/Start with a separate Power Off arrow, Reboot with a separate Reset
+  arrow, Pause, then the toolbar's overflow menu (Actual Size, Fit Guest to
+  Window, USB Devices, Hibernate, Settings and Snapshots) and fullscreen. At
+  narrow widths Pause moves into the overflow while the power/reboot groups
+  stay; the fullscreen floating bar puts Power Off/Reset dropdowns directly
+  next to Shut Down/Reboot. The fullscreen floating bar orders the window
+  controls as More, minimize, restore/exit fullscreen and close (all monochrome
+  symbolic icons). Custom menus also close when the window frame is clicked or the
   application loses focus. "Fit to Window" was deliberately removed. A stopped VM opens the
   viewer without starting it and shows only a large clickable start triangle;
   it is started only when the user asks. When a running VM stops, the viewer
@@ -735,6 +906,11 @@ Karton style; do not invent a separate layout for a new screen.
   viewer, whether it is running or stopped. UI icons use the monochrome
   `*-symbolic` variants. PCI and Storage have no separate menu actions; they are
   managed inline from SettingsDialog.
+- `PipeWireAudioSink` runs the blocking PipeWire setup/teardown (`pw_context_connect`,
+  `pw_thread_loop_stop`) on a dedicated worker thread; `start()`/`stop()` only
+  post work, and the destructor flushes it with a blocking call before the
+  thread is stopped. PCM data still arrives from the GUI thread and is queued
+  under a mutex.
 - The scene graph uses OpenGL (`QQuickWindow::setGraphicsApi()` in `main.cpp`)
   with a 1-frame swap interval, double buffering and no multisampling. On
   Wayland the compositor provides the presentation sync. Vulkan is not

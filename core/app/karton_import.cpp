@@ -3,6 +3,7 @@
 
 #include "app/karton.h"
 #include "app/karton_private.h"
+#include "app/libvirtconnection.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
@@ -14,9 +15,10 @@
 #include <QFileInfo>
 #include <QString>
 
-bool Karton::importDomainXml(const QString &path)
+bool Karton::importDomainXml(const QString &path, const QString &connectionUri)
 {
-    if (!m_conn) {
+    virConnectPtr conn = connectionHandleForUri(connectionUri);
+    if (!conn) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "not_connected_to_libvirt"));
         Q_EMIT domainImported(false, QString());
         return false;
@@ -52,9 +54,9 @@ bool Karton::importDomainXml(const QString &path)
 
     // Validate the full document against libvirt's schema. Older libvirt
     // implementations do not know the flag, so fall back to a plain define.
-    virDomainPtr domain = virDomainDefineXMLFlags(m_conn, xml.constData(), VIR_DOMAIN_DEFINE_VALIDATE);
+    virDomainPtr domain = virDomainDefineXMLFlags(conn, xml.constData(), VIR_DOMAIN_DEFINE_VALIDATE);
     if (!domain) {
-        domain = virDomainDefineXML(m_conn, xml.constData());
+        domain = virDomainDefineXML(conn, xml.constData());
     }
     if (!domain) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "failed_to_define_the_domain_1").arg(QString::fromUtf8(virGetLastErrorMessage())));
@@ -63,7 +65,11 @@ bool Karton::importDomainXml(const QString &path)
     }
 
     virDomainFree(domain);
-    refreshDomainList();
+    if (LibvirtConnection *target = connectionForUri(connectionUri)) {
+        target->refreshDomains();
+    } else {
+        refreshDomainList();
+    }
     Q_EMIT domainImported(true, name);
     return true;
 }
