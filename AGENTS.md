@@ -648,7 +648,12 @@ Karton style; do not invent a separate layout for a new screen.
   Clone, Settings, Delete). Row order is stored per connection. The main window
   always uses the fixed two-column layout (list on the left, details on the
   right); opening or switching a VM replaces only the details page and never
-  hides or replaces the list.
+  hides or replaces the list. `VMListPage::openDomain()` must set
+  `pageStack.currentIndex` to `depth - 1` before `pageStack.replace()`: clicking
+  in the list column makes that column current, and `PageRow.replace()` pops
+  the pages above the current one and replaces the new topmost page, so it
+  would otherwise replace the VM list itself (this made the list disappear
+  when a collapsed connection was expanded after a restart).
 - The VM list uses `Karton::domainOsIcon()`/`domainOsName()` and flat
   `karton-os-*` family icons (Windows modern/legacy, Linux Tux, BSD family,
   macOS and DOS), installed into hicolor. Unknown guests use Karton's own

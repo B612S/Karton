@@ -208,7 +208,14 @@ Kirigami.ScrollablePage {
         }
         // The wide layout keeps the empty details page in the right column;
         // replacing it avoids a pop/push flash and keeps the list column in place.
+        // PageRow.replace() removes every page above the *current* one and then
+        // replaces the new topmost page. Clicking a row in the list column (for
+        // example the header that expands a collapsed connection after a
+        // restart) makes that column current, so replace() would pop the empty
+        // details page and then replace the VM list itself, leaving the window
+        // with the VM page only. Point the page row at the details column first.
         if (stack.depth > 1 && stack.lastItem && stack.lastItem.isEmptyDetailsPage === true) {
+            stack.currentIndex = stack.depth - 1;
             stack.replace(page);
             return;
         }
