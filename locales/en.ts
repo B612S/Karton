@@ -245,6 +245,15 @@
 <message><source>remote_spice_display_is_not_reachable</source><translation>The remote SPICE display is not reachable: it is bound to the remote host's loopback or is exposed through a local socket.</translation></message>
 </context>
 <context>
+<name>DeleteDomainDialog</name>
+<message><source>cancel</source><translation>Cancel</translation></message>
+<message><source>delete</source><translation>Delete</translation></message>
+<message><source>delete_disk</source><translation>Delete disk</translation></message>
+<message><source>delete_virtual_machine</source><translation>Delete virtual machine</translation></message>
+<message><source>delete_vm_1</source><translation>Delete %1? This removes the virtual machine from libvirt.</translation></message>
+<message><source>deleted_vm_1</source><translation>Deleted VM: %1</translation></message>
+</context>
+<context>
 <name>InstallationDialog</name>
 <message><source>add_new_virtual_machine</source><translation>Add New Virtual Machine</translation></message>
 <message><source>all_files</source><translation>All files (*)</translation></message>

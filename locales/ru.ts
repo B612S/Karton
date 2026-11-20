@@ -245,6 +245,15 @@
 <message><source>remote_spice_display_is_not_reachable</source><translation>Удалённый SPICE-дисплей недоступен: он привязан к loopback удалённого хоста или использует локальный сокет.</translation></message>
 </context>
 <context>
+<name>DeleteDomainDialog</name>
+<message><source>cancel</source><translation>Отмена</translation></message>
+<message><source>delete</source><translation>Удалить</translation></message>
+<message><source>delete_disk</source><translation>Удалить диск</translation></message>
+<message><source>delete_virtual_machine</source><translation>Удаление виртуальной машины</translation></message>
+<message><source>delete_vm_1</source><translation>Удалить %1? Виртуальная машина будет удалена из libvirt.</translation></message>
+<message><source>deleted_vm_1</source><translation>ВМ удалена: %1</translation></message>
+</context>
+<context>
 <name>InstallationDialog</name>
 <message><source>add_new_virtual_machine</source><translation>Добавить новую виртуальную машину</translation></message>
 <message><source>all_files</source><translation>Все файлы (*)</translation></message>

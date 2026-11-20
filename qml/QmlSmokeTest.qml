@@ -54,4 +54,9 @@ Kirigami.ApplicationWindow {
         domain: null
         visible: false
     }
+
+    DeleteDomainDialog {
+        domain: null
+        visible: false
+    }
 }

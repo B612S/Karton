@@ -597,47 +597,8 @@ Kirigami.ScrollablePage {
         domain: vmMenu.domain
     }
 
-    KartonDialog {
+    DeleteDomainDialog {
         id: contextDeleteDialog
-        property Domain domain: null
-        title: qsTr("delete_virtual_machine")
-        preferredDialogWidth: Kirigami.Units.gridUnit * 26
-        modal: true
-
-        onOpened: deleteDiskCheck.checked = false
-
-        ColumnLayout {
-            width: contextDeleteDialog.availableWidth
-            spacing: Kirigami.Units.largeSpacing
-
-            Controls.Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: contextDeleteDialog.domain ? qsTr("delete_vm_1").arg(contextDeleteDialog.domain.config.name) : ""
-            }
-            Controls.CheckBox {
-                id: deleteDiskCheck
-                text: qsTr("delete_disk")
-            }
-        }
-
-        customFooterActions: [
-            Kirigami.Action {
-                text: qsTr("cancel")
-                icon.name: "dialog-cancel-symbolic"
-                onTriggered: contextDeleteDialog.close()
-            },
-            Kirigami.Action {
-                text: qsTr("delete")
-                icon.name: "delete-symbolic"
-                onTriggered: {
-                    if (contextDeleteDialog.domain) {
-                        Karton.deleteDomain(contextDeleteDialog.domain, deleteDiskCheck.checked);
-                    }
-                    contextDeleteDialog.close();
-                }
-            }
-        ]
     }
 
     ListView {

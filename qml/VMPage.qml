@@ -935,71 +935,7 @@ Kirigami.Page {
     }
 
 
-    KartonDialog {
+    DeleteDomainDialog {
         id: deleteConfirmationDialog
-        title: qsTr("delete_1").arg(deleteConfirmationDialog.domain ? deleteConfirmationDialog.domain.config.name : "")
-
-        showCloseButton: false
-        standardButtons: Kirigami.Dialog.NoButton
-        flatFooterButtons: false
-
-        property var domain: null
-
-        ColumnLayout {
-            width: deleteConfirmationDialog.availableWidth
-            spacing: Kirigami.Units.largeSpacing
-
-            Controls.Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: deleteConfirmationDialog.domain ? qsTr("delete_vm_confirmation").arg(deleteConfirmationDialog.domain.config.name) : ""
-            }
-        }
-        customFooterActions: [
-            Kirigami.Action {
-                text: qsTr("cancel")
-                icon.name: "dialog-cancel-symbolic"
-                onTriggered: {
-                    deleteConfirmationDialog.domain = null;
-                    deleteConfirmationDialog.close();
-                }
-            },
-            Kirigami.Action {
-                text: qsTr("keep_file")
-                icon.name: "edit-delete-remove-symbolic"
-
-                onTriggered: {
-                    const domainToDelete = deleteConfirmationDialog.domain;
-                    if (!domainToDelete) {
-                        return;
-                    }
-                    const domainName = domainToDelete.config.name;
-                    const window = applicationWindow();
-                    deleteConfirmationDialog.domain = null;
-                    deleteConfirmationDialog.close();
-                    if (Karton.deleteDomain(domainToDelete, false) && window) {
-                        window.showPassiveNotification(qsTr("deleted_vm_1").arg(domainName));
-                    }
-                }
-            },
-            Kirigami.Action {
-                text: qsTr("delete_disk")
-                icon.name: "delete-symbolic"
-
-                onTriggered: {
-                    const domainToDelete = deleteConfirmationDialog.domain;
-                    if (!domainToDelete) {
-                        return;
-                    }
-                    const domainName = domainToDelete.config.name;
-                    const window = applicationWindow();
-                    deleteConfirmationDialog.domain = null;
-                    deleteConfirmationDialog.close();
-                    if (Karton.deleteDomain(domainToDelete, true) && window) {
-                        window.showPassiveNotification(qsTr("deleted_vm_1").arg(domainName));
-                    }
-                }
-            }
-        ]
     }
 }

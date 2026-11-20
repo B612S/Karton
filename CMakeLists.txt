@@ -226,6 +226,7 @@ ecm_target_qml_sources(karton
     qml/SnapshotsDialog.qml
     qml/BusyOperationDialog.qml
     qml/CloneDialog.qml
+    qml/DeleteDomainDialog.qml
     qml/StorageVolumePickerDialog.qml
 )
 
